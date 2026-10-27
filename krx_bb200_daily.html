@@ -3956,7 +3956,7 @@
     function renderChat() {
       const el = document.getElementById('chatList');
       if (!el) return;
-      el.innerHTML = chat.msgs.length ? chat.msgs.map((m, mi) => `<div class="flex ${m.role === 'user' ? 'justify-end' : ''}"><div class="max-w-[88%] px-2 py-1 text-[11px] leading-relaxed whitespace-pre-line ${m.role === 'user' ? 'bg-[#111111] text-white' : 'bg-[#f3f3f3] text-[#222222]'}">${esc(m.text)}${(m.prop || []).map((a, k) => `<button type="button" data-prop="${mi}:${k}" class="block mt-1 ${a.done ? 'text-[#999999]' : 'btn'} px-2 py-0.5 text-[10px] text-left" ${a.done ? 'disabled' : ''}>${a.done ? '✔ ' : '▶ 적용 — '}${esc(describeAct(a))}</button>`).join('')}</div></div>`).join('')
+      el.innerHTML = chat.msgs.length ? chat.msgs.map((m, mi) => `<div class="flex ${m.role === 'user' ? 'justify-end' : ''}"><div class="max-w-[88%] px-2 py-1 text-[11px] leading-relaxed whitespace-pre-line ${m.role === 'user' ? 'bg-[#111111] text-white' : 'bg-[#f3f3f3] text-[#222222]'}">${esc(m.role === 'assistant' ? plainSay(m.text) : m.text)}${(m.prop || []).map((a, k) => `<button type="button" data-prop="${mi}:${k}" class="block mt-1 ${a.done ? 'text-[#999999]' : 'btn'} px-2 py-0.5 text-[10px] text-left" ${a.done ? 'disabled' : ''}>${a.done ? '✔ ' : '▶ 적용 — '}${esc(describeAct(a))}</button>`).join('')}</div></div>`).join('')
         + (chat.busy ? '<div class="text-[10px] text-[#999999]">비서가 답하는 중…</div>' : '')
         : `<div class="text-[10px] text-[#999999] leading-relaxed">말이나 글로 물어보세요. 예: "지금 이 종목 위험한 점 말해줘", "삼성전자 주봉으로 띄워줘", "리서치센터 섹터 열어줘", "매도 기준을 10일선으로 바꿔줘" — 화면 조작도 해 드려요. 주문·설정 변경은 확인 창을 거치고, 종목 추천은 하지 않습니다.${aiReady() ? '' : '<br><b>설정 → AI 분석</b>에서 키를 넣어야 대화할 수 있습니다.'}</div>`;
       el.scrollTop = el.scrollHeight;
@@ -3996,7 +3996,7 @@
     }
     function splitActions(reply) {
       const acts = [], prop = [];
-      let text = reply;
+      let text = String(reply).replace(/(?:<<|«|＜＜|〈〈)\s*(명령|제안)\s*(?:>>|»|＞＞|〉〉)/g, '<<$1>>');
       const take = (tag, into) => {
         const k = text.indexOf(tag);
         if (k < 0) return;
@@ -4010,6 +4010,11 @@
       for (let n = loose.length - 1; n >= 0; n--) { prop.unshift(loose[n].o); text = text.slice(0, loose[n].i) + text.slice(loose[n].j + 1); }
       text = text.replace(/```(json)?/g, '').replace(/\[[\s,]*\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
       return { text, acts, prop };
+    }
+    // 사람에게 보이거나 읽힐 말만 남김 — 명령·제안·코드 블록·남은 표시까지 모두 제거 (예전에 저장된 대화에도 적용)
+    function plainSay(t) {
+      const x = splitActions(splitBlocks(String(t || '')).text).text;
+      return x.replace(/<<[^>]{0,20}>>|<\/?[a-z][^>]*>/gi, '').replace(/\n{3,}/g, '\n\n').trim();
     }
     function describeAct(a) {
       if (a.do === '설정') {
@@ -4714,6 +4719,26 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
         : '<div class="text-[10px] text-[#999999] leading-relaxed">차트에서 📐 버튼을 켜거나 Shift를 누른 채, 산 지점부터 판 지점까지 드래그하세요. 수익률·매수 시점 특징·전략과의 차이·비슷한 과거 자리 통계를 보여주고, 👍/👎로 표시하면 비서가 내 기준을 학습합니다.</div>');
     }
     document.getElementById('assistBody').addEventListener('click', (e) => { const r = e.target.closest('[data-mark]'); if (r) openMark(r.dataset.mark); });
+    // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
+    const pageVer = { at: null };
+    async function checkPageVersion() {
+      if (location.protocol === 'file:') return;
+      try {
+        const r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+        const v = r.headers.get('last-modified') || r.headers.get('etag');
+        if (!v) return;
+        if (pageVer.at == null) { pageVer.at = v; return; }
+        if (v !== pageVer.at && !document.getElementById('newVerBar')) {
+          const bar = document.createElement('div');
+          bar.id = 'newVerBar';
+          bar.className = 'fixed top-0 inset-x-0 z-[80] bg-[#111111] text-white text-[12px] px-3 py-1 flex items-center justify-center gap-2';
+          bar.innerHTML = '새 버전으로 고쳐졌어요. <button type="button" class="underline font-semibold">지금 새로고침</button>';
+          bar.querySelector('button').onclick = () => location.reload();
+          document.body.appendChild(bar);
+        }
+      } catch (_) {}
+    }
+    checkPageVersion(); setInterval(checkPageVersion, 60000);
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
@@ -4769,7 +4794,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
     // 덩어리는 최대 2개 — 따로 합성할수록 말투·톤이 덩어리마다 달라져 몰입이 깨짐
     //  짧은 답은 한 번에, 긴 답만 '첫 문장 + 나머지'로 나눠 첫 문장을 빨리 읽기 시작
     function speechChunks(text) {
-      const clean = String(text).replace(/[•#*_>{}\[\]"]/g, ' ').replace(/\s+/g, ' ').trim();
+      const clean = plainSay(text).replace(/[•#*_<>{}\[\]"`]/g, ' ').replace(/\s+/g, ' ').trim();
       if (clean.length <= 500) return clean ? [clean] : [];
       const out = [];
       (clean.match(/[^.!?。…]+[.!?。…]*\s*/g) || [clean]).forEach((sn) => { const l = out.length - 1; if (l >= 0 && out[l].length + sn.length <= 500) out[l] += sn; else out.push(sn); });
@@ -4947,7 +4972,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
         input.placeholder = '받아 적는 중…';
         try {
           const p0 = paper(), hint = [...new Set([state.selected, ...Object.keys(p0.positions), ...Object.keys(p0.manual), ...state.watch].filter(Boolean).map((c) => nameOf(c)))]
-            .concat(['코스피', '코스닥', '5일선', '볼린저밴드', '상단 돌파', '손절', '익절', '시장 국면']).join(', ');
+            .concat(['코스피', '코스닥', '5일선', '10선', '11선', '20선', '60선', '이평선', '거래량 3배', '볼린저밴드', '상단 돌파', '손절', '익절', '시장 국면']).join(', ');
           const r = await bridge('/ai/stt', { audio: b64, mime: blob.type, hint, ...aiPayload() });
           input.placeholder = '비서에게 묻기…';
           if (r.text) chatSend(r.text); else convoNext(false);
