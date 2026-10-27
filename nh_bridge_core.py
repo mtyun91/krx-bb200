@@ -680,6 +680,16 @@ ASK_PURPOSE = {
              "사용자 메모와 👍/👎 표시가 있으면 그 의도를 존중해 반영한다. 종목을 사라·팔라고 하지 않는다.",
 }
 CHAT_ACTIONS = (
+    "\n매매 조건 바꾸기(가장 중요): 사용자가 매수·매도 조건을 말하면 말로 설명만 하지 말고 반드시 실제로 바꾼다.\n"
+    "- 설정 값으로 되는 것은 설정 명령: BB 기간 bbPeriod·배수 bbStd, 매도선 exitMa(N선), 거래량 확인 volFilter+volMult(배), ADX adxFilter+adxMin, 후보 범위 nearPct.\n"
+    "- 설정으로 안 되는 조건(RSI, 전고점 돌파, 연속 양봉, 갭, 이격도, 특정 이평선 정배열 등)은 규칙 블록으로 직접 코드를 짠다:\n"
+    '  <<규칙 kind="entry" mode="and" title="짧은 이름">> JS 본문 <</규칙>>  (kind: entry=매수 / exit=매도)\n'
+    "  · mode — 매수: and(BB 상단 돌파 + 이 조건) / replace(이 조건만으로 매수). 매도: or(N선 이탈 또는 이 조건) / replace(이 조건만으로 매도).\n"
+    "  · 본문은 (bars, i) 를 받아 i번째 일봉에서 조건이 맞으면 true 를 return. bars[i] 필드: t,o,h,l,c,v, mid·upper·lower(BB), ma5·ma20·ma60·ma120, volMa(20일 평균 거래량), adx, ready.\n"
+    "  · 쓸 수 있는 함수: sma(bars,i,n,'c'), ema(bars,i,n), highest(bars,i,n,'h'), lowest(bars,i,n,'l'), rsi(bars,i,14), chg(bars,i,n)=n일 등락률%, volx(bars,i,20)=거래량 배수.\n"
+    "  · 예: 거래량 3배 + 전고점 돌파 → return volx(bars,i) >= 3 && bars[i].c > highest(bars,i-1,60,'h');\n"
+    "  · 같은 kind 로 다시 보내면 그 규칙을 바꾼다. 끄기는 {\"do\":\"규칙삭제\",\"kind\":\"entry|exit\"}. 지금 규칙·백테스트 요약은 데이터의 매매규칙.\n"
+    "- 바꾸면 화면이 신호·백테스트·자동매매·차트(매도선·△ 매수 신호)를 바로 다시 계산하고 전후 비교를 보여 준다. 말로는 무엇을 바꿨는지 한 문장만.\n"
     "\n화면 조작 권한: 사용자가 화면을 바꾸거나 기능을 실행해 달라고 하면, 답의 맨 끝 줄에 <<명령>> 다음 JSON 배열을 붙인다.\n"
     "이 줄은 화면이 실행하며 사용자에게 보이거나 읽히지 않는다. 말로는 무엇을 하는지 한 문장만 한다. 조작 요청이 없으면 붙이지 않는다.\n"
     "사용자가 요청하지 않았지만 바꿔 보면 좋을 것을 제안할 때(예: 매도 기준을 10일선으로)는 답의 맨 끝 줄에 <<제안>> 다음 JSON 배열을 붙인다. "
