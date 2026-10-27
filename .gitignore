@@ -1,0 +1,18 @@
+# 비밀값 — 절대 저장소에 넣지 않음
+.env
+*.env
+.nh_bridge_token
+
+# 맥·윈도우 동기화 파일 (모의 계좌·설정 등 개인 데이터, 계속 바뀜)
+krx_state*.json
+
+# 중계기가 다시 받아 오는 데이터
+krx_master.json
+krx_sectors.json
+
+# 예전 수동 백업 — 이제 git 기록이 대신함
+*.backup-*
+
+# 파이썬 임시 파일
+__pycache__/
+*.pyc

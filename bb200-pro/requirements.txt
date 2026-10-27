@@ -1,0 +1,31 @@
+# BB200 Pro - 비트코인 자동매매 시스템
+# Python 3.11+
+
+# 웹 서버
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# 거래소 연동
+ccxt==4.4.54
+
+# 데이터베이스
+sqlalchemy==2.0.36
+aiosqlite==0.20.0
+
+# 환경변수 관리
+python-dotenv==1.0.1
+pydantic-settings==2.7.1
+
+# 데이터 처리
+numpy==2.2.2
+pandas==2.2.3
+
+# 텔레그램 알림
+python-telegram-bot==21.10
+
+# 비동기 HTTP
+httpx==0.28.1
+aiohttp==3.11.11
+
+# WebSocket
+websockets==14.2
