@@ -694,6 +694,15 @@ CHAT_ACTIONS = (
     '  {"do":"비교","key":"exitMa","values":[5,10,20]} 또는 {"do":"비교","variants":[{"name":"10선+거래량2배","set":{"exitMa":10,"volFilter":true,"volMult":2}}, ...]} (최대 6개)\n'
     '- 사용자가 표시한 👍 예시로 규칙을 만들어 달라고 하면 {"do":"규칙추출"} — 화면이 공통점을 찾아 규칙 초안과 검증 수치를 보여 준다. '
     "결과(데이터의 뽑은규칙)를 다듬어 달라고 하면 그 코드를 고쳐 규칙 블록으로 보낸다.\n"
+    '  비교에 규칙 후보도 넣을 수 있다: {"name":"RSI 70 이하","rule":{"kind":"entry","mode":"and","code":"return rsi(bars,i,14) <= 70;"}} — 적용 전에 효과를 보여 줄 때 쓴다.\n'
+    "- 종목 찾기: 사용자가 조건에 맞는 종목을 찾아 달라고 하면 말로 추측하지 말고 "
+    '{"do":"종목찾기","title":"짧은 이름","code":"JS 본문","days":1,"sort":"amount|chg|vol"} — code 는 규칙 블록과 같은 (bars, i) 본문, '
+    "화면이 불러온 모든 종목의 최근 days일 일봉에서 맞는 종목을 표로 보여 준다(줄을 누르면 차트, 관심종목 넣기 버튼). 결과 요약은 데이터의 마지막검색. 종목을 고르거나 권하지는 않는다.\n"
+    "- 차트에 그리기: 지지선·저항선·목표가·메모를 보여 달라고 하면 "
+    '{"do":"그리기","code":"...","lines":[{"price":71000,"label":"지지","color":"파랑"}],"notes":[{"date":"20261015","text":"거래량 급증"}],"replace":false} '
+    '(색: 빨강·파랑·초록·주황·보라·회색, code 를 빼면 지금 종목). 지우기 {"do":"그림삭제"} 또는 {"do":"그림삭제","all":true}. 지금 그림은 데이터의 차트그림. 가격은 데이터의 실제 수치로 정한다.\n'
+    "- 매매 일지: 모든 주문이 일지에 자동으로 적힌다(데이터의 매매일지 — 수익·이유). 사용자가 산·판 이유를 말하면 "
+    '{"do":"일지","code":"...","why":"이유"} 로 가장 최근 그 종목 기록에 붙인다. 일지를 돌아봐 달라고 하면 잘한 점·반복한 실수·바꿀 점을 기록의 숫자로 근거를 들어 짧게 말한다.\n'
     "- 화면은 장중에 비서 이름으로 먼저 알림을 보낸다(매도선 근접·도달, 매수 신호, 매매 시간대, 체결). 대화 기록의 🔔 줄이 그 알림이다.\n"
     "\n화면 조작 권한: 사용자가 화면을 바꾸거나 기능을 실행해 달라고 하면, 답의 맨 끝 줄에 <<명령>> 다음 JSON 배열을 붙인다.\n"
     "이 줄은 화면이 실행하며 사용자에게 보이거나 읽히지 않는다. 말로는 무엇을 하는지 한 문장만 한다. 조작 요청이 없으면 붙이지 않는다.\n"
@@ -1192,7 +1201,30 @@ def state_write(data, base, device):
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False)
         os.replace(tmp, STATE_FILE)
+        state_backup(out)
         return {"ok": True, "rev": out["rev"], "saved": out["saved"]}
+
+
+# 기록 백업 — 프로그램 폴더를 지워도 남도록 '문서/KRX_백업'에 하루 한 파일씩 (최근 60일만 남김)
+#  설정·관심종목·모의 계좌·👍 표시·매매 규칙·일지·차트 그림만 들어 있음 (앱키·토큰·계좌번호 없음)
+BACKUP_DIR = os.path.abspath(os.path.expanduser(os.environ.get("KRX_BACKUP") or os.path.join("~", "Documents", "KRX_백업")))
+
+
+def state_backup(out):
+    if DEMO:
+        return
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        path = os.path.join(BACKUP_DIR, f"krx_state-{time.strftime('%Y%m%d')}.json")
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False)
+        os.replace(tmp, path)
+        olds = sorted(x for x in os.listdir(BACKUP_DIR) if x.startswith("krx_state-") and x.endswith(".json"))
+        for x in olds[:-60]:
+            os.remove(os.path.join(BACKUP_DIR, x))
+    except OSError as e:
+        print(f"[백업] 저장 실패: {e}")
 
 
 # ---- 실계좌 주문 ----
@@ -1466,7 +1498,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/rt/stream":
             return self._stream()
         now = datetime.now(KST)
-        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "ai": ai_available(), "stateFile": STATE_FILE, "trade": trade_available(),
+        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
                          "kst": now.strftime("%Y-%m-%d %H:%M:%S")})
 
     def _stream(self):
@@ -1682,6 +1714,8 @@ def main():
     print(f"나무 PLUG 중계기 실행 중: http://{HOST}:{PORT}  {'[데모 모드 — 가짜 시세]' if DEMO else '[실제 시세]'}  · 실시간 체결·호가 포함")
     print(f"중계기 토큰 (화면의 '중계기 연결'에 입력): {TOKEN}")
     print(f"계좌 동기화 파일: {STATE_FILE}")
+    if not DEMO:
+        print(f"기록 백업 폴더: {BACKUP_DIR} (하루 한 파일 · 60일 보관)")
     if trade_available():
         print(f"실계좌 주문: {TRADE_ENV_NAME[TRADE_ENV]} · 계좌 {acct_mask()} · 1회 {MAX_ORDER:,}원 · 하루 {MAX_DAY:,}원 — 지금은 '정지' 상태 (화면에서 주문 허용을 켜야 주문 가능)")
     print("종료: Ctrl+C")

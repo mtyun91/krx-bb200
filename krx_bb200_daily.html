@@ -57,7 +57,9 @@
         <button id="btnConnClose" type="button" class="btn px-3 py-1 text-[11px]">닫기</button>
       </div>
       <p class="text-[10px] text-[#888888] leading-relaxed">중계기 토큰은 이 PC의 중계기에만 쓰이는 값으로, 증권사 앱키와는 별개입니다.</p>
-      <div class="text-[10px] text-[#888888] leading-relaxed border-t border-[#e6e6e6] pt-1.5">계좌 동기화 파일 <span class="text-[#bbbbbb]">(이 폴더를 구글 드라이브·iCloud 등으로 동기화하면 맥·윈도우가 같은 계좌를 씀)</span><div id="syncFile" class="num text-[#444444] break-all select-all"></div></div>
+      <div class="text-[10px] text-[#888888] leading-relaxed border-t border-[#e6e6e6] pt-1.5">계좌 동기화 파일 <span class="text-[#bbbbbb]">(이 폴더를 구글 드라이브·iCloud 등으로 동기화하면 맥·윈도우가 같은 계좌를 씀)</span><div id="syncFile" class="num text-[#444444] break-all select-all"></div>
+        <div class="mt-1">자동 백업 폴더 <span class="text-[#bbbbbb]">(하루 한 파일 · 60일 보관 — 프로그램 폴더를 지워도 남음)</span><div id="backupDir" class="num text-[#444444] break-all select-all">중계기 연결 후 표시</div></div>
+        <div class="flex gap-1 mt-1"><button id="btnExport" type="button" class="btn px-2 py-0.5 text-[11px]" title="설정·관심종목·모의 계좌·👍 표시·매매 규칙·일지·차트 그림을 파일로 저장">기록 내보내기</button><label class="btn px-2 py-0.5 text-[11px] cursor-pointer" title="내보낸 파일이나 자동 백업 파일에서 기록 되살리기">기록 불러오기<input id="inpImport" type="file" accept=".json,application/json" class="hidden" /></label></div></div>
     </div>
   </header>
   <!-- 리서치 센터 (큰 창): 시장 국면 · 섹터 · 시나리오 가이드 · 뉴스 -->
@@ -403,6 +405,8 @@
       bt: null,
       marks: [],         // 내가 차트에 표시한 매수~매도 구간 (👍·👎 예시)
       rules: { entry: null, exit: null },   // 비서가 만든 내 매수·매도 규칙
+      journal: [],       // 매매 일지 (모든 주문 + 이유 + 매도 수익)
+      draw: {},          // 비서가 차트에 그린 선·메모 (종목별)
       view: { end: null, span: 160 },
       paper: null,
       tab: 'bt'
@@ -418,6 +422,8 @@
       if (d.names) state.names = { ...state.names, ...d.names };
       if (Array.isArray(d.marks)) state.marks = d.marks;
       if (d.rules) state.rules = { entry: d.rules.entry || null, exit: d.rules.exit || null };
+      if (Array.isArray(d.journal)) state.journal = d.journal;
+      if (d.draw && typeof d.draw === 'object') state.draw = d.draw;
     }
     function loadStore() {
       try {
@@ -442,12 +448,18 @@
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify({
           cfg: state.cfg, watch: state.watch, universe: state.universe, bridgeUrl: state.bridge.url,
-          paper: state.paper, names: state.names, tab: state.tab, marks: state.marks, rules: state.rules,
+          paper: state.paper, names: state.names, tab: state.tab, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw,
           lists: state.lists, listsAt: state.listsAt, sel: state.selected, tf: state.tf, ui: state.ui, lastMode: state.lastMode
         }));
       } catch (_) {}
       if (!sync.applying) syncMark();
     }
+
+    // 가려진 창에서도 제때 돌게 — 브라우저는 가려진 탭의 타이머를 1분 넘게 늦추지만 Worker 타이머는 그대로 둠
+    const bgJobs = [];
+    function bgRun() { const now = Date.now(); bgJobs.forEach((j) => { if (now - j.at >= j.ms - 60) { j.at = now; try { const r = j.fn(); if (r && r.catch) r.catch((e) => console.error(e)); } catch (e) { console.error(e); } } }); }
+    const bgWorker = (() => { try { const w = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 1000);'], { type: 'text/javascript' }))); w.onmessage = bgRun; return w; } catch (_) { setInterval(bgRun, 1000); return null; } })();
+    function bgEvery(fn, ms) { bgJobs.push({ fn, ms, at: Date.now() }); }
 
     // =========================================================================
     // 2. 공통 유틸 — 한국 시간 · 호가 단위 · 숫자 표시
@@ -1156,6 +1168,7 @@
       ctx.lineWidth = 1;
       drawCustomInd(bars, vis, start, x, y, g);   // AI가 만든 지표
       drawStrategyMarks(bars, vis, start, x, y);   // 매도선 · 매수 신호
+      drawUserDraw(bars, vis, start, x, y, g);   // 비서가 그린 선·메모
       // 캔들 · 거래량
       const bw = Math.max(1, slot * 0.66);
       vis.forEach((b, j) => {
@@ -1281,7 +1294,7 @@
       document.getElementById('chartSub').textContent = b ? `${tfInfo(state.tf).label}봉 · ${fmtT(b.t)} 기준 · ${bars.length.toLocaleString()}봉${local} · BB${state.cfg.bbPeriod} 상단 ${b.ready ? won(b.upper) : '-'} · 중심 ${b.ready ? won(b.mid) : '-'}` : '';
       document.getElementById('chartSignal').innerHTML = info ? (info.signal ? '<span class="px-1.5 bg-[#e5383b] text-white">일봉 상단 돌파 신호</span>' :
         info.toUpper != null ? `<span class="text-[#666666]">일봉 상단선까지 ${info.toUpper >= 0 ? '이미 위' : pct(info.toUpper, 1)}</span>` : '') : '';
-      document.getElementById('maLegend').innerHTML = '<span style="color:#111">━</span>중심 <span style="color:#e5383b">┅</span>상단 <span style="color:#1e6bd6">┅</span>하단 ' + (state.tf === 'D' ? `<b style="color:#1e6bd6">━</b>매도 ${state.cfg.exitMa}선 <span style="color:#e5383b">△</span>매수 신호 ` : '') + MA_LIST.map((m) => `<span style="color:${m.c}">━</span>${m.p}`).join(' ');
+      document.getElementById('maLegend').innerHTML = '<span style="color:#111">━</span>중심 <span style="color:#e5383b">┅</span>상단 <span style="color:#1e6bd6">┅</span>하단 ' + (state.tf === 'D' ? `<b style="color:#1e6bd6">━</b>매도 ${state.cfg.exitMa}선 <span style="color:#e5383b">△</span>매수 신호 ` : '') + MA_LIST.map((m) => `<span style="color:${m.c}">━</span>${m.p}`).join(' ') + drawLegend();
     }
 
     function selectCode(code) {
@@ -2186,6 +2199,7 @@
         if (h.research) loadSectors();
         renderAiBox();
         sync.on = !!h.sync; sync.file = h.stateFile || '';
+        { const bd = document.getElementById('backupDir'); if (bd) bd.textContent = h.backupDir || (h.demo ? '데모 모드 — 백업 안 함' : '이 중계기는 자동 백업을 지원하지 않아요 (실행기를 다시 켜세요)'); }
         if (sync.on) syncPull(true); else renderSync();
       } catch (err) {
         state.bridge.ok = false;
@@ -2516,7 +2530,7 @@
       try { localStorage.setItem(SYNC_KEY, JSON.stringify({ rev: sync.rev, saved: sync.saved, device: sync.device, dirty: sync.dirty, hash: sync.hash })); } catch (_) {}
     }
     function syncPayload() {
-      return { cfg: state.cfg, watch: state.watch, universe: state.universe, paper: state.paper, names: state.names, marks: state.marks, rules: state.rules };
+      return { cfg: state.cfg, watch: state.watch, universe: state.universe, paper: state.paper, names: state.names, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw };
     }
     function hasActivity() {
       const p = state.paper;
@@ -3815,6 +3829,7 @@
     }
     // ---- 체결 직후 코멘트 ----
     function assistOnTrade(code, side, qty, price, note) {
+      journalAdd({ code, side, qty, price, src: /자동|마감 전|반등 매도/.test(note || '') ? '자동' : '모의', note: note || '' });
       const fx = stockFacts(code) || {};
       const item = { kind: 'trade', title: `${nameOf(code)} ${side === 'BUY' ? '매수' : '매도'} ${qty}주 @ ${won(price)}`, lines: [note].filter(Boolean) };
       const g = guardCheck({ code, side, type: 'MKT', price, qty });
@@ -3862,7 +3877,7 @@
             <button type="button" id="btnAssistAi" class="underline text-[10px] text-[#888888]">AI 코멘트${bf.ai ? ' 다시' : ''}</button>`
             : '<div class="text-[11px] text-[#999999]">종목을 고르면 핵심 수치를 보여줍니다.</div>'}
           ${aiNote}`, true)
-        + marksFold()
+        + marksFold() + journalFold()
         + fold('feed', '코멘트 · 주문 점검 기록', assist.feed.length ? `${assist.feed.length}건 · ${esc(assist.feed[0].title)}` : '없음', `
           <div class="max-h-56 overflow-y-auto scroll -mx-2">${assist.feed.length ? assist.feed.map((x) => `<div class="px-2 py-1 border-t border-[#f5f5f5] text-[11px]">
               <div class="flex justify-between"><span class="${x.kind === 'guard' ? 'text-[#b45309]' : ''}">${x.kind === 'guard' ? '⚠ ' : x.kind === 'trade' ? '● ' : ''}${esc(x.title)}</span><span class="text-[9px] text-[#999999] num">${new Date(x.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span></div>
@@ -4030,6 +4045,7 @@
       }
       if (a.do === '규칙적용') return `${a.kind === 'exit' ? '매도' : '매수'} 규칙 적용 (${RULE_MODE[a.kind === 'exit' ? 'exit' : 'entry'][a.mode] || a.mode})`;
       if (a.do === '종목') return `${a.name || nameOf(a.code)} 차트 보기`;
+      if (a.do === '관심추가') return `찾은 종목 ${(a.codes || []).length}개 관심종목에 넣기`;
       if (a.do === '규칙삭제') return `${a.kind === 'exit' ? '매도' : '매수'} 규칙 끄기`;
       if (a.do === '설정') {
         const defs = {};
@@ -4117,14 +4133,15 @@
           return '✔ 패널을 바꿨어요';
         case '백테스트': runBt(); return '✔ 백테스트를 다시 돌렸어요';
         case '설정': return settingAct(a.set || {}, src);
-        case '주문': return orderAct(a);
+        case '주문': jWhy = lastUserText(src); try { return await orderAct(a); } finally { jWhy = ''; }
         case '즉시매도': {
           const c = findCode(a);
           if (!c) return miss();
           const kind = paper().manual[c] ? 'manual' : paper().positions[c] ? 'strat' : null;
           if (!kind) return `✖ ${nameOf(c)}은(는) 보유 중이 아니에요`;
           if (!(await confirmAct(`AI 비서 요청 — ${nameOf(c)} 즉시 매도`, ['보유 수량 전량을 지금 가격으로 매도합니다 (모의투자).'], '매도'))) return '✖ 즉시 매도를 취소했어요';
-          await sellNow(c, kind);
+          jWhy = lastUserText(src);
+          try { await sellNow(c, kind); } finally { jWhy = ''; }
           return `✔ ${nameOf(c)} 즉시 매도를 요청했어요`;
         }
         case '위젯삭제': { const n = custom.widgets.length; custom.widgets = custom.widgets.filter((w) => w.id !== a.id); saveCustom(); renderWidgets(); renderCustomBox(); return n !== custom.widgets.length ? '✔ 위젯을 지웠어요' : `✖ 위젯 '${a.id}'이(가) 없어요`; }
@@ -4133,11 +4150,18 @@
           if (src === 'widget') return '✖ 위젯은 실계좌 주문을 할 수 없어요';
           const c = findCode(a);
           if (!c) return miss();
-          const r = await realSubmit({ code: c, side: String(a.side).toUpperCase(), type: String(a.type).toUpperCase(), price: a.price, qty: a.qty });
+          jWhy = lastUserText(src);
+          let r;
+          try { r = await realSubmit({ code: c, side: String(a.side).toUpperCase(), type: String(a.type).toUpperCase(), price: a.price, qty: a.qty }); } finally { jWhy = ''; }
           return `${r.ok ? '✔' : '✖'} ${r.msg}`;
         }
         case '비상정지': await realKill(); return '✔ 실계좌 주문을 정지했어요';
         case '비교': return runCompare(a);
+        case '종목찾기': return runScreen(a);
+        case '관심추가': { const cs = (a.codes || []).filter((c) => /^[0-9A-Z]{6}$/.test(c)).slice(0, 30); cs.forEach((c) => toggleWatch(c, true)); return cs.length ? `✔ 관심종목에 ${cs.length}개를 넣었어요` : '✖ 넣을 종목이 없어요'; }
+        case '그리기': if (src === 'widget') return '✖ 위젯은 차트에 그릴 수 없어요'; return drawAct(a);
+        case '그림삭제': return drawClearAct(a);
+        case '일지': return journalWhyAct(a);
         case '규칙추출': return runExtract();
         case '규칙적용': {
           if (src === 'widget') return '✖ 위젯은 매매 규칙을 바꿀 수 없어요';
@@ -4472,6 +4496,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       try {
         const r = await bridge('/trade/order', { code, side, type, price, qty, ref });
         setTimeout(() => realRefresh(true), 1500);
+        journalAdd({ code, side, qty, price: type === 'LMT' ? price : ref, src: '실계좌', note: `주문 접수 #${r.orderNo} · ${type === 'MKT' ? '시장가' : '지정가'}` });
         return { ok: true, msg: `실계좌 주문 접수 #${r.orderNo} — ${nameOf(code)} ${side === 'BUY' ? '매수' : '매도'} ${qty.toLocaleString()}주` };
       } catch (err) { realRefresh(true); return { ok: false, msg: `실계좌 주문 실패: ${err.message}` }; }
     }
@@ -4530,7 +4555,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       const rc = e.target.closest('#realBox [data-rcode]');
       if (rc) selectCode(rc.dataset.rcode);
     });
-    setInterval(() => { if (state.bridge.ok && state.bridge.trade) realRefresh(false); }, 10000);
+    bgEvery(() => { if (state.bridge.ok && state.bridge.trade) realRefresh(false); }, 10000);
     document.getElementById('tkReal').addEventListener('change', renderTicket);
     function realFacts() {
       const s = real.st;
@@ -4753,7 +4778,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
         : '<div class="text-[10px] text-[#999999] leading-relaxed">차트에서 📐 버튼을 켜거나 Shift를 누른 채, 산 지점부터 판 지점까지 드래그하세요. 수익률·매수 시점 특징·전략과의 차이·비슷한 과거 자리 통계를 보여주고, 👍/👎로 표시하면 비서가 내 기준을 학습합니다.</div>');
     }
     document.getElementById('assistBody').addEventListener('click', (e) => {
-      if (e.target.closest('[data-extract]')) { toast(runExtract()); document.getElementById('chatList').scrollIntoView({ block: 'nearest' }); return; }
+      if (e.target.closest('[data-extract]')) { runExtract().then(toast); document.getElementById('chatList').scrollIntoView({ block: 'nearest' }); return; }
       const r = e.target.closest('[data-mark]');
       if (r) openMark(r.dataset.mark);
     });
@@ -4827,7 +4852,7 @@ onmessage = (e) => { const { body, sets } = e.data;
     const dataSig = () => { let n = 0, sum = 0; for (const d of Object.values(state.data)) { const b = d.bars; if (b && b.length) { n += b.length; sum += b[b.length - 1].c; } } return `${n}:${sum}`; };
     // 시세가 바뀌면 규칙도 다시 계산 (규칙이 있을 때만 · 30초마다)
     const ruleTick = async () => { if ((ruleOn('entry') || ruleOn('exit')) && dataSig() !== ruleSig) { await computeRules(); runBt(); } };
-    setInterval(ruleTick, 30000);
+    bgEvery(ruleTick, 30000);
     setTimeout(ruleTick, 2500);   // 화면을 켜면 저장된 규칙을 바로 적용
 
     // 매도 판단 한 곳에서 — N선 이탈 / 내 매도 규칙
@@ -5001,7 +5026,7 @@ onmessage = (e) => { const { body, sets } = e.data;
         if (prev != null && o.filled > prev) raiseAlert({ lv: 'high', code: o.code, text: `실계좌 체결 — ${o.name || nameOf(o.code)} ${o.side} ${o.filled - prev}주${o.avg ? ` @ ${won(o.avg)}원` : ''} (주문 #${o.no}, ${o.filled}/${o.qty}주)`, say: `실계좌 ${o.name || ''} 체결됐어요.` });
       });
     }
-    setInterval(alertTick, 15000);
+    bgEvery(alertTick, 15000);
     setTimeout(alertTick, 5000);
     function renderAlertBtn() {
       const b = document.getElementById('btnAlert');
@@ -5030,6 +5055,23 @@ onmessage = (e) => { const { body, sets } = e.data;
         if (bbChanged) Object.values(state.data).forEach((d) => computeInd(d.bars));
       }
     }
+    async function backtestWithRule(set, rule) {
+      if (!rule) return backtestWith(set);
+      const kind = rule.kind === 'exit' ? 'exit' : 'entry', key = kind === 'entry' ? 'rE' : 'rX';
+      const codes = Object.keys(state.data).filter((k) => state.data[k].bars && state.data[k].bars.length);
+      const res = await runRule(rule, codes);
+      if (res.error) return null;
+      const saved = {}, prev = state.rules[kind];
+      codes.forEach((k) => { saved[k] = state.data[k].bars.map((b) => b[key]); });
+      state.rules[kind] = { title: rule.title || '시험 규칙', code: rule.code, mode: rule.mode || (kind === 'entry' ? 'and' : 'or') };
+      try {
+        Object.entries(res.out).forEach(([k, a]) => { const b = state.data[k].bars; for (let i = 0; i < b.length && i < a.length; i++) b[i][key] = a[i]; });
+        return backtestWith(set);
+      } finally {
+        state.rules[kind] = prev;
+        codes.forEach((k) => { const b = state.data[k].bars; saved[k].forEach((v, i) => { if (b[i]) b[i][key] = v; }); });
+      }
+    }
     function halfStats(bt) {
       if (!bt || !bt.curve.length) return null;
       const mid = bt.curve[Math.floor(bt.curve.length / 2)].t;
@@ -5039,12 +5081,13 @@ onmessage = (e) => { const { body, sets } = e.data;
     const SET_NAMES = { exitMa: '매도선', volMult: '거래량 배수', volFilter: '거래량 확인', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxMin: 'ADX', adxFilter: 'ADX 확인', nearPct: '후보 범위', maxPos: '최대 보유', slotPct: '종목당 비중' };
     const setLabel = (set) => Object.entries(set).map(([k, v]) => `${SET_NAMES[k] || k} ${v === true ? '켬' : v === false ? '끔' : k === 'exitMa' ? `${v}선` : v}`).join(' · ');
     // variants: [{ name, set }] — 최대 6개. 지금 설정은 맨 앞에 자동으로 넣어 비교 기준으로 씀
-    function compareVariants(variants) {
-      const list = [{ name: '지금 설정', set: {} }, ...variants.filter((v) => v && v.set && Object.keys(v.set).length).slice(0, 6)];
-      const rows = list.map((v) => {
-        const bt = backtestWith(v.set), s = bt && bt.stats, h = halfStats(bt);
-        return { name: v.name || setLabel(v.set), set: v.set, s, h };
-      }).filter((r) => r.s);
+    async function compareVariants(variants) {
+      const list = [{ name: '지금 설정', set: {} }, ...variants.filter((v) => v && ((v.set && Object.keys(v.set).length) || (v.rule && v.rule.code))).slice(0, 6)];
+      const rows = [];
+      for (const v of list) {
+        const bt = await backtestWithRule(v.set || {}, v.rule), s = bt && bt.stats, h = halfStats(bt);
+        if (s) rows.push({ name: v.name || setLabel(v.set || {}), set: v.set || {}, rule: v.rule, s, h });
+      }
       if (!rows.length) return { text: '✖ 비교할 시세가 아직 없어요 — 시세를 먼저 불러오세요.' };
       const f = (x, d = 1) => (x == null || !isFinite(x) ? '-' : x.toFixed(d));
       const best = rows.slice().sort((a, b) => b.s.ret - a.s.ret)[0];
@@ -5063,7 +5106,8 @@ onmessage = (e) => { const { body, sets } = e.data;
           rows: rows.map((r) => [r.name, `${r.s.n}`, `${f(r.s.win, 0)}%`, pctTxt(r.s.ret), `-${f(r.s.mdd)}%`, r.h.front.avg == null ? '-' : pctTxt(r.h.front.avg), r.h.back.avg == null ? '-' : pctTxt(r.h.back.avg)]),
           best: rows.indexOf(best),
         },
-        prop: rows.slice(1).map((r) => ({ do: '설정', set: r.set })),
+        prop: rows.slice(1).map((r) => (r.rule ? { do: '규칙적용', kind: r.rule.kind === 'exit' ? 'exit' : 'entry', mode: r.rule.mode, title: String(r.rule.title || r.name).slice(0, 60), code: r.rule.code } : { do: '설정', set: r.set })),
+        rows,
       };
     }
     // 한 가지 값만 바꿔 보는 단축형 {key:'exitMa', values:[5,10,20]}
@@ -5073,16 +5117,16 @@ onmessage = (e) => { const { body, sets } = e.data;
       return [];
     }
     async function runCompare(a) {
-      const vs = variantsFrom(a).filter((v) => !Object.keys(v.set).every((k) => state.cfg[k] === v.set[k]));
+      const vs = variantsFrom(a).filter((v) => v && (v.rule || !Object.keys(v.set || {}).every((k) => state.cfg[k] === v.set[k])));
       if (!vs.length) return '✖ 비교할 조건이 없어요 (지금 설정과 같아요).';
       toast('조건별 백테스트를 돌리는 중…');
       await new Promise((r) => setTimeout(r, 30));
-      const res = compareVariants(vs);
+      const res = await compareVariants(vs);
       chat.msgs.push({ role: 'assistant', text: res.text, at: Date.now(), ...(res.table ? { table: res.table } : {}), ...(res.prop && res.prop.length ? { prop: res.prop } : {}) });
       saveChat(); renderChat();
       return '✔ 조건 비교를 대화창에 올렸어요 — 마음에 드는 줄의 ▶ 적용을 누르면 바로 바뀌어요';
     }
-    const tableHtml = (t) => `<table class="num text-[10px] mt-1 w-full border-collapse"><thead><tr>${t.head.map((h) => `<th class="text-left font-normal text-[#888888] pr-1.5 pb-0.5">${esc(h)}</th>`).join('')}</tr></thead><tbody>${t.rows.map((r, i) => `<tr class="${i === t.best ? 'font-semibold' : ''} border-t border-[#e6e6e6]">${r.map((c, j) => `<td class="pr-1.5 py-0.5 ${j === 0 ? 'text-left' : ''} ${/^[+]/.test(c) ? 'up' : /^-\d|^-0|^-\./.test(c) && j !== 4 ? 'down' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    const tableHtml = (t) => `<table class="num text-[10px] mt-1 w-full border-collapse"><thead><tr>${t.head.map((h) => `<th class="text-left font-normal text-[#888888] pr-1.5 pb-0.5">${esc(h)}</th>`).join('')}</tr></thead><tbody>${t.rows.map((r, i) => `<tr ${t.codes ? `data-goto="${esc(t.codes[i])}"` : ''} class="${i === t.best ? 'font-semibold' : ''} ${t.codes ? 'cursor-pointer hover:bg-[#f5f5f5]' : ''} border-t border-[#e6e6e6]">${r.map((c, j) => `<td class="pr-1.5 py-0.5 ${j === 0 ? 'text-left' : ''} ${/^[+]/.test(c) ? 'up' : /^-\d|^-0|^-\./.test(c) && j !== 4 ? 'down' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     // ---- 표시한 구간에서 규칙 뽑기: 👍 예시들의 매수일 공통점을 찾아 매수 규칙 초안을 만들고 숫자로 검증 ----
     //  특징 계산식은 규칙 Worker 와 같은 함수로 만들어, 뽑은 규칙을 그대로 적용해도 결과가 같게 함
     const RH = new Function(`${RULE_HELPERS}; return { sma, ema, highest, lowest, rsi, chg, volx };`)();
@@ -5157,7 +5201,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       const caught = goods.filter((g) => { const x = markIndex(g.m); for (let k = Math.max(1, x.i - 2); k <= Math.min(x.bars.length - 1, x.i + 2); k++) if (isBreakout(x.bars, k)) return true; return false; }).length;
       return { conds, title: conds.map(nm).join(' + '), code, goods: goods.length, bads: bads.length, cur, all, caught };
     }
-    function runExtract() {
+    async function runExtract() {
       const r = extractRule();
       if (r.error) return `✖ ${r.error}`;
       const f = (x, d = 1) => (x == null ? '-' : x.toFixed(d));
@@ -5169,7 +5213,17 @@ onmessage = (e) => { const { body, sets } = e.data;
         r.cur.fwd != null && r.all.fwd != null && r.cur.fwd <= r.all.fwd ? '⚠ 이 규칙이 켜진 날의 이후 성과가 평균보다 낮아요 — 내 예시가 우연히 잘된 자리였을 수 있어요.' : '',
       ].filter(Boolean);
       lastExtract = r;
-      chat.msgs.push({ role: 'assistant', text: lines.join('\n'), at: Date.now(), prop: [
+      // 자동 검증: 지금 전략 vs '돌파 + 이 규칙' vs '이 규칙만' 을 나란히 백테스트하고 앞·뒤 기간 일관성까지
+      toast('뽑은 규칙을 백테스트로 검증하는 중…');
+      await new Promise((res) => setTimeout(res, 30));
+      const rl = (mode) => ({ kind: 'entry', mode, code: r.code, title: r.title.slice(0, 60) });
+      const cmp = await compareVariants([{ name: '+ 뽑은 규칙 (돌파와 함께)', rule: rl('and') }, { name: '뽑은 규칙만', rule: rl('replace') }]);
+      if (cmp.rows && cmp.rows.length > 1) {
+        const base = cmp.rows[0], gain = cmp.rows.slice(1).filter((x) => x.s.ret > base.s.ret && x.h.back.n >= 3 && base.h.back.avg != null && x.h.back.avg >= base.h.back.avg);
+        lines.push('', gain.length ? `✔ 검증: '${gain[0].name}'이 지금 전략보다 총수익이 크고 뒤 기간에서도 앞서요.` : '⚠ 검증: 뽑은 규칙이 지금 전략보다 뚜렷하게 낫지 않거나, 뒤 기간에서 밀려요 — 예시를 더 모으거나 그대로 두는 게 나아요.');
+        r.verify = cmp.rows.map((x) => ({ 조건: x.name, 거래: x.s.n, 총수익: +x.s.ret.toFixed(1), 뒤평균: x.h.back.avg == null ? null : +x.h.back.avg.toFixed(2) }));
+      }
+      chat.msgs.push({ role: 'assistant', text: lines.join('\n'), at: Date.now(), ...(cmp.table ? { table: cmp.table } : {}), prop: [
         { do: '규칙적용', kind: 'entry', mode: 'and', title: r.title.slice(0, 60), code: r.code },
         { do: '규칙적용', kind: 'entry', mode: 'replace', title: r.title.slice(0, 60), code: r.code },
       ] });
@@ -5177,7 +5231,206 @@ onmessage = (e) => { const { body, sets } = e.data;
       return '✔ 규칙 초안을 대화창에 올렸어요 — ▶ 적용을 누르면 바로 신호·백테스트에 반영돼요';
     }
     let lastExtract = null;
-    const extractFacts = () => (lastExtract ? { 규칙: lastExtract.title, 코드: lastExtract.code, 내예시포착: `${Math.round(lastExtract.cur.rec * lastExtract.goods)}/${lastExtract.goods}`, 켜지는비율: +(lastExtract.cur.rate * 100).toFixed(1), 열흘뒤평균: lastExtract.cur.fwd, 전체평균: lastExtract.all.fwd } : null);
+    const extractFacts = () => (lastExtract ? { 규칙: lastExtract.title, 코드: lastExtract.code, 내예시포착: `${Math.round(lastExtract.cur.rec * lastExtract.goods)}/${lastExtract.goods}`, 켜지는비율: +(lastExtract.cur.rate * 100).toFixed(1), 열흘뒤평균: lastExtract.cur.fwd, 전체평균: lastExtract.all.fwd, 검증: lastExtract.verify || null } : null);
+    // ---- 기록 내보내기·불러오기 — 설정·관심종목·모의 계좌·👍 표시·매매 규칙·일지·차트 그림을 파일 하나로 ----
+    //  (중계기는 따로 '문서/KRX_백업' 폴더에 하루 한 파일씩 자동 백업. 앱키·토큰·계좌번호는 어디에도 넣지 않음)
+    function exportRecords() {
+      const out = { app: 'krx-bb200', ver: 1, at: Date.now(), device: device.name, data: syncPayload() };
+      const k = kstNow();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }));
+      a.download = `krx_기록-${k.ymd}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast('기록 파일을 내려받았어요.');
+    }
+    function importRecords(file) {
+      const rd = new FileReader();
+      rd.onload = () => {
+        let d;
+        try { d = JSON.parse(rd.result); } catch (_) { toast('✖ 기록 파일을 읽지 못했어요 (JSON 아님).'); return; }
+        const data = d && (d.app === 'krx-bb200' ? d.data : d.data && d.rev ? d.data : null);   // 내보낸 파일 또는 중계기 백업 파일
+        if (!data || typeof data !== 'object' || !data.cfg) { toast('✖ 이 프로그램의 기록 파일이 아니에요.'); return; }
+        const p = data.paper || {}, when = d.at || d.saved;
+        const sum = [`저장 시각: ${when ? new Date(when).toLocaleString('ko-KR') : '알 수 없음'}`, `관심종목 ${(data.watch || []).length}개 · 표시 구간 ${(data.marks || []).length}개 · 일지 ${(data.journal || []).length}건`,
+          `모의 계좌: 보유 ${Object.keys(p.positions || {}).length + Object.keys(p.manual || {}).length}종목 · 기록 ${(p.log || []).length}건`, '지금 이 화면의 기록은 이 파일 내용으로 바뀌어요 (다른 컴퓨터에도 동기화).'];
+        confirmAct('기록 불러오기', sum, '불러오기').then((ok) => {
+          if (!ok) return;
+          state.paper = null;
+          applySynced(data);
+          saveStore(); renderSettings(); recomputeAll(); renderRules(); renderSymbols(); renderPaper(); renderAssist(); drawChart();
+          toast('✔ 기록을 불러왔어요.');
+        });
+      };
+      rd.readAsText(file);
+    }
+
+    // ---- 말로 종목 찾기: 비서가 조건을 코드로 짜면 불러온 모든 종목의 최근 일봉에서 맞는 종목을 표로 ----
+    async function runScreen(a) {
+      const code = String(a.code || '').trim();
+      if (!code) return '✖ 찾을 조건이 없어요';
+      const days = Math.max(1, Math.min(20, Math.floor(Number(a.days) || 1)));
+      const codes = Object.keys(state.data).filter((k) => state.data[k].bars && state.data[k].bars.length > 61 && !priceBroken(state.data[k].bars));
+      if (!codes.length) return '✖ 불러온 시세가 없어요 — 시세를 먼저 불러오세요';
+      toast('조건에 맞는 종목을 찾는 중…');
+      const res = await runRule({ code }, codes);
+      if (res.error) return `✖ 조건 코드 오류: ${res.error}`;
+      const hits = [];
+      codes.forEach((k) => {
+        const on = res.out[k], b = state.data[k].bars;
+        for (let j = 0; j < days; j++) { const i = b.length - 1 - j; if (i > 0 && on[i]) { hits.push({ k, i, b }); break; } }
+      });
+      const vx = (h) => { const m = h.b[h.i].volMa; return m ? h.b[h.i].v / m : 0; };
+      const sorters = { chg: (h) => h.b[h.i].c / h.b[h.i - 1].c, vol: vx, amount: (h) => h.b[h.i].c * h.b[h.i].v };
+      const sf = sorters[a.sort] || sorters.amount;
+      hits.sort((x, y) => sf(y) - sf(x));
+      const title = String(a.title || '조건 검색').slice(0, 40);
+      const top = hits.slice(0, 30);
+      const fd = (t) => `${t.slice(4, 6)}.${t.slice(6, 8)}`;
+      chat.msgs.push({
+        role: 'assistant', at: Date.now(),
+        text: `🔎 ${title}: ${hits.length}종목 (불러온 ${codes.length}종목${days > 1 ? ` · 최근 ${days}일` : ' · 마지막 일봉'} 기준${hits.length > 30 ? ' · 거래대금 큰 30개만 표시' : ''})${hits.length ? '\n줄을 누르면 차트로 가요.' : '\n맞는 종목이 없어요 — 조건을 조금 느슨하게 해 보세요.'}`,
+        ...(top.length ? { table: { head: ['종목', '종가', '등락', '거래량', '날짜'], codes: top.map((h) => h.k), rows: top.map((h) => [nameOf(h.k), won(h.b[h.i].c), pctTxt((h.b[h.i].c / h.b[h.i - 1].c - 1) * 100), `${vx(h).toFixed(1)}배`, fd(h.b[h.i].t)]) } } : {}),
+        ...(top.length ? { prop: [{ do: '관심추가', codes: top.slice(0, 10).map((h) => h.k) }] } : {}),
+      });
+      saveChat(); renderChat();
+      lastScreen = { title, n: hits.length, of: codes.length, top: top.slice(0, 10).map((h) => nameOf(h.k)) };
+      return `✔ ${title}: ${hits.length}종목을 찾았어요`;
+    }
+    let lastScreen = null;
+    document.getElementById('chatList').addEventListener('click', (e) => {
+      const r = e.target.closest('[data-goto]');
+      if (r) selectCode(r.dataset.goto);
+    });
+
+    // ---- 비서가 차트에 그리기: 가격선(지지·저항 등)과 날짜 메모. 종목별로 저장·동기화 ----
+    const DRAW_COLORS = { 빨강: '#e5383b', 파랑: '#1e6bd6', 초록: '#16a34a', 주황: '#f08c00', 보라: '#7c3aed', 회색: '#666666' };
+    const drawColor = (c) => (DRAW_COLORS[c] || (/^#[0-9a-f]{6}$/i.test(String(c)) ? c : '#7c3aed'));
+    function drawAct(a) {
+      const code = findCode(a) || state.selected;
+      if (!code) return '✖ 어느 종목에 그릴지 모르겠어요';
+      const list = a.replace ? [] : (state.draw[code] || []).slice();
+      (Array.isArray(a.lines) ? a.lines : []).slice(0, 12).forEach((l) => {
+        const price = Number(l.price);
+        if (price > 0) list.push({ id: Math.random().toString(36).slice(2, 8), kind: 'line', price, label: String(l.label || '').slice(0, 30), color: drawColor(l.color) });
+      });
+      (Array.isArray(a.notes) ? a.notes : []).slice(0, 12).forEach((n) => {
+        const t = String(n.date || n.t || '').replace(/\D/g, '').slice(0, 8);
+        if (t.length === 8 && n.text) list.push({ id: Math.random().toString(36).slice(2, 8), kind: 'note', t, text: String(n.text).slice(0, 40), color: drawColor(n.color) });
+      });
+      state.draw[code] = list.slice(-30);
+      if (!state.draw[code].length) delete state.draw[code];
+      saveStore();
+      if (code !== state.selected) selectCode(code); else drawChart();
+      renderChartHeader();
+      return `✔ ${nameOf(code)} 차트에 그렸어요 (선 ${list.filter((x) => x.kind === 'line').length} · 메모 ${list.filter((x) => x.kind === 'note').length})`;
+    }
+    function drawClearAct(a) {
+      if (a.all) { const n = Object.keys(state.draw).length; state.draw = {}; saveStore(); drawChart(); renderChartHeader(); return `✔ 모든 종목의 그림을 지웠어요 (${n}종목)`; }
+      const code = findCode(a) || state.selected;
+      if (!code || !state.draw[code]) return '✖ 지울 그림이 없어요';
+      delete state.draw[code]; saveStore(); drawChart(); renderChartHeader();
+      return `✔ ${nameOf(code)} 차트 그림을 지웠어요`;
+    }
+    function drawUserDraw(bars, vis, start, x, y, g) {
+      const list = state.draw && state.draw[state.selected];
+      if (!list || !list.length || !vis.length) return;
+      const right = g.w - g.right;
+      ctx.save(); ctx.font = '10px Noto Sans KR, sans-serif';
+      list.forEach((d) => {
+        if (d.kind === 'line') {
+          const yy = y(d.price);
+          ctx.strokeStyle = d.color; ctx.lineWidth = 1.2; ctx.setLineDash([6, 3]);
+          ctx.beginPath(); ctx.moveTo(g.left, yy); ctx.lineTo(right, yy); ctx.stroke(); ctx.setLineDash([]);
+          const tx = `${d.label ? `${d.label} ` : ''}${won(d.price)}`, w = ctx.measureText(tx).width + 6;
+          ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(right - w - 2, yy - 13, w, 12);
+          ctx.fillStyle = d.color; ctx.fillText(tx, right - w + 1, yy - 4);
+        } else {
+          // 날짜 메모: 그 날짜(분봉이면 그날 첫 봉)의 고가 위에 ▼ 와 글
+          let j = vis.findIndex((b) => String(b.t).slice(0, 8) >= d.t);
+          if (j < 0 || String(vis[j].t).slice(0, 8) > d.t && state.tf === 'D') return;
+          const b = vis[j], xx = x(start + j), yy = y(b.h) - 26;
+          ctx.fillStyle = d.color;
+          ctx.beginPath(); ctx.moveTo(xx, yy + 8); ctx.lineTo(xx - 4, yy + 2); ctx.lineTo(xx + 4, yy + 2); ctx.closePath(); ctx.fill();
+          const w = ctx.measureText(d.text).width + 6;
+          ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(xx - w / 2, yy - 12, w, 13);
+          ctx.strokeStyle = d.color; ctx.lineWidth = 1; ctx.strokeRect(xx - w / 2, yy - 12, w, 13);
+          ctx.fillStyle = d.color; ctx.fillText(d.text, xx - w / 2 + 3, yy - 2);
+        }
+      });
+      ctx.restore();
+    }
+    function drawLegend() {
+      const n = state.draw && state.draw[state.selected] ? state.draw[state.selected].length : 0;
+      return n ? ` <button type="button" data-clear-draw class="underline text-[#7c3aed]" title="비서가 이 종목 차트에 그린 선·메모 지우기">✏ 그림 ${n} ✕</button>` : '';
+    }
+    document.getElementById('maLegend').addEventListener('click', (e) => { if (e.target.closest('[data-clear-draw]')) toast(drawClearAct({})); });
+    const drawFacts = () => { const l = state.draw[state.selected]; return l && l.length ? l.map((d) => (d.kind === 'line' ? `선 ${d.label || ''} ${d.price}` : `메모 ${d.t} ${d.text}`)) : null; };
+
+    // ---- 매매 일지: 모든 주문(모의·자동·실계좌)을 이유와 함께 남기고, 매도하면 그 매수 대비 수익을 붙임 ----
+    let jWhy = '';   // 비서에게 말로 시킨 주문이면 그때 내가 한 말을 이유로
+    const lastUserText = (src) => { if (src !== 'ai') return ''; const m = [...chat.msgs].reverse().find((x) => x.role === 'user'); return m && Date.now() - m.at < 300000 ? String(m.text).slice(0, 120) : ''; };
+    function journalAdd(e) {
+      const j = { id: Math.random().toString(36).slice(2, 9), at: Date.now(), ...e, why: e.why || jWhy || '' };
+      if (j.side === 'SELL') {   // 같은 종목·같은 계좌(모의/실계좌)의 직전 매도 이후 매수들의 평균가 대비
+        const grp = (s) => (s === '실계좌' ? 'real' : 'paper');
+        const buys = [];
+        for (const x of state.journal) { if (x.code !== j.code || grp(x.src) !== grp(j.src)) continue; if (x.side === 'SELL') break; buys.push(x); }
+        const q = buys.reduce((s, x) => s + x.qty, 0);
+        if (q > 0) { const avg = buys.reduce((s, x) => s + x.qty * x.price, 0) / q; j.ret = +((j.price / avg - 1) * 100).toFixed(2); j.days = Math.round((j.at - buys[buys.length - 1].at) / 86400000); }
+      }
+      state.journal.unshift(j);
+      if (state.journal.length > 500) state.journal.length = 500;
+      saveStore(); renderAssist();
+      if (!j.why && j.src !== '자동') toast('📓 일지에 적었어요 — 비서 탭 "매매 일지"에서 이유를 남길 수 있어요.');
+    }
+    function journalWhyAct(a) {
+      const c = a.code || a.name ? findCode(a) : null;
+      const e = state.journal.find((x) => !c || x.code === c);
+      if (!e) return '✖ 이유를 붙일 일지가 없어요';
+      e.why = String(a.why || a.text || '').slice(0, 200);
+      saveStore(); renderAssist();
+      return `✔ 일지에 이유를 적었어요 — ${nameOf(e.code)} ${e.side === 'BUY' ? '매수' : '매도'}`;
+    }
+    function journalFold() {
+      const js = state.journal, mon = js.filter((x) => Date.now() - x.at < 30 * 86400000), sells = mon.filter((x) => x.ret != null);
+      const win = sells.filter((x) => x.ret > 0).length;
+      const sum = js.length ? `30일 ${mon.length}건${sells.length ? ` · 매도 ${sells.length}건 중 ${win}건 이익` : ''}` : '주문하면 자동으로 적혀요';
+      const fd = (at) => { const d = new Date(at); return `${d.getMonth() + 1}.${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+      return fold('journal', '매매 일지', sum, js.length ? `<button type="button" data-jreview class="btn-on w-full px-2 py-0.5 text-[11px] mb-1" title="최근 30일 일지를 비서가 돌아보고 잘한 점·반복한 실수를 정리">📓 한 달 돌아보기</button>
+        <div class="max-h-64 overflow-y-auto scroll -mx-2">${js.slice(0, 60).map((x) => `<div class="px-2 py-1 border-t border-[#f5f5f5] text-[11px]">
+          <div class="flex gap-1"><span class="${x.side === 'BUY' ? 'up' : 'down'} font-semibold">${x.side === 'BUY' ? '매수' : '매도'}</span><span class="font-semibold">${esc(nameOf(x.code))}</span>
+          <span class="num text-[#666666]">${x.qty}주 @ ${won(x.price)}</span>${x.ret != null ? `<b class="num ${x.ret >= 0 ? 'up' : 'down'}">${pctTxt(x.ret)}</b>` : ''}
+          <span class="ml-auto text-[10px] text-[#999999]">${x.src} · ${fd(x.at)}</span></div>
+          ${x.note ? `<div class="text-[10px] text-[#888888]">${esc(x.note)}</div>` : ''}
+          <div class="text-[10px] ${x.why ? 'text-[#333333]' : 'text-[#bbbbbb]'}">${x.why ? `이유: ${esc(x.why)}` : '이유 없음'} <button type="button" data-jwhy="${x.id}" class="underline text-[#888888]">✎</button></div></div>`).join('')}</div>` : '<div class="text-[11px] text-[#999999]">모의·실계좌 주문을 하면 여기에 이유와 함께 쌓이고, 매도하면 수익률이 붙어요.</div>');
+    }
+    document.getElementById('assistBody').addEventListener('click', (e) => {
+      const w = e.target.closest('[data-jwhy]');
+      if (w) {
+        const x = state.journal.find((j) => j.id === w.dataset.jwhy);
+        if (!x) return;
+        const v = prompt(`${nameOf(x.code)} ${x.side === 'BUY' ? '산' : '판'} 이유`, x.why || '');
+        if (v != null) { x.why = v.trim().slice(0, 200); saveStore(); renderAssist(); }
+        return;
+      }
+      if (e.target.closest('[data-jreview]')) {
+        state.ui.right = true; saveStore(); applyPanes(); setTab('assist');
+        chatSend('지난 30일 매매 일지를 돌아봐 줘. 잘한 점, 반복한 실수, 다음에 바꿀 점 하나씩. 이유를 안 적은 거래가 많으면 그것도 말해 줘.');
+      }
+    });
+    function journalFacts() {
+      const mon = state.journal.filter((x) => Date.now() - x.at < 30 * 86400000);
+      if (!mon.length) return null;
+      const sells = mon.filter((x) => x.ret != null);
+      const d = (at) => { const k = new Date(at + 9 * 3600000).toISOString(); return `${k.slice(5, 10)} ${k.slice(11, 16)}`; };
+      return {
+        요약: { 건수: mon.length, 매도: sells.length, 이익매도: sells.filter((x) => x.ret > 0).length, 평균수익: sells.length ? +(sells.reduce((s, x) => s + x.ret, 0) / sells.length).toFixed(2) : null, 이유없음: mon.filter((x) => !x.why).length },
+        기록: mon.slice(0, 40).map((x) => ({ 때: d(x.at), 종목: nameOf(x.code), 구분: x.side === 'BUY' ? '매수' : '매도', 수량: x.qty, 가격: x.price, 계좌: x.src, ...(x.ret != null ? { 수익: x.ret, 보유일: x.days } : {}), ...(x.why ? { 이유: x.why } : {}), ...(x.note ? { 메모: x.note } : {}) })),
+      };
+    }
+    document.getElementById('btnExport').addEventListener('click', exportRecords);
+    document.getElementById('inpImport').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importRecords(f); e.target.value = ''; });
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
@@ -5187,7 +5440,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       chat.msgs.push({ role: 'user', text, at: Date.now() });
       chat.busy = true; renderChat(); saveChat();
       let reply;
-      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts() }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
+      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
       catch (err) { reply = `(오류) ${err.message}`; }
       const bl = splitBlocks(reply);
       const { text: said, acts, prop } = splitActions(bl.text);
@@ -5600,7 +5853,7 @@ onmessage = (e) => { const { body, sets } = e.data;
     });
     // 1초마다 시계 · 실시간 갱신 · 자동 동기화 · 모의투자 스케줄
     scheduler();
-    setInterval(scheduler, 1000);
+    bgEvery(scheduler, 1000);
   </script>
 </body>
 </html>
