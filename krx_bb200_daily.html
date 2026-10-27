@@ -163,7 +163,7 @@
             <div class="flex items-center justify-between px-2 py-0.5 text-[10px] text-[#888888] bg-[#fafafa]"><span>비서와 대화</span><button id="btnChatClear" type="button" class="underline">지우기</button></div>
             <div id="chatList" class="max-h-72 min-h-[90px] overflow-y-auto scroll p-2 space-y-1.5"></div>
             <div class="flex gap-1 p-1.5 border-t border-[#f0f0f0]"><input id="chatInput" type="text" class="flex-1 min-w-0 text-[11px]" placeholder="비서에게 묻기…" autocomplete="off" /><button id="btnChatSend" type="button" class="btn-on px-2 text-[11px]">보내기</button></div>
-            <div class="flex flex-wrap gap-1 px-1.5 pb-1.5"><button id="btnConvo" type="button" class="btn px-2 py-0.5 text-[11px]" title="말하면 듣고, 소리로 답한 뒤 다시 듣기 — 버튼을 누르지 않고 대화">🗣 대화 모드</button><button id="btnMic" type="button" class="btn px-2 py-0.5 text-[11px]">🎤 말하기</button><button id="btnSpeak" type="button" class="btn px-2 py-0.5 text-[11px]"></button></div>
+            <div class="flex flex-wrap gap-1 px-1.5 pb-1.5"><button id="btnAlert" type="button" class="btn px-2 py-0.5 text-[11px]" title="장중에 비서가 먼저 알림 — 누를 때마다 소리 켬 → 화면만 → 끔"></button><button id="btnConvo" type="button" class="btn px-2 py-0.5 text-[11px]" title="말하면 듣고, 소리로 답한 뒤 다시 듣기 — 버튼을 누르지 않고 대화">🗣 대화 모드</button><button id="btnMic" type="button" class="btn px-2 py-0.5 text-[11px]">🎤 말하기</button><button id="btnSpeak" type="button" class="btn px-2 py-0.5 text-[11px]"></button></div>
           </div>
           <div id="customBox" class="border border-[#e6e6e6] p-2 space-y-1"></div>
           <div id="assistBody" class="space-y-1.5"></div>
@@ -3821,6 +3821,7 @@
       if (g.length) item.lines.push(...g.map((w) => `점검: ${w.msg}`));
       pushFeed(item);
       if (side === 'SELL') setTimeout(retrainStyle, 1500);
+      if (/자동|마감 전|반등 매도/.test(note || '')) raiseAlert({ lv: 'info', code, text: `모의 자동매매 — ${item.title}${note ? ` (${note})` : ''}`, say: `자동매매로 ${nameOf(code)} ${side === 'BUY' ? '샀어요' : '팔았어요'}.` });
       if (!aiAuto()) return;
       const ref = assist.feed[0];
       askAi('trade', { 체결: { 종목: nameOf(code), 구분: side === 'BUY' ? '매수' : '매도', 수량: qty, 가격: price, 사유: note }, 종목상황: fx, 점검: g.map((w) => w.msg) })
@@ -3962,7 +3963,7 @@
     function renderChat() {
       const el = document.getElementById('chatList');
       if (!el) return;
-      el.innerHTML = chat.msgs.length ? chat.msgs.map((m, mi) => `<div class="flex ${m.role === 'user' ? 'justify-end' : ''}"><div class="max-w-[88%] px-2 py-1 text-[11px] leading-relaxed whitespace-pre-line ${m.role === 'user' ? 'bg-[#111111] text-white' : 'bg-[#f3f3f3] text-[#222222]'}">${esc(m.role === 'assistant' ? plainSay(m.text) : m.text)}${(m.prop || []).map((a, k) => `<button type="button" data-prop="${mi}:${k}" class="block mt-1 ${a.done ? 'text-[#999999]' : 'btn'} px-2 py-0.5 text-[10px] text-left" ${a.done ? 'disabled' : ''}>${a.done ? '✔ ' : '▶ 적용 — '}${esc(describeAct(a))}</button>`).join('')}</div></div>`).join('')
+      el.innerHTML = chat.msgs.length ? chat.msgs.map((m, mi) => `<div class="flex ${m.role === 'user' ? 'justify-end' : ''}"><div class="${m.table ? 'w-full' : 'max-w-[88%]'} px-2 py-1 text-[11px] leading-relaxed whitespace-pre-line ${m.role === 'user' ? 'bg-[#111111] text-white' : 'bg-[#f3f3f3] text-[#222222]'}">${esc(m.role === 'assistant' ? plainSay(m.text) : m.text)}${m.table ? tableHtml(m.table) : ''}${(m.prop || []).map((a, k) => `<button type="button" data-prop="${mi}:${k}" class="block mt-1 ${a.done ? 'text-[#999999]' : 'btn'} px-2 py-0.5 text-[10px] text-left" ${a.done ? 'disabled' : ''}>${a.done ? '✔ ' : '▶ 적용 — '}${esc(describeAct(a))}</button>`).join('')}</div></div>`).join('')
         + (chat.busy ? '<div class="text-[10px] text-[#999999]">비서가 답하는 중…</div>' : '')
         : `<div class="text-[10px] text-[#999999] leading-relaxed">말이나 글로 물어보세요. 예: "지금 이 종목 위험한 점 말해줘", "삼성전자 주봉으로 띄워줘", "리서치센터 섹터 열어줘", "매도 기준을 10일선으로 바꿔줘" — 화면 조작도 해 드려요. 주문·설정 변경은 확인 창을 거치고, 종목 추천은 하지 않습니다.${aiReady() ? '' : '<br><b>설정 → AI 분석</b>에서 키를 넣어야 대화할 수 있습니다.'}</div>`;
       el.scrollTop = el.scrollHeight;
@@ -4027,11 +4028,13 @@
         const nm = { exitMa: '매도선', volFilter: '거래량 확인', volMult: '거래량 배수', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxFilter: 'ADX 확인', adxMin: 'ADX', nearPct: '후보 범위' };
         return `되돌리기 — ${Object.entries(a.set || {}).map(([k, v]) => `${nm[k] || k} ${v === true ? '켬' : v === false ? '끔' : v}`).join(', ')}`;
       }
+      if (a.do === '규칙적용') return `${a.kind === 'exit' ? '매도' : '매수'} 규칙 적용 (${RULE_MODE[a.kind === 'exit' ? 'exit' : 'entry'][a.mode] || a.mode})`;
+      if (a.do === '종목') return `${a.name || nameOf(a.code)} 차트 보기`;
       if (a.do === '규칙삭제') return `${a.kind === 'exit' ? '매도' : '매수'} 규칙 끄기`;
       if (a.do === '설정') {
         const defs = {};
         SETTING_DEFS.forEach((g) => g.items.forEach((it) => { defs[it.k] = it.label.replace(/\s*\(.*\)$/, ''); }));
-        return `설정: ${Object.entries(a.set || {}).map(([k, v]) => `${defs[k] || k} ${state.cfg[k]} → ${v}`).join(', ')}`;
+        return `설정: ${Object.entries(a.set || {}).map(([k, v]) => `${SET_NAMES[k] || defs[k] || k} ${state.cfg[k]} → ${v}`).join(', ')}`;
       }
       if (a.do === '주문' || a.do === '실주문') return `${a.do === '실주문' ? '실계좌 ' : '모의 '}${String(a.side).toUpperCase() === 'SELL' ? '매도' : '매수'} ${a.name || nameOf(a.code)} ${a.qty}주`;
       if (a.do === '종목') return `${a.name || nameOf(a.code)} 띄우기`;
@@ -4134,6 +4137,13 @@
           return `${r.ok ? '✔' : '✖'} ${r.msg}`;
         }
         case '비상정지': await realKill(); return '✔ 실계좌 주문을 정지했어요';
+        case '비교': return runCompare(a);
+        case '규칙추출': return runExtract();
+        case '규칙적용': {
+          if (src === 'widget') return '✖ 위젯은 매매 규칙을 바꿀 수 없어요';
+          const kind = a.kind === 'exit' ? 'exit' : 'entry';
+          return setRule(kind, { title: String(a.title || '내 규칙').slice(0, 60), code: String(a.code || ''), mode: a.mode === 'replace' ? 'replace' : kind === 'entry' ? 'and' : 'or', at: Date.now() });
+        }
         case '규칙삭제': return setRule(a.kind === 'exit' ? 'exit' : 'entry', null);
         case '스타일초기화': custom.css = ''; saveCustom(); applyCss(); renderCustomBox(); return '✔ 화면 스타일을 원래대로 돌렸어요';
         default: return `✖ 모르는 명령: ${a.do}`;
@@ -4413,7 +4423,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       try { real.st = await bridge('/trade/status', {}); real.err = ''; } catch (err) { real.err = err.message; }
       if (full && real.st && real.st.available) {
         try { real.bal = await bridge('/trade/balance', {}); } catch (err) { real.err = `잔고 조회: ${err.message}`; }
-        try { real.orders = (await bridge('/trade/orders', {})).items; } catch (err) { real.err = `주문내역 조회: ${err.message}`; }
+        try { real.orders = (await bridge('/trade/orders', {})).items; realFillCheck(real.orders); } catch (err) { real.err = `주문내역 조회: ${err.message}`; }
       }
       renderReal(); renderTicket();
     }
@@ -4737,12 +4747,16 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
     function marksFold() {
       const ms = state.marks;
       const g = ms.filter((m) => m.label === 'good').length, b = ms.filter((m) => m.label === 'bad').length;
-      return fold('marks', '내가 표시한 구간', ms.length ? `👍 ${g} · 👎 ${b}` : '차트에서 📐 또는 Shift+드래그', ms.length ? `<div class="max-h-56 overflow-y-auto scroll -mx-2">${ms.map((m) => `<div data-mark="${m.id}" class="flex items-center gap-1 px-2 py-0.5 text-[11px] border-t border-[#f5f5f5] cursor-pointer hover:bg-[#fafafa]">
+      return fold('marks', '내가 표시한 구간', ms.length ? `👍 ${g} · 👎 ${b}` : '차트에서 📐 또는 Shift+드래그', ms.length ? `<button type="button" data-extract class="${g >= 3 ? 'btn-on' : 'btn'} w-full px-2 py-0.5 text-[11px] mb-1" title="👍 예시들의 매수일 공통점으로 매수 규칙 초안 만들기 (3개 이상 필요)">👍 예시에서 매수 규칙 뽑기${g < 3 ? ` (${g}/3)` : ''}</button><div class="max-h-56 overflow-y-auto scroll -mx-2">${ms.map((m) => `<div data-mark="${m.id}" class="flex items-center gap-1 px-2 py-0.5 text-[11px] border-t border-[#f5f5f5] cursor-pointer hover:bg-[#fafafa]">
             <span>${m.label === 'good' ? '👍' : m.label === 'bad' ? '👎' : '·'}</span><span class="truncate flex-1">${esc(m.name)} <span class="text-[10px] text-[#999999] num">${esc(fmtT(m.a))}→${esc(fmtT(m.b))}</span></span>
             <span class="num ${m.ret >= 0 ? 'up' : 'down'}">${pctTxt(m.ret)}</span>${m.ai ? '<span class="text-[10px] text-[#888888]" title="AI 의견 있음">💬</span>' : ''}</div>`).join('')}</div>`
         : '<div class="text-[10px] text-[#999999] leading-relaxed">차트에서 📐 버튼을 켜거나 Shift를 누른 채, 산 지점부터 판 지점까지 드래그하세요. 수익률·매수 시점 특징·전략과의 차이·비슷한 과거 자리 통계를 보여주고, 👍/👎로 표시하면 비서가 내 기준을 학습합니다.</div>');
     }
-    document.getElementById('assistBody').addEventListener('click', (e) => { const r = e.target.closest('[data-mark]'); if (r) openMark(r.dataset.mark); });
+    document.getElementById('assistBody').addEventListener('click', (e) => {
+      if (e.target.closest('[data-extract]')) { toast(runExtract()); document.getElementById('chatList').scrollIntoView({ block: 'nearest' }); return; }
+      const r = e.target.closest('[data-mark]');
+      if (r) openMark(r.dataset.mark);
+    });
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
     const pageVer = { at: null };
     async function checkPageVersion() {
@@ -4859,9 +4873,20 @@ onmessage = (e) => { const { body, sets } = e.data;
           <details class="text-[10px] text-[#666666]"><summary class="cursor-pointer">코드 보기</summary><pre class="whitespace-pre-wrap num bg-[#fafafa] p-1">${esc(r.code)}</pre></details>
           <button type="button" data-rule-off="${kind}" class="underline text-[10px] text-[#888888]">이 규칙 끄기</button></div>`;
       };
-      el.innerHTML = `<div class="text-[11px] font-semibold">내 매매 규칙 <span class="font-normal text-[10px] text-[#999999]">— 비서에게 말로 바꾸세요</span></div>${row('entry')}${row('exit')}`;
+      el.innerHTML = `<div class="text-[11px] font-semibold">내 매매 규칙 <span class="font-normal text-[10px] text-[#999999]">— 비서에게 말로 바꾸세요</span></div>${row('entry')}${row('exit')}
+        <div class="flex flex-wrap gap-1 pt-1 border-t border-[#f0f0f0]"><span class="text-[10px] text-[#888888] self-center">비교:</span>
+          <button type="button" data-cmp="exitMa" class="btn px-1.5 py-0 text-[10px]">매도선 5·10·20</button>
+          <button type="button" data-cmp="volMult" class="btn px-1.5 py-0 text-[10px]">거래량 1.5·2·3배</button>
+          <button type="button" data-cmp="bbPeriod" class="btn px-1.5 py-0 text-[10px]">BB 120·200·250</button></div>`;
     }
     document.getElementById('rulesBox').addEventListener('click', async (e) => {
+      const cb = e.target.closest('[data-cmp]');
+      if (cb) {
+        const vals = { exitMa: [5, 10, 20], volMult: [1.5, 2, 3], bbPeriod: [120, 200, 250] }[cb.dataset.cmp];
+        const msg = await runCompare({ key: cb.dataset.cmp, values: vals });
+        state.ui.right = true; saveStore(); applyPanes(); setTab('assist'); toast(msg);
+        return;
+      }
       const b = e.target.closest('[data-rule-off]');
       if (!b) return;
       toast(await setRule(b.dataset.ruleOff, null));
@@ -4887,6 +4912,272 @@ onmessage = (e) => { const { body, sets } = e.data;
         if (rx && b.rX === 1) { ctx.fillStyle = '#1e6bd6'; ctx.beginPath(); ctx.arc(xx, y(b.h) - 16, 2.2, 0, Math.PI * 2); ctx.fill(); }
       });
     }
+    // ---- 먼저 말 거는 비서: 장중에 상황이 바뀌면 비서가 먼저 알림 (화면 카드 + 대화창 + 음성 + 창이 가려져 있으면 OS 알림) ----
+    //  보유 종목 매도선 근접·도달 · 오늘 매수 신호 · 매매 시간대 시작 · 자동매매 체결 · 실계좌 체결. 같은 알림은 하루 한 번
+    const ALERT_KEY = 'krx_alert_v1';
+    const alertCfg = (() => { try { return { mode: 'voice', nearPct: 1, ...JSON.parse(localStorage.getItem(ALERT_KEY) || '{}') }; } catch (_) { return { mode: 'voice', nearPct: 1 }; } })();   // mode: voice · quiet · off
+    const saveAlertCfg = () => { try { localStorage.setItem(ALERT_KEY, JSON.stringify(alertCfg)); } catch (_) {} };
+    const alertSeen = (() => { try { return JSON.parse(sessionStorage.getItem('krx_alert_seen') || '{}'); } catch (_) { return {}; } })();
+    function alertOnce(key) {
+      if (alertSeen[key]) return false;
+      alertSeen[key] = Date.now();
+      try { sessionStorage.setItem('krx_alert_seen', JSON.stringify(alertSeen)); } catch (_) {}
+      return true;
+    }
+    const sayQ = [];
+    function raiseAlert(a) {   // { lv: 'high'|'info', text, say, code }
+      if (alertCfg.mode === 'off') return;
+      chat.msgs.push({ role: 'assistant', text: `🔔 ${a.text}`, at: Date.now(), alert: true, ...(a.code ? { prop: [{ do: '종목', code: a.code }] } : {}) });
+      saveChat(); renderChat();
+      showAlertCard(a);
+      if (alertCfg.mode === 'voice') { sayQ.push({ t: a.say || a.text, at: Date.now() }); flushSay(); }
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') { try { new Notification('비서 알림', { body: a.text, tag: a.key || undefined }); } catch (_) {} }
+    }
+    // 사용자가 말하는 중이거나 비서가 답하는 중이면 기다렸다가 읽음 (2분 지난 알림은 버림)
+    function flushSay() {
+      if (!sayQ.length || chat.recOn || chat.busy || chat.speaking) { if (sayQ.length) setTimeout(flushSay, 2000); return; }
+      const x = sayQ.shift();
+      if (Date.now() - x.at > 120000) { flushSay(); return; }
+      chat.speaking = true;
+      speakText(x.t).finally(() => { chat.speaking = false; setTimeout(flushSay, 400); });
+    }
+    function showAlertCard(a) {
+      let st = document.getElementById('alertStack');
+      if (!st) { st = document.createElement('div'); st.id = 'alertStack'; st.className = 'fixed right-3 top-12 z-[65] w-[min(320px,calc(100vw-24px))] space-y-1.5'; document.body.appendChild(st); }
+      const el = document.createElement('div');
+      el.className = `bg-white border ${a.lv === 'high' ? 'border-[#e5383b] border-2' : 'border-[#111111]'} shadow-lg px-2.5 py-1.5 text-[11px] leading-snug`;
+      el.innerHTML = `<div class="flex gap-1.5"><span>${a.lv === 'high' ? '⚠' : '🔔'}</span><span class="flex-1">${esc(a.text)}</span><button type="button" data-x class="text-[#999999] px-0.5" aria-label="닫기">✕</button></div>${a.code ? '<button type="button" data-go class="underline text-[10px] text-[#666666] mt-0.5">차트 보기</button>' : ''}`;
+      el.querySelector('[data-x]').onclick = () => el.remove();
+      if (a.code) el.querySelector('[data-go]').onclick = () => { selectCode(a.code); el.remove(); };
+      st.prepend(el);
+      while (st.children.length > 4) st.lastChild.remove();
+      setTimeout(() => el.remove(), a.lv === 'high' ? 90000 : 25000);
+    }
+    const hm2min = (s) => +String(s).slice(0, 2) * 60 + +String(s).slice(3, 5);
+    let alertRealAt = 0;
+    function alertTick() {
+      if (alertCfg.mode === 'off' || !state.bridge.ok) return;
+      const k = kstNow(), day = k.ymd, open = marketOpenNow(), c = state.cfg, p = paper();
+      // 매매 시간대
+      if (open) {
+        const now = k.min, ws = hm2min(c.winStart), we = hm2min(c.winEnd);
+        const held = Object.keys(p.positions).length;
+        if (now >= ws - 10 && now < ws && alertOnce(`winpre-${day}`)) raiseAlert({ lv: 'info', text: `${c.winStart} 매매 시간대 ${ws - now}분 전이에요. 상단 근처 후보 ${win.near.length}종목, 전략 보유 ${held}종목을 지켜보고 있어요.`, say: `${ws - now}분 뒤 매매 시간대가 시작돼요.` });
+        if (now >= ws && now < we && alertOnce(`winstart-${day}`)) raiseAlert({ lv: 'info', text: `매매 시간대가 시작됐어요 (${c.winStart}~${c.winEnd}). ${p.enabled ? '자동매매가 켜져 있어요.' : '자동매매는 꺼져 있어요.'}`, say: '매매 시간대가 시작됐어요.' });
+      }
+      // 보유 종목: 매도선 근접 · 매도 조건 도달 (모의 전략·수동·실계좌)
+      const held = new Set([...Object.keys(p.positions), ...Object.keys(p.manual || {}), ...(real.bal ? real.bal.holdings.map((h) => h.code) : [])]);
+      held.forEach((code) => {
+        const d = state.data[code], px = lastPrice(code);
+        if (!d || !d.bars.length || !px) return;
+        const ex = exitSignal(d.bars, d.bars.length - 1, px);
+        if (ex.hit) {
+          if (alertOnce(`exit-${code}-${day}`)) raiseAlert({ lv: 'high', code, key: `exit-${code}`, text: `${nameOf(code)} 매도 조건에 닿았어요 — ${ex.note}, 지금 ${won(px)}원.${open ? ' 마감까지 이 아래면 매도 대상이에요.' : ''}`, say: `${nameOf(code)}, 매도 조건에 닿았어요.` });
+        } else if (ex.ma) {
+          const gap = (px / ex.ma - 1) * 100;
+          if (gap < alertCfg.nearPct && alertOnce(`near-${code}-${day}`)) raiseAlert({ lv: 'info', code, text: `${nameOf(code)} 매도선(${c.exitMa}선 ${won(Math.round(ex.ma))}원)까지 ${gap.toFixed(1)}% 남았어요. 지금 ${won(px)}원.`, say: `${nameOf(code)}, 매도선까지 ${gap.toFixed(1)}% 남았어요.` });
+        }
+      });
+      // 오늘 매수 신호 (장중 · 관심·후보·지금 종목군에서 새로 뜬 것만)
+      if (open) {
+        const codes = new Set([...state.watch, ...win.near, ...universeCodes()].filter((x) => state.data[x]));
+        const hits = [];
+        codes.forEach((code) => {
+          const b = state.data[code].bars, i = b.length - 1;
+          if (!b[i] || b[i].t !== day || held.has(code)) return;
+          if (isBreakout(b, i) && alertOnce(`sig-${code}-${day}`)) hits.push(code);
+        });
+        if (hits.length) raiseAlert({ lv: 'info', code: hits[0], text: `오늘 매수 신호 ${hits.length}개: ${hits.slice(0, 5).map(nameOf).join(', ')}${hits.length > 5 ? ` 외 ${hits.length - 5}개` : ''}. 지금 시세 기준이라 마감 전까지 바뀔 수 있어요.`, say: `매수 신호 ${hits.length}개가 떴어요.` });
+        // 실계좌가 켜져 있으면 1분마다 주문내역을 확인해 체결을 알림
+        if (real.st && real.st.available && Date.now() - alertRealAt > 60000) { alertRealAt = Date.now(); realRefresh(true); }
+      }
+    }
+    // 실계좌 체결 감지 — 주문내역의 체결 수량이 늘면 알림
+    const realFilled = {};
+    function realFillCheck(items) {
+      (items || []).forEach((o) => {
+        const prev = realFilled[o.no];
+        realFilled[o.no] = o.filled;
+        if (prev != null && o.filled > prev) raiseAlert({ lv: 'high', code: o.code, text: `실계좌 체결 — ${o.name || nameOf(o.code)} ${o.side} ${o.filled - prev}주${o.avg ? ` @ ${won(o.avg)}원` : ''} (주문 #${o.no}, ${o.filled}/${o.qty}주)`, say: `실계좌 ${o.name || ''} 체결됐어요.` });
+      });
+    }
+    setInterval(alertTick, 15000);
+    setTimeout(alertTick, 5000);
+    function renderAlertBtn() {
+      const b = document.getElementById('btnAlert');
+      if (!b) return;
+      b.textContent = alertCfg.mode === 'voice' ? '🔔 알림+소리' : alertCfg.mode === 'quiet' ? '🔔 알림' : '🔕 알림 끔';
+      b.className = `${alertCfg.mode === 'off' ? 'btn' : 'btn-on'} px-2 py-0.5 text-[11px]`;
+    }
+    document.getElementById('btnAlert').addEventListener('click', () => {
+      alertCfg.mode = alertCfg.mode === 'voice' ? 'quiet' : alertCfg.mode === 'quiet' ? 'off' : 'voice';
+      saveAlertCfg(); renderAlertBtn();
+      if (alertCfg.mode !== 'off' && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+      toast(alertCfg.mode === 'voice' ? '장중에 비서가 먼저 알려 주고 소리로도 말해요.' : alertCfg.mode === 'quiet' ? '알림은 화면에만 띄워요 (소리 없음).' : '비서 먼저 알림을 껐어요.');
+    });
+    renderAlertBtn();
+    // ---- 조건 비교 실험실: 여러 설정을 나란히 백테스트 + 기간을 앞·뒤로 나눠 '앞에서 좋았던 게 뒤에서도 통하나' 확인 ----
+    function backtestWith(over) {
+      const save = state.cfg;
+      const bbChanged = (over.bbPeriod != null && over.bbPeriod !== save.bbPeriod) || (over.bbStd != null && over.bbStd !== save.bbStd);
+      state.cfg = { ...save, ...over };
+      try {
+        if (bbChanged) Object.values(state.data).forEach((d) => computeInd(d.bars));
+        const codes = universeCodes().filter((k) => state.data[k]);
+        return codes.length ? runBacktest(codes) : null;
+      } finally {
+        state.cfg = save;
+        if (bbChanged) Object.values(state.data).forEach((d) => computeInd(d.bars));
+      }
+    }
+    function halfStats(bt) {
+      if (!bt || !bt.curve.length) return null;
+      const mid = bt.curve[Math.floor(bt.curve.length / 2)].t;
+      const part = (a) => ({ n: a.length, win: a.length ? a.filter((t) => t.ret > 0).length / a.length * 100 : null, avg: a.length ? a.reduce((s, t) => s + t.ret, 0) / a.length : null });
+      return { mid, front: part(bt.trades.filter((t) => t.startT < mid)), back: part(bt.trades.filter((t) => t.startT >= mid)) };
+    }
+    const SET_NAMES = { exitMa: '매도선', volMult: '거래량 배수', volFilter: '거래량 확인', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxMin: 'ADX', adxFilter: 'ADX 확인', nearPct: '후보 범위', maxPos: '최대 보유', slotPct: '종목당 비중' };
+    const setLabel = (set) => Object.entries(set).map(([k, v]) => `${SET_NAMES[k] || k} ${v === true ? '켬' : v === false ? '끔' : k === 'exitMa' ? `${v}선` : v}`).join(' · ');
+    // variants: [{ name, set }] — 최대 6개. 지금 설정은 맨 앞에 자동으로 넣어 비교 기준으로 씀
+    function compareVariants(variants) {
+      const list = [{ name: '지금 설정', set: {} }, ...variants.filter((v) => v && v.set && Object.keys(v.set).length).slice(0, 6)];
+      const rows = list.map((v) => {
+        const bt = backtestWith(v.set), s = bt && bt.stats, h = halfStats(bt);
+        return { name: v.name || setLabel(v.set), set: v.set, s, h };
+      }).filter((r) => r.s);
+      if (!rows.length) return { text: '✖ 비교할 시세가 아직 없어요 — 시세를 먼저 불러오세요.' };
+      const f = (x, d = 1) => (x == null || !isFinite(x) ? '-' : x.toFixed(d));
+      const best = rows.slice().sort((a, b) => b.s.ret - a.s.ret)[0];
+      const bestFront = rows.slice().filter((r) => r.h.front.n >= 5).sort((a, b) => b.h.front.avg - a.h.front.avg)[0];
+      const notes = [];
+      notes.push(`총수익이 가장 큰 건 '${best.name}' (${pctTxt(best.s.ret)}, 거래 ${best.s.n}건).`);
+      if (bestFront && bestFront.h.back.n >= 3) {
+        const backRank = rows.slice().filter((r) => r.h.back.n >= 3).sort((a, b) => b.h.back.avg - a.h.back.avg).findIndex((r) => r === bestFront) + 1;
+        notes.push(backRank === 1 ? `앞 기간 1등 '${bestFront.name}'이 뒤 기간에서도 1등 — 일관성이 있어요.` : `⚠ 앞 기간 1등 '${bestFront.name}'이 뒤 기간에선 ${backRank}등 — 과거에만 맞춘 결과일 수 있어요.`);
+      }
+      if (rows.some((r) => r.s.n < 20)) notes.push('⚠ 거래 20건 미만인 줄은 우연일 가능성이 커요.');
+      return {
+        text: `조건 비교 (${rows[0].h ? `앞·뒤 기준일 ${fmtDate(rows[0].h.mid)}` : ''})\n${notes.join('\n')}`,
+        table: {
+          head: ['조건', '거래', '승률', '총수익', '최대낙폭', '앞 평균', '뒤 평균'],
+          rows: rows.map((r) => [r.name, `${r.s.n}`, `${f(r.s.win, 0)}%`, pctTxt(r.s.ret), `-${f(r.s.mdd)}%`, r.h.front.avg == null ? '-' : pctTxt(r.h.front.avg), r.h.back.avg == null ? '-' : pctTxt(r.h.back.avg)]),
+          best: rows.indexOf(best),
+        },
+        prop: rows.slice(1).map((r) => ({ do: '설정', set: r.set })),
+      };
+    }
+    // 한 가지 값만 바꿔 보는 단축형 {key:'exitMa', values:[5,10,20]}
+    function variantsFrom(a) {
+      if (Array.isArray(a.variants)) return a.variants;
+      if (a.key && Array.isArray(a.values)) return a.values.slice(0, 6).map((v) => ({ name: setLabel({ [a.key]: v }), set: { [a.key]: v, ...(a.key === 'volMult' ? { volFilter: true } : a.key === 'adxMin' ? { adxFilter: true } : {}) } }));
+      return [];
+    }
+    async function runCompare(a) {
+      const vs = variantsFrom(a).filter((v) => !Object.keys(v.set).every((k) => state.cfg[k] === v.set[k]));
+      if (!vs.length) return '✖ 비교할 조건이 없어요 (지금 설정과 같아요).';
+      toast('조건별 백테스트를 돌리는 중…');
+      await new Promise((r) => setTimeout(r, 30));
+      const res = compareVariants(vs);
+      chat.msgs.push({ role: 'assistant', text: res.text, at: Date.now(), ...(res.table ? { table: res.table } : {}), ...(res.prop && res.prop.length ? { prop: res.prop } : {}) });
+      saveChat(); renderChat();
+      return '✔ 조건 비교를 대화창에 올렸어요 — 마음에 드는 줄의 ▶ 적용을 누르면 바로 바뀌어요';
+    }
+    const tableHtml = (t) => `<table class="num text-[10px] mt-1 w-full border-collapse"><thead><tr>${t.head.map((h) => `<th class="text-left font-normal text-[#888888] pr-1.5 pb-0.5">${esc(h)}</th>`).join('')}</tr></thead><tbody>${t.rows.map((r, i) => `<tr class="${i === t.best ? 'font-semibold' : ''} border-t border-[#e6e6e6]">${r.map((c, j) => `<td class="pr-1.5 py-0.5 ${j === 0 ? 'text-left' : ''} ${/^[+]/.test(c) ? 'up' : /^-\d|^-0|^-\./.test(c) && j !== 4 ? 'down' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    // ---- 표시한 구간에서 규칙 뽑기: 👍 예시들의 매수일 공통점을 찾아 매수 규칙 초안을 만들고 숫자로 검증 ----
+    //  특징 계산식은 규칙 Worker 와 같은 함수로 만들어, 뽑은 규칙을 그대로 적용해도 결과가 같게 함
+    const RH = new Function(`${RULE_HELPERS}; return { sma, ema, highest, lowest, rsi, chg, volx };`)();
+    const FEATS = [
+      { k: 'chg1', name: '그날 상승률', unit: '%', js: 'chg(bars,i,1)' },
+      { k: 'chg5', name: '5일 상승률', unit: '%', js: 'chg(bars,i,5)' },
+      { k: 'volx', name: '거래량 배수', unit: '배', js: 'volx(bars,i,20)' },
+      { k: 'ma5', name: '5선 대비', unit: '%', js: '(bars[i].c/bars[i].ma5-1)*100' },
+      { k: 'ma20', name: '20선 대비', unit: '%', js: '(bars[i].c/bars[i].ma20-1)*100' },
+      { k: 'ma60', name: '60선 대비', unit: '%', js: '(bars[i].c/bars[i].ma60-1)*100' },
+      { k: 'up', name: 'BB 상단 대비', unit: '%', js: '(bars[i].c/bars[i].upper-1)*100' },
+      { k: 'hi60', name: '60일 고점 대비', unit: '%', js: '(bars[i].c/highest(bars,i-1,60,"h")-1)*100' },
+      { k: 'rsi', name: 'RSI(14)', unit: '', js: 'rsi(bars,i,14)' },
+    ].map((x) => ({ ...x, f: new Function('sma', 'ema', 'highest', 'lowest', 'rsi', 'chg', 'volx', `return (bars, i) => { const v = ${x.js}; return v == null || !isFinite(v) ? null : v; };`)(RH.sma, RH.ema, RH.highest, RH.lowest, RH.rsi, RH.chg, RH.volx) }));
+    const featRow = (bars, i) => { const o = {}; FEATS.forEach((x) => { o[x.k] = i >= 61 ? x.f(bars, i) : null; }); return o; };
+    function markIndex(m) {
+      const db = state.data[m.code] && state.data[m.code].bars;
+      if (!db) return null;
+      const day = m.a.slice(0, 8);
+      let i = db.findIndex((x) => x.t >= day);
+      if (i < 0) return null;
+      if (db[i].t > day && i > 0) i--;
+      return { bars: db, i };
+    }
+    const roundT = (k, v) => (k === 'rsi' ? Math.round(v) : Math.round(v * 10) / 10);
+    function extractRule() {
+      const pick = (lab) => state.marks.filter((m) => m.label === lab).map((m) => { const x = markIndex(m); return x && x.i >= 61 ? { m, f: featRow(x.bars, x.i) } : null; }).filter(Boolean);
+      const goods = pick('good'), bads = pick('bad');
+      if (goods.length < 3) return { error: `👍 예시가 ${goods.length}개예요 — 일봉 차트에서 3개 이상 표시하면 공통점을 찾을 수 있어요.` };
+      // 비교 기준: 불러온 모든 종목의 일봉(2일 간격) + 10일 뒤 수익
+      const base = [];
+      Object.values(state.data).forEach((d) => {
+        const b = d.bars;
+        if (!b || b.length < 90) return;
+        for (let i = 61; i < b.length - 10; i += 2) base.push({ f: featRow(b, i), fwd: (b[i + 10].c / b[i].c - 1) * 100 });
+      });
+      if (base.length < 500) return { error: '비교할 일봉이 부족해요 — 시세를 더 불러오세요.' };
+      const pass = (conds, f) => conds.every((c) => f[c.k] != null && (c.op === '>=' ? f[c.k] >= c.t : f[c.k] <= c.t));
+      const measure = (conds) => {
+        const rec = goods.filter((g) => pass(conds, g.f)).length / goods.length;
+        const bp = bads.length ? bads.filter((g) => pass(conds, g.f)).length / bads.length : 0;
+        const hit = base.filter((x) => pass(conds, x.f));
+        return { rec, bp, rate: hit.length / base.length, n: hit.length, fwd: hit.length ? hit.reduce((s, x) => s + x.fwd, 0) / hit.length : null, win: hit.length ? hit.filter((x) => x.fwd > 0).length / hit.length * 100 : null };
+      };
+      const score = (r) => (r.rec * r.rec * (1 - 0.8 * r.bp)) / Math.max(r.rate, 0.002);
+      // 후보 조건: 👍 값의 분포에서 아래쪽(이상)·위쪽(이하) 경계
+      const cands = [];
+      FEATS.forEach((x) => {
+        const vs = goods.map((g) => g.f[x.k]).filter((v) => v != null).sort((a, b) => a - b);
+        if (vs.length < goods.length * 0.8) return;
+        [0, 0.15, 0.3].forEach((q) => cands.push({ k: x.k, op: '>=', t: roundT(x.k, vs[Math.floor(q * (vs.length - 1))]) }));
+        [1, 0.85, 0.7].forEach((q) => cands.push({ k: x.k, op: '<=', t: roundT(x.k, vs[Math.floor(q * (vs.length - 1))]) }));
+      });
+      let conds = [], cur = measure([]), curS = score(cur);
+      for (let step = 0; step < 3; step++) {
+        let best = null;
+        cands.forEach((c) => {
+          if (conds.some((x) => x.k === c.k)) return;
+          const r = measure([...conds, c]);
+          if (r.rec < 0.7 || r.n < 20) return;
+          const s = score(r);
+          if (!best || s > best.s) best = { c, r, s };
+        });
+        if (!best || best.s < curS * 1.1) break;
+        conds.push(best.c); cur = best.r; curS = best.s;
+      }
+      if (!conds.length) return { error: '👍 예시들 사이에 뚜렷한 공통점을 찾지 못했어요 — 예시를 더 표시하거나, 비슷한 자리끼리 골라 보세요.' };
+      const all = measure([]);
+      const nm = (c) => { const x = FEATS.find((y) => y.k === c.k); return `${x.name} ${c.t}${x.unit} ${c.op === '>=' ? '이상' : '이하'}`; };
+      const code = `const v = (x) => (x == null || !isFinite(x) ? NaN : x);\nreturn ${conds.map((c) => `v(${FEATS.find((y) => y.k === c.k).js}) ${c.op} ${c.t}`).join('\n  && ')};`;
+      // 지금 전략이 👍 예시를 몇 개 잡았나
+      const caught = goods.filter((g) => { const x = markIndex(g.m); for (let k = Math.max(1, x.i - 2); k <= Math.min(x.bars.length - 1, x.i + 2); k++) if (isBreakout(x.bars, k)) return true; return false; }).length;
+      return { conds, title: conds.map(nm).join(' + '), code, goods: goods.length, bads: bads.length, cur, all, caught };
+    }
+    function runExtract() {
+      const r = extractRule();
+      if (r.error) return `✖ ${r.error}`;
+      const f = (x, d = 1) => (x == null ? '-' : x.toFixed(d));
+      const lines = [
+        `👍 예시 ${r.goods}개${r.bads ? `·👎 ${r.bads}개` : ''}에서 뽑은 매수 규칙: ${r.title}`,
+        `• 내 👍 ${r.goods}개 중 ${Math.round(r.cur.rec * r.goods)}개를 잡아요${r.bads ? ` · 👎 ${r.bads}개 중 ${r.bads - Math.round(r.cur.bp * r.bads)}개를 피해요` : ''} (지금 전략은 👍 ${r.caught}개를 잡음)`,
+        `• 과거 일봉 중 ${f(r.cur.rate * 100)}%에서 켜짐 — 종목당 1년에 약 ${f(r.cur.rate * 250, 0)}번`,
+        `• 켜진 날의 10일 뒤: 평균 ${pctTxt(r.cur.fwd)} · 오른 비율 ${f(r.cur.win, 0)}% (전체 평균 ${pctTxt(r.all.fwd)} · ${f(r.all.win, 0)}%)`,
+        r.cur.fwd != null && r.all.fwd != null && r.cur.fwd <= r.all.fwd ? '⚠ 이 규칙이 켜진 날의 이후 성과가 평균보다 낮아요 — 내 예시가 우연히 잘된 자리였을 수 있어요.' : '',
+      ].filter(Boolean);
+      lastExtract = r;
+      chat.msgs.push({ role: 'assistant', text: lines.join('\n'), at: Date.now(), prop: [
+        { do: '규칙적용', kind: 'entry', mode: 'and', title: r.title.slice(0, 60), code: r.code },
+        { do: '규칙적용', kind: 'entry', mode: 'replace', title: r.title.slice(0, 60), code: r.code },
+      ] });
+      saveChat(); renderChat();
+      return '✔ 규칙 초안을 대화창에 올렸어요 — ▶ 적용을 누르면 바로 신호·백테스트에 반영돼요';
+    }
+    let lastExtract = null;
+    const extractFacts = () => (lastExtract ? { 규칙: lastExtract.title, 코드: lastExtract.code, 내예시포착: `${Math.round(lastExtract.cur.rec * lastExtract.goods)}/${lastExtract.goods}`, 켜지는비율: +(lastExtract.cur.rate * 100).toFixed(1), 열흘뒤평균: lastExtract.cur.fwd, 전체평균: lastExtract.all.fwd } : null);
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
@@ -4896,7 +5187,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       chat.msgs.push({ role: 'user', text, at: Date.now() });
       chat.busy = true; renderChat(); saveChat();
       let reply;
-      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts() }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
+      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts() }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
       catch (err) { reply = `(오류) ${err.message}`; }
       const bl = splitBlocks(reply);
       const { text: said, acts, prop } = splitActions(bl.text);
@@ -4905,7 +5196,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (bl.blocks.length) chat.msgs.push({ role: 'assistant', text: applyBlocks(bl.blocks).join('\n'), at: Date.now() });
       chat.busy = false; renderChat(); saveChat();
       const acting = acts.length ? runActions(acts) : null;   // 화면 조작은 말하는 동안 실행 (확인 창은 사용자 클릭을 기다림)
-      if ((chat.speak || chat.convo) && !reply.startsWith('(오류)')) await speakText(reply);
+      if ((chat.speak || chat.convo) && !reply.startsWith('(오류)')) { chat.speaking = true; try { await speakText(reply); } finally { chat.speaking = false; } }
       if (acting) await acting;
       convoNext();
     }
