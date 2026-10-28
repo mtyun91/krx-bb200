@@ -21,3 +21,6 @@ __pycache__/
 research/data/
 research/*.pkl
 research/report.txt
+
+# Gemini 대화창용 자료·적용 결과 (다시 만들 수 있음)
+gemini_pack/
