@@ -681,7 +681,11 @@ ASK_PURPOSE = {
 }
 CHAT_ACTIONS = (
     "\n매매 조건 바꾸기(가장 중요): 사용자가 매수·매도 조건을 말하면 말로 설명만 하지 말고 반드시 실제로 바꾼다.\n"
-    "- 설정 값으로 되는 것은 설정 명령: BB 기간 bbPeriod·배수 bbStd, 매도선 exitMa(N선), 거래량 확인 volFilter+volMult(배), ADX adxFilter+adxMin, 후보 범위 nearPct.\n"
+    "- 설정 값으로 되는 것은 설정 명령: BB 기간 bbPeriod·배수 bbStd, 매도선 exitMa(N선), 거래량 확인 volFilter+volMult(배), ADX adxFilter+adxMin, 후보 범위 nearPct, "
+    '진입 방식 entryMode("ALL" 모든 상단 돌파 / "SQ" 200일 스퀴즈 돌파만 — 스퀴즈 기준 sqPct 밴드 폭 3년 중 하위%·sqDrop 하락 흔적%·sqRange 120일 횡보 폭%), '
+    "장대양봉 대기 lcWait(장대양봉으로 돌파하면 바로 사지 않고 눌림 뒤 첫 반등에 매수 — lcAtr 몸통 배수·lcChg 상승률%·lcDays 최대 대기일), 복리 배분 slotAuto. "
+    "스퀴즈 돌파는 장기 추세의 신호일 뿐 절대적인 매수 근거가 아니라고 설명한다. 진입 방식을 바꾸기 전에는 비교 명령으로 "
+    '{"do":"비교","variants":[{"name":"스퀴즈만","set":{"entryMode":"SQ"}},{"name":"스퀴즈만+장대양봉 대기","set":{"entryMode":"SQ","lcWait":true}}]} 처럼 먼저 보여 준다.\n'
     "- 설정으로 안 되는 조건(RSI, 전고점 돌파, 연속 양봉, 갭, 이격도, 특정 이평선 정배열 등)은 규칙 블록으로 직접 코드를 짠다:\n"
     '  <<규칙 kind="entry" mode="and" title="짧은 이름">> JS 본문 <</규칙>>  (kind: entry=매수 / exit=매도)\n'
     "  · mode — 매수: and(BB 상단 돌파 + 이 조건) / replace(이 조건만으로 매수). 매도: or(N선 이탈 또는 이 조건) / replace(이 조건만으로 매도).\n"
