@@ -1802,7 +1802,7 @@
       document.getElementById('tkName').textContent = code ? `${nameOf(code)} ${code}` : '종목을 선택하세요';
       const cur = code ? lastPrice(code) : null;
       const live = code && liveQuote(code);
-      document.getElementById('tkCur').innerHTML = cur ? `현재가 <b class="num">${won(cur)}</b>${live ? ' <span class="text-[#e5383b]">●</span>' : ' <span class="text-[#bbbbbb]" title="실시간 시세 아님">○</span>'}` : '';
+      document.getElementById('tkCur').innerHTML = cur ? `현재가 <b class="num">${won(cur)}</b>${chgTag(cur, prevClose(code))}${live ? ' <span class="text-[#e5383b]">●</span>' : ' <span class="text-[#bbbbbb]" title="실시간 시세 아님">○</span>'}` : '';
       document.querySelectorAll('[data-side]').forEach((b) => {
         const on = b.dataset.side === tk.side;
         b.className = `py-1 text-[11px] border ${on ? (b.dataset.side === 'BUY' ? 'bg-[#e5383b] border-[#e5383b] text-white' : 'bg-[#1e6bd6] border-[#1e6bd6] text-white') : 'border-[#d4d4d4] text-[#666666]'}`;
@@ -2580,6 +2580,14 @@
     }
 
     // 호가창(10단계) · 최근 체결
+    // 전일 종가 (오늘 봉이 있으면 그 전 봉) — 등락률 기준
+    function prevClose(code) {
+      const d = state.data[code];
+      if (!d || d.bars.length < 2) return null;
+      const L = d.bars.length;
+      return d.bars[L - 1].t === kstNow().ymd ? d.bars[L - 2].c : d.bars[L - 1].c;
+    }
+    function chgTag(p, base) { return base && p ? `<span class="text-[9px] ml-1 ${p > base ? 'up' : p < base ? 'down' : 'text-[#999999]'}">${p > base ? '+' : ''}${((p / base - 1) * 100).toFixed(2)}%</span>` : ''; }
     function renderBook() {
       const body = document.getElementById('bookBody'), code = state.selected;
       const b = rt.bookData && rt.bookData.code === code ? rt.bookData : null;
@@ -2588,7 +2596,7 @@
         body.innerHTML = `<tr><td colspan="3" class="px-2 py-2 text-[#999999] font-sans">${!state.bridge.rt ? '실시간 호가는 새 버전 중계기가 필요합니다' : marketOpenNow() ? '호가 수신 대기 중…' : '장중(09:00~15:30)에 호가가 들어옵니다'}</td></tr>`;
       } else {
         const d = state.data[code];
-        const base = d && d.bars.length > 1 ? (d.bars[d.bars.length - 1].t === kstNow().ymd ? d.bars[d.bars.length - 2].c : d.bars[d.bars.length - 1].c) : null;
+        const base = prevClose(code);
         const cur = lastPrice(code);
         const max = Math.max(1, ...b.asks.map((a) => a[1]), ...b.bids.map((x) => x[1]));
         const cls = (p) => (base ? (p > base ? 'up' : p < base ? 'down' : '') : '');
@@ -2599,8 +2607,9 @@
         body.innerHTML = [...asks, ...bids].join('') +
           `<tr class="border-t border-[#e6e6e6] text-[#666666]"><td class="text-right px-1">${won(b.totalAsk)}</td><td class="text-center font-sans">총잔량</td><td class="px-1">${won(b.totalBid)}</td></tr>`;
       }
+      const tb = prevClose(code);
       document.getElementById('tickList').innerHTML = rt.ticks.filter(() => true).slice(0, 40).map((t) =>
-        `<div class="flex justify-between px-2"><span class="text-[#999999]">${esc(t.time)}</span><span class="${t.dir > 0 ? 'up' : t.dir < 0 ? 'down' : ''}">${won(t.price)}</span><span class="${t.dir > 0 ? 'up' : t.dir < 0 ? 'down' : 'text-[#666666]'}">${won(t.qty)}</span></div>`).join('')
+        `<div class="flex justify-between px-2"><span class="text-[#999999]">${esc(t.time)}</span><span><span class="${t.dir > 0 ? 'up' : t.dir < 0 ? 'down' : ''}">${won(t.price)}</span>${chgTag(t.price, tb)}</span><span class="${t.dir > 0 ? 'up' : t.dir < 0 ? 'down' : 'text-[#666666]'}">${won(t.qty)}</span></div>`).join('')
         || `<div class="px-2 py-1 text-[#999999] font-sans">${state.bridge.rt ? '체결이 들어오면 여기 표시됩니다' : '-'}</div>`;
     }
     document.getElementById('bookBody').addEventListener('click', (e) => {
@@ -4911,7 +4920,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.15', APP_DATE = '2026-10-28';
+    const APP_VERSION = '1.16', APP_DATE = '2026-10-28';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
