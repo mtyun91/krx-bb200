@@ -66,12 +66,15 @@
         <div class="flex gap-1 mt-1"><button id="btnExport" type="button" class="btn px-2 py-0.5 text-[11px]" title="설정·관심종목·모의 계좌·👍 표시·매매 규칙·일지·차트 그림을 파일로 저장">기록 내보내기</button><label class="btn px-2 py-0.5 text-[11px] cursor-pointer" title="내보낸 파일이나 자동 백업 파일에서 기록 되살리기">기록 불러오기<input id="inpImport" type="file" accept=".json,application/json" class="hidden" /></label></div></div>
     </div>
   </header>
+  <!-- 주요 지수 띠: 코스피·코스닥·미국 지수·환율 (누르면 리서치센터 지수 차트) -->
+  <div id="idxBar" class="flex items-center gap-2 px-3 h-6 border-b border-[#e6e6e6] text-[11px] num overflow-x-auto overflow-y-hidden scroll whitespace-nowrap shrink-0"></div>
   <!-- 리서치 센터 (큰 창): 시장 국면 · 섹터 · 시나리오 가이드 · 뉴스 -->
   <div id="centerPop" class="hidden fixed inset-0 z-50 bg-black/20 flex items-start justify-center pt-8">
     <div class="bg-white border border-[#111111] shadow-xl w-[min(1180px,96vw)] h-[86vh] flex flex-col">
       <div class="flex items-center border-b border-[#e6e6e6] px-3 shrink-0">
         <span class="text-[13px] font-semibold mr-4">리서치 센터</span>
         <button type="button" data-ctab="brief" class="center-tab">요약</button>
+        <button type="button" data-ctab="index" class="center-tab">지수 차트</button>
         <button type="button" data-ctab="regime" class="center-tab">시장 국면</button>
         <button type="button" data-ctab="sector" class="center-tab">섹터</button>
         <button type="button" data-ctab="scen" class="center-tab">시나리오 가이드</button>
@@ -149,7 +152,7 @@
         <span id="chartLive" class="num text-[#999999]"></span>
       </div>
       <button id="assistStrip" type="button" class="flex items-center gap-1.5 px-3 h-6 border-b border-[#f0f0f0] text-[10px] text-[#666666] shrink-0 overflow-hidden whitespace-nowrap text-left hover:bg-[#fafafa]" title="비서 열기"></button>
-      <div class="relative flex-1 min-h-0">
+      <div id="chartWrap" class="relative flex-1 min-h-0">
         <canvas id="chart" class="absolute inset-0 w-full h-full" tabindex="0"></canvas>
         <div id="chartTip" class="absolute hidden pointer-events-none bg-[#111111] text-white text-[11px] num px-2 py-1.5 leading-relaxed z-10"></div>
         <div id="lookCard" class="hidden absolute right-2 top-2 z-20 w-[310px] max-h-[calc(100%-16px)] overflow-y-auto scroll bg-white border border-[#111111] shadow-xl p-2 text-[11px]"></div>
@@ -434,6 +437,7 @@
       rules: { entry: null, exit: null },   // 비서가 만든 내 매수·매도 규칙
       journal: [],       // 매매 일지 (모든 주문 + 이유 + 매도 수익)
       draw: {},          // 비서가 차트에 그린 선·메모 (종목별)
+      idxView: null,     // 리서치센터에서 지수 차트를 보는 중이면 { sym, name, bars } — 차트가 이 봉을 그림
       agenda: [],        // 결재 안건 (신호 → 내 결재 → 실행) + 결정 기록
       view: { end: null, span: 160 },
       paper: null,
@@ -1133,6 +1137,7 @@
 
     // 지금 차트에 그릴 봉 (일봉은 전략용 데이터를 그대로, 나머지는 차트 전용 데이터)
     function chartBars() {
+      if (state.idxView) return state.idxView.bars;
       if (state.tf === 'D') { const d = state.data[state.selected]; return d ? d.bars : null; }
       const c = state.chart;
       return c && c.code === state.selected && c.tf === state.tf ? c.bars : null;
@@ -1247,7 +1252,7 @@
       const vis = bars.slice(start, end + 1);
       // 가장 오래된 봉까지 보이면 과거 봉을 자동으로 더 받음 (받은 만큼 꽉 찼을 때만 — 더 없으면 반복 안 함)
       const moreKey = `${state.selected}|${tf}|${bars.length}`;
-      if (start === 0 && state.bridge.ok && bars.length >= chartWant(tf) && drawChartNow.more !== moreKey) { drawChartNow.more = moreKey; loadMoreBars(); }
+      if (!state.idxView && start === 0 && state.bridge.ok && bars.length >= chartWant(tf) && drawChartNow.more !== moreKey) { drawChartNow.more = moreKey; loadMoreBars(); }
       let hi = -Infinity, lo = Infinity, vmax = 0;
       vis.forEach((b) => {
         const bb = b.ready && state.look.bb;
@@ -1324,7 +1329,7 @@
       drawRanges(bars, x, y, g, slot);   // 내가 표시한 구간
       ctx.restore();
       // 모의 보유 종목: 평단 · 매도 기준선(N일선) (모든 봉 주기에 표시)
-      const held = state.paper && state.paper.positions[state.selected];
+      const held = !state.idxView && state.paper && state.paper.positions[state.selected];
       if (held) {
         const c = state.cfg;
         const lv = [{ p: held.avg, c: '#111111', t: `평단 ${won(held.avg)}` }];
@@ -1339,7 +1344,7 @@
         });
       }
       // 직접 넣은 주문: 수동 평단 · 미체결 지정가
-      if (state.paper && state.paper.manual) {
+      if (!state.idxView && state.paper && state.paper.manual) {
         const lv = [];
         const m = state.paper.manual[state.selected];
         if (m) lv.push({ p: m.avg, c: '#8b5cf6', t: `수동 평단 ${won(m.avg)} · ${m.qty}주`, dash: [6, 3] });
@@ -1355,7 +1360,7 @@
       }
       chartScale = { lo, hi, top: g.top, priceH: g.priceH };
       // 매매 표시 (백테스트 — 일봉에서만)
-      if (state.bt && tf === 'D') {
+      if (!state.idxView && state.bt && tf === 'D') {
         const marks = [];
         [...state.bt.trades, ...state.bt.open].filter((tr) => tr.code === state.selected).forEach((tr) => {
           tr.entries.forEach((e) => marks.push({ t: e.t, p: e.price, kind: 'buy', label: `${e.stage}차` }));
@@ -1500,7 +1505,7 @@
       document.getElementById('tkQty').focus();
     });
     cv.addEventListener('mousedown', (e) => {
-      if (e.button === 0 && (rangeMode || e.shiftKey) && chartView && chartBars()) { startRange(e); return; }   // 구간 표시
+      if (e.button === 0 && !state.idxView && (rangeMode || e.shiftKey) && chartView && chartBars()) { startRange(e); return; }   // 구간 표시
       if (e.button !== 0 || !chartBars()) return;
       stopGlide();
       drag = { x: e.clientX, end: curEnd(), lx: e.clientX, lt: performance.now(), v: 0 };
@@ -2372,7 +2377,7 @@
       const badge = document.getElementById('modeBadge');
       try {
         const h = await bridge('/health');
-        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
+        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.market = !!h.market; setTimeout(() => loadMarketQuotes(), 300); state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
         badge.textContent = h.demo ? '● 데모 시세' : '● 나무증권 실시간';
         badge.className = `text-[11px] px-2 py-0.5 ${h.demo ? 'bg-[#e5383b] text-white' : 'bg-[#111111] text-white'}`;
         document.getElementById('demoBanner').classList.toggle('hidden', !h.demo);
@@ -3335,6 +3340,8 @@
       document.querySelectorAll('.center-tab').forEach((b) => { b.className = `center-tab px-3 py-1.5 text-[12px] ${b.dataset.ctab === center.tab ? 'font-semibold border-b-2 border-[#111111]' : 'text-[#888888]'}`; });
       const r = research.res;
       document.getElementById('centerRegime').innerHTML = r ? `시장 국면 ${regimeChip(r.regime)} <span class="num ${REGIME[r.regime].cls}">${r.score >= 0 ? '+' : ''}${r.score}</span>` : '';
+      if (center.tab === 'index') { renderIndexTab(el); return; }   // 지수 차트: 메인 차트를 옮겨 와서 봄
+      if (state.idxView) idxExit();   // 다른 탭으로 가면 차트를 원래 자리로 (아래에서 내용을 갈아엎기 전에)
       const top = el.scrollTop;
       el.innerHTML = center.tab === 'brief' ? renderBriefTab() : center.tab === 'sector' ? renderSectorTab() : center.tab === 'scen' ? renderScenarioTab() : center.tab === 'news' ? renderNewsTab()
         : `<div id="researchBody2" class="max-w-xl space-y-2"></div>`;
@@ -4542,7 +4549,7 @@
     function drawCustomInd(bars, vis, start, x, y, g) {
       const on = custom.ind.filter((d) => d.on);
       if (!on.length) return;
-      const last = bars[bars.length - 1], key = `${state.selected}|${state.tf}|${bars.length}|${last.t}|${last.c}`;
+      const last = bars[bars.length - 1], key = `${state.idxView ? state.idxView.sym : state.selected}|${state.tf}|${bars.length}|${last.t}|${last.c}`;
       ctx.font = '10px Noto Sans KR, sans-serif';
       on.forEach((d, k) => {
         const cv0 = custom.vals[d.id];
@@ -4966,6 +4973,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
     document.getElementById('btnRange').addEventListener('click', () => setRangeMode(!rangeMode));
     // 차트에 그리기 — 저장한 구간(초록 👍 · 빨강 👎 · 회색 미표시)과 드래그 중인 구간
     function drawRanges(bars, x, y, g, slot) {
+      if (state.idxView) return;
       const pos = new Map(bars.map((b, i) => [b.t, i]));
       const band = (ia, ib, col, alpha) => {
         const x0 = x(Math.min(ia, ib)) - slot / 2, x1 = x(Math.max(ia, ib)) + slot / 2;
@@ -5029,7 +5037,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.23', APP_DATE = '2026-10-28';
+    const APP_VERSION = '1.24', APP_DATE = '2026-10-28';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5176,7 +5184,7 @@ onmessage = (e) => { const { body, sets } = e.data;
     }
     // 차트에 전략을 보이게 — 매도선(N선)·매수 신호(빈 △)·매도 규칙 신호(파란 점). 조건을 바꾸면 바로 달라짐 (일봉)
     function drawStrategyMarks(bars, vis, start, x, y) {
-      if (state.tf !== 'D') return;
+      if (state.tf !== 'D' || state.idxView) return;
       const n = state.cfg.exitMa, rx = ruleOn('exit');
       if (state.look.exitLine) {   // 매도 기준선(N일선) — 차트 설정에서 숨기기·색 바꾸기
         ctx.beginPath(); ctx.strokeStyle = state.look.exitColor; ctx.lineWidth = 1.6; ctx.setLineDash([]);
@@ -5611,7 +5619,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       return `✔ ${nameOf(code)} 차트 그림을 지웠어요`;
     }
     function drawUserDraw(bars, vis, start, x, y, g) {
-      const list = state.draw && state.draw[state.selected];
+      const list = !state.idxView && state.draw && state.draw[state.selected];
       if (!list || !list.length || !vis.length) return;
       const right = g.w - g.right;
       ctx.save(); ctx.font = '10px Noto Sans KR, sans-serif';
@@ -5806,7 +5814,7 @@ onmessage = (e) => { const { body, sets } = e.data;
     let lookCache = { key: '', mas: [], ind: [] };
     function lookSeries(bars) {
       const L = state.look, last = bars[bars.length - 1];
-      const key = `${state.selected}|${state.tf}|${bars.length}|${last.t}|${last.c}|${last.h}|${last.l}|${JSON.stringify(L.mas)}|${JSON.stringify(L.ind)}`;
+      const key = `${state.idxView ? state.idxView.sym : state.selected}|${state.tf}|${bars.length}|${last.t}|${last.c}|${last.h}|${last.l}|${JSON.stringify(L.mas)}|${JSON.stringify(L.ind)}`;
       if (lookCache.key === key) return lookCache;
       const c = cl(bars);
       lookCache = { key, mas: L.mas.map((m) => (m.on ? LK.sma(c, m.p) : null)), ind: L.ind.map((d) => { if (!d.on) return null; try { return indDef(d.k).calc(bars, d.p, d.c); } catch (_) { return null; } }) };
@@ -6226,7 +6234,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (state.selected && state.bridge.ok && state.bridge.research && !newsCache[nameOf(state.selected)]) { try { await getNews(nameOf(state.selected), 10); } catch (_) {} }
       const pack = {
         안내: '파르티잔 인베스트먼트 화면의 지금 상태입니다. 이 수치를 근거로 분석·비교·추천해 주세요(근거 수치와 위험을 함께, 보장 표현 없이 — 결정은 사용자가 결재). 화면 조작·차트 작도·설정이 필요하면 <<명령>> [ ... ] 형식으로, 매매 규칙은 <<규칙 ...>>...<</규칙>>, 위젯은 <<위젯 ...>>...<</위젯>> 형식으로 답하면 사용자가 앱의 "📥 답 적용"에 붙여 넣어 실행합니다.',
-        ...assistFacts(), 화면: screenFacts(), 매매규칙: rulesFacts(), 결재함: agendaFacts(), 표시구간: marksFacts(), 차트모양: lookFacts(),
+        ...assistFacts(), 화면: screenFacts(), 매매규칙: rulesFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 표시구간: marksFacts(), 차트모양: lookFacts(),
       };
       const text = `[파르티잔 인베스트먼트 지금 상황 — ${pack.시각}]\n${JSON.stringify(pack, null, 2)}`;
       try { await navigator.clipboard.writeText(text); toast('📋 지금 화면 상황을 복사했어요 — Gemini 대화창에 붙여 넣고 물어보세요'); }
@@ -6262,6 +6270,86 @@ onmessage = (e) => { const { body, sets } = e.data;
       };
       if (prompts[k]) chatSend(prompts[k]);
     });
+    // ---- 주요 지수: 위쪽 지수 띠(코스피·코스닥·미국 지수·환율) + 리서치센터 '지수 차트' (메인 차트를 그대로 옮겨 와 같은 차트로 봄) ----
+    //  시세는 중계기가 야후 파이낸스 공개 차트에서 받아 옴 (15~20분 늦을 수 있음). 지수 차트를 여는 동안 state.idxView 가 차트 봉을 대신함
+    const IDX_LIST = [['^KS11', '코스피'], ['^KQ11', '코스닥'], ['^GSPC', 'S&P500'], ['^IXIC', '나스닥'], ['^DJI', '다우'], ['^SOX', '반도체'], ['^VIX', 'VIX'], ['KRW=X', '원/달러']];
+    const chartWrapEl = document.getElementById('chartWrap');
+    const mkt = { items: [], at: 0, err: '', sym: '^KS11', bars: {}, barsAt: {}, views: {}, save: null, home: document.createComment('chart-home') };
+    chartWrapEl.parentNode.insertBefore(mkt.home, chartWrapEl);
+    const idxNum = (v) => (v == null ? '-' : Number(v).toLocaleString('ko-KR', { maximumFractionDigits: Math.abs(v) < 100 ? 2 : Math.abs(v) < 2000 ? 2 : 1 }));
+    const idxPct = (v) => (v == null ? '' : `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : 'text-[#999999]'}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`);
+    async function loadMarketQuotes() {
+      if (state.bridge.ok && state.bridge.market) {
+        try { const r = await bridge('/market/quotes', {}); mkt.items = r.items || []; mkt.at = r.at || Date.now(); mkt.err = ''; } catch (err) { mkt.err = err.message; }
+      }
+      renderIdxBar();
+      if (state.idxView) renderIndexToolbar();
+    }
+    function renderIdxBar() {
+      const el = document.getElementById('idxBar');
+      if (!el) return;
+      if (!state.bridge.ok) { el.innerHTML = '<span class="text-[#999999] font-sans">주요 지수 — 중계기에 연결하면 코스피·코스닥·미국 지수가 보여요</span>'; return; }
+      if (!state.bridge.market) { el.innerHTML = '<span class="text-[#999999] font-sans">주요 지수 — 중계기를 새 버전으로 다시 켜면 보여요</span>'; return; }
+      if (!mkt.items.length) { el.innerHTML = `<span class="text-[#999999] font-sans">${mkt.err ? `지수 오류: ${esc(mkt.err)}` : '주요 지수 불러오는 중…'}</span>`; return; }
+      el.innerHTML = mkt.items.map((x) => `<button type="button" data-idx="${esc(x.sym)}" class="hover:underline whitespace-nowrap" title="${esc(x.name)}${x.time ? ` · ${esc(x.time)} 기준` : ''} — 눌러서 지수 차트 보기"><span class="font-sans text-[#666666]">${esc(x.name)}</span> <b>${idxNum(x.price)}</b> ${x.error ? '<span class="text-[#bbbbbb]">-</span>' : idxPct(x.chg)}</button>`).join('<span class="text-[#dddddd]">·</span>')
+        + `<span class="ml-auto pl-2 text-[9px] text-[#bbbbbb] font-sans whitespace-nowrap">지연 시세 · ${new Date(mkt.at + 9 * 3600000).toISOString().slice(11, 16)} 갱신</span>`;
+    }
+    document.getElementById('idxBar').addEventListener('click', (e) => { const b = e.target.closest('[data-idx]'); if (b) { mkt.sym = b.dataset.idx; openCenter('index'); } });
+    // 리서치센터 '지수 차트' 탭 — 처음 한 번만 틀을 만들고, 그 뒤엔 위쪽 버튼 줄만 다시 그림 (차트가 지워지지 않게)
+    function renderIndexTab(el) {
+      if (!el.querySelector('#idxChartHost')) {
+        el.innerHTML = `<div class="flex flex-col h-full gap-2"><div id="idxToolbar" class="flex flex-wrap items-center gap-1 text-[11px]"></div>
+          <div id="idxChartHost" class="relative flex-1 min-h-[420px] border border-[#e6e6e6] flex flex-col"></div>
+          <div class="text-[10px] text-[#999999]">일봉 · 최대 10년 · 야후 파이낸스 공개 시세라 15~20분 늦을 수 있어요. 차트 설정(⚙ 차트)·보조지표·그물망은 메인 차트와 같고, 휠로 확대·축소, 드래그로 이동해요. 닫으면 보던 종목 차트로 돌아가요.</div></div>`;
+      }
+      if (!state.idxView || state.idxView.sym !== mkt.sym) idxEnter(mkt.sym);
+      else renderIndexToolbar();
+    }
+    function renderIndexToolbar() {
+      const el = document.getElementById('idxToolbar');
+      if (!el) return;
+      const q = (s) => mkt.items.find((x) => x.sym === s);
+      const v = state.idxView, bars = v && v.bars, last = bars && bars[bars.length - 1];
+      el.innerHTML = IDX_LIST.map(([s, n]) => { const x = q(s); return `<button type="button" data-isym="${s}" class="${s === mkt.sym ? 'btn-on' : 'btn'} px-2 py-0.5">${n}${x && x.chg != null ? ` <span class="num">${x.chg > 0 ? '+' : ''}${x.chg.toFixed(2)}%</span>` : ''}</button>`; }).join('')
+        + `<span class="ml-2 text-[#666666]">${v ? `<b class="text-[#111111]">${esc(v.name)}</b> ${last ? `${idxNum(last.c)} · ${fmtDate(last.t)} 종가 · ${bars.length.toLocaleString()}봉` : '불러오는 중…'}` : ''}</span>`;
+    }
+    document.getElementById('centerBody').addEventListener('click', (e) => { const b = e.target.closest('[data-isym]'); if (b) { mkt.sym = b.dataset.isym; idxEnter(mkt.sym); } });
+    async function idxEnter(sym) {
+      const host = document.getElementById('idxChartHost');
+      if (!host) return;
+      mkt.sym = sym;
+      if (state.idxView) mkt.views[state.idxView.sym] = { ...state.view };
+      else mkt.save = { tf: state.tf, view: { ...state.view } };
+      if (chartWrapEl.parentNode !== host) host.appendChild(chartWrapEl);
+      state.tf = 'D';
+      state.view = mkt.views[sym] ? { ...mkt.views[sym] } : { end: null, span: 250 };
+      state.idxView = { sym, name: (IDX_LIST.find((x) => x[0] === sym) || [sym, sym])[1], bars: mkt.bars[sym] || null };
+      renderIndexToolbar(); drawChart();
+      if (mkt.bars[sym] && Date.now() - mkt.barsAt[sym] < 600000) return;
+      if (!state.bridge.ok || !state.bridge.market) { toast('지수 차트는 새 버전 중계기에 연결해야 볼 수 있어요'); return; }
+      try {
+        const r = await bridge('/market/index', { sym });
+        const bars = (r.bars || []).filter((b) => b.c > 0);
+        computeInd(bars);
+        mkt.bars[sym] = bars; mkt.barsAt[sym] = Date.now();
+        if (state.idxView && state.idxView.sym === sym) { state.idxView.bars = bars; drawChart(); renderIndexToolbar(); }
+      } catch (err) { toast(`지수 차트 오류: ${err.message}`); }
+    }
+    function idxExit() {
+      if (!state.idxView) return;
+      mkt.views[state.idxView.sym] = { ...state.view };
+      state.idxView = null;
+      mkt.home.parentNode.insertBefore(chartWrapEl, mkt.home);
+      if (mkt.save) { state.tf = mkt.save.tf; state.view = mkt.save.view; }
+      drawChart(); renderChartHeader();
+    }
+    // 리서치센터를 어떤 방법으로 닫든(닫기·Esc·바깥 클릭·비서 명령) 차트를 원래 자리로
+    new MutationObserver(() => { if (document.getElementById('centerPop').classList.contains('hidden')) idxExit(); })
+      .observe(document.getElementById('centerPop'), { attributes: true, attributeFilter: ['class'] });
+    const marketFacts = () => (mkt.items.length ? mkt.items.filter((x) => !x.error).map((x) => ({ 지수: x.name, 값: x.price, 등락률: x.chg == null ? null : +x.chg.toFixed(2), 기준: x.time })) : null);
+    bgEvery(() => { if (!document.hidden) loadMarketQuotes(); }, 60000);
+    renderIdxBar();
+
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
@@ -6271,7 +6359,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       chat.msgs.push({ role: 'user', text, at: Date.now() });
       chat.busy = true; renderChat(); saveChat();
       let reply;
-      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 결재함: agendaFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
+      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
       catch (err) { reply = `(오류) ${err.message}`; }
       const bl = splitBlocks(reply);
       const { text: said, acts, prop } = splitActions(bl.text);

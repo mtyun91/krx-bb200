@@ -348,6 +348,80 @@ NEWS_CACHE = {}
 NEWS_LOCK = threading.Lock()
 
 
+# ---------------------------------------------------------------------------
+# 주요 지수 — 코스피·코스닥·미국 지수·VIX·원/달러 (야후 파이낸스 공개 차트 · 키 없음 · 15~20분 늦을 수 있음)
+# ---------------------------------------------------------------------------
+MARKET_IDX = [("^KS11", "코스피"), ("^KQ11", "코스닥"), ("^GSPC", "S&P500"), ("^IXIC", "나스닥"), ("^DJI", "다우"), ("^SOX", "반도체"), ("^VIX", "VIX"), ("KRW=X", "원/달러")]
+MARKET_NAMES = dict(MARKET_IDX)
+MARKET_CACHE = {}
+MARKET_LOCK = threading.Lock()
+
+
+def _yahoo_chart(sym, rng, interval):
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(sym)}?range={rng}&interval={interval}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=15) as res:
+        return json.load(res)["chart"]["result"][0]
+
+
+def market_index(sym, rng="10y"):
+    if sym not in MARKET_NAMES:
+        raise RuntimeError("모르는 지수입니다")
+    rng = rng if rng in ("1y", "2y", "5y", "10y", "max") else "10y"
+    key = ("idx", sym, rng)
+    with MARKET_LOCK:
+        hit = MARKET_CACHE.get(key)
+        if hit and time.time() - hit[0] < 600:
+            return hit[1]
+    if DEMO:
+        out = {"sym": sym, "name": MARKET_NAMES[sym], "bars": demo_daily(sym, 2500)["bars"], "demo": True}
+    else:
+        d = _yahoo_chart(sym, rng, "1d")
+        off = d["meta"].get("gmtoffset", 0)
+        q = d["indicators"]["quote"][0]
+        cols = [q.get(k) or [] for k in ("open", "high", "low", "close", "volume")]
+        bars = []
+        for i, ts in enumerate(d.get("timestamp") or []):
+            o, h, l, c, v = (a[i] if i < len(a) else None for a in cols)
+            if None in (o, h, l, c):
+                continue
+            t = datetime.fromtimestamp(ts + off, timezone.utc).strftime("%Y%m%d")
+            bar = {"t": t, "o": round(o, 2), "h": round(h, 2), "l": round(l, 2), "c": round(c, 2), "v": int(v or 0)}
+            if bars and bars[-1]["t"] == t:
+                bars[-1] = bar
+            else:
+                bars.append(bar)
+        out = {"sym": sym, "name": MARKET_NAMES[sym], "bars": bars, "price": d["meta"].get("regularMarketPrice")}
+    with MARKET_LOCK:
+        MARKET_CACHE[key] = (time.time(), out)
+    return out
+
+
+def market_quotes():
+    with MARKET_LOCK:
+        hit = MARKET_CACHE.get("quotes")
+        if hit and time.time() - hit[0] < 30:
+            return hit[1]
+    items = []
+    for sym, name in MARKET_IDX:
+        try:
+            if DEMO:
+                b = demo_daily(sym, 3)["bars"]
+                price, prev, tm = b[-1]["c"], b[-2]["c"], ""
+            else:
+                m = _yahoo_chart(sym, "1d", "5m")["meta"]
+                price, prev = m.get("regularMarketPrice"), m.get("chartPreviousClose") or m.get("previousClose")
+                rt = m.get("regularMarketTime")
+                tm = datetime.fromtimestamp(rt + m.get("gmtoffset", 0), timezone.utc).strftime("%m.%d %H:%M") if rt else ""
+            items.append({"sym": sym, "name": name, "price": price, "prev": prev, "chg": (price / prev - 1) * 100 if price and prev else None, "time": tm})
+        except Exception as e:
+            items.append({"sym": sym, "name": name, "error": str(e)[:80]})
+    out = {"items": items, "at": int(time.time() * 1000)}
+    with MARKET_LOCK:
+        MARKET_CACHE["quotes"] = (time.time(), out)
+    return out
+
+
 def news_search(q, n=20):
     import xml.etree.ElementTree as ET
     from email.utils import parsedate_to_datetime
@@ -1517,7 +1591,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/rt/stream":
             return self._stream()
         now = datetime.now(KST)
-        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
+        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "market": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
                          "kst": now.strftime("%Y-%m-%d %H:%M:%S")})
 
     def _stream(self):
@@ -1542,7 +1616,7 @@ class Handler(BaseHTTPRequestHandler):
             HUB.remove(q)
 
     def do_POST(self):
-        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/sectors", "/news", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
+        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/sectors", "/news", "/market/quotes", "/market/index", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
                              "/trade/status", "/trade/arm", "/trade/order", "/trade/cancel", "/trade/balance", "/trade/orders"):
             return self._json(404, {"error": "not found"})
         if not self._guard():
@@ -1625,6 +1699,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not q:
                     return self._json(400, {"error": "검색어가 필요합니다"})
                 return self._json(200, {"q": q, "items": news_search(q, max(1, min(100, int(req.get("n", 20)))))})
+            if self.path == "/market/quotes":
+                return self._json(200, market_quotes())
+            if self.path == "/market/index":
+                return self._json(200, market_index(str(req.get("sym", "")), str(req.get("range", "10y"))))
             if self.path == "/krx/master":
                 m = krx_master(bool(req.get("force")))
                 return self._json(200, {"at": m.get("at", 0), "items": m["items"]})
