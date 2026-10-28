@@ -130,6 +130,7 @@
         <div class="ml-auto flex items-center gap-1 text-[11px] shrink-0">
           <span id="barCountTxt" class="num text-[10px] text-[#999999]"></span>
           <button type="button" id="btnRange" class="btn px-2" title="구간 표시 — 산 지점부터 판 지점까지 드래그 (Shift+드래그도 됨)">📐 구간</button>
+          <button type="button" id="btnLook" class="btn px-2" title="차트 설정 — 봉·이평선 색, 보조지표">⚙ 차트</button>
           <button type="button" id="btnLatest" class="btn px-2" title="휠 확대·축소 · 드래그 이동 · ↑↓ 종목 · ←→ 차트 이동 · 왼쪽 끝까지 가면 과거 봉을 더 불러옴">최신</button>
           <button id="btnToggleRight" type="button" class="btn px-1.5 py-0.5 ml-1" title="오른쪽 패널(백테스트·모의투자·설정) 접기/펴기" aria-label="오른쪽 패널 접기/펴기">◨</button>
         </div>
@@ -144,6 +145,7 @@
       <div class="relative flex-1 min-h-0">
         <canvas id="chart" class="absolute inset-0 w-full h-full" tabindex="0"></canvas>
         <div id="chartTip" class="absolute hidden pointer-events-none bg-[#111111] text-white text-[11px] num px-2 py-1.5 leading-relaxed z-10"></div>
+        <div id="lookCard" class="hidden absolute right-2 top-2 z-20 w-[310px] max-h-[calc(100%-16px)] overflow-y-auto scroll bg-white border border-[#111111] shadow-xl p-2 text-[11px]"></div>
         <div id="rangeCard" class="hidden absolute left-2 bottom-8 z-20 w-[min(470px,calc(100%-16px))] bg-white border border-[#111111] shadow-xl p-2"></div>
       </div>
     </section>
@@ -424,6 +426,7 @@
       if (d.rules) state.rules = { entry: d.rules.entry || null, exit: d.rules.exit || null };
       if (Array.isArray(d.journal)) state.journal = d.journal;
       if (d.draw && typeof d.draw === 'object') state.draw = d.draw;
+      if (d.look && typeof d.look === 'object') state.look = normalizeLook(d.look);
     }
     function loadStore() {
       try {
@@ -448,7 +451,7 @@
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify({
           cfg: state.cfg, watch: state.watch, universe: state.universe, bridgeUrl: state.bridge.url,
-          paper: state.paper, names: state.names, tab: state.tab, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw,
+          paper: state.paper, names: state.names, tab: state.tab, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look,
           lists: state.lists, listsAt: state.listsAt, sel: state.selected, tf: state.tf, ui: state.ui, lastMode: state.lastMode
         }));
       } catch (_) {}
@@ -1070,7 +1073,12 @@
 
     function chartGeom() {
       const r = cv.getBoundingClientRect();
-      return { w: r.width, h: r.height, left: 8, right: 70, top: 10, priceH: r.height * 0.80, volTop: r.height * 0.82, axisH: 16 };
+      const subs = lookSubs().length, axisH = 16, top = 10, H = r.height - top - axisH;
+      const volOn = state.look.vol || custom.ind.some((d) => d.on && d.pane === 'sub');
+      const subH = subs ? Math.max(44, Math.min(110, H * 0.45 / subs)) : 0, volH = volOn ? H * (subs ? 0.13 : 0.17) : 0;
+      const volBot = r.height - axisH - subs * subH;
+      return { w: r.width, h: r.height, left: 8, right: 70, top, axisH, priceH: volBot - volH - (volOn || subs ? 6 : 0), volTop: volBot - volH + 2, volBot, volOn,
+        subs: Array.from({ length: subs }, (_, k) => ({ top: volBot + k * subH + 5, bot: volBot + (k + 1) * subH - 2 })) };
     }
     function axisTag(text, yy, bg, g) {
       ctx.font = '10px DM Mono, monospace';
@@ -1116,7 +1124,8 @@
       if (start === 0 && state.bridge.ok && bars.length >= chartWant(tf) && drawChartNow.more !== moreKey) { drawChartNow.more = moreKey; loadMoreBars(); }
       let hi = -Infinity, lo = Infinity, vmax = 0;
       vis.forEach((b) => {
-        hi = Math.max(hi, b.h, b.ready ? b.upper : -Infinity); lo = Math.min(lo, b.l, b.ready ? b.lower : Infinity);
+        const bb = b.ready && state.look.bb;
+        hi = Math.max(hi, b.h, bb ? b.upper : -Infinity); lo = Math.min(lo, b.l, bb ? b.lower : Infinity);
         vmax = Math.max(vmax, b.v);
       });
       const pad = (hi - lo) * 0.06 || 1; hi += pad; lo -= pad;
@@ -1130,11 +1139,11 @@
       ctx.fillStyle = '#999999'; ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 1;
       for (let k = 0; k <= 5; k++) {
         const p = lo + (hi - lo) * k / 5, yy = y(p);
-        ctx.beginPath(); ctx.moveTo(g.left, yy); ctx.lineTo(g.w - g.right, yy); ctx.stroke();
+        if (state.look.grid) { ctx.beginPath(); ctx.moveTo(g.left, yy); ctx.lineTo(g.w - g.right, yy); ctx.stroke(); }
         ctx.fillText(won(p), g.w - g.right + 6, yy + 3);
       }
       ctx.strokeStyle = '#e6e6e6';
-      ctx.beginPath(); ctx.moveTo(g.left, g.volTop - 2); ctx.lineTo(g.w - g.right, g.volTop - 2); ctx.stroke();
+      if (g.volOn || g.subs.length) { ctx.beginPath(); ctx.moveTo(g.left, g.priceH + 3); ctx.lineTo(g.w - g.right, g.priceH + 3); ctx.stroke(); }
       // 시간축 — 분봉: 날짜 바뀜(세로 구분선)·정시, 일봉: 월, 주봉: 분기, 월봉: 연도
       let prevKey = null, lastX = -1e9;
       const hourDense = info.min ? slot * (60 / info.min) < 44 : false;
@@ -1163,8 +1172,9 @@
         vis.forEach((b, j) => { const v = b[key]; if (v == null || (!b.ready && /mid|upper|lower/.test(key))) { on = false; return; } const xx = x(start + j), yy = y(v); if (!on) { ctx.moveTo(xx, yy); on = true; } else ctx.lineTo(xx, yy); });
         ctx.stroke(); ctx.setLineDash([]);
       };
-      line('upper', '#e5383b', [4, 3]); line('lower', '#1e6bd6', [4, 3]); line('mid', '#111111', null, 1.4);
-      MA_LIST.forEach((m) => line('ma' + m.p, m.c, null, 1));
+      const LKs = state.look;
+      if (LKs.bb) { line('upper', LKs.bbUp, [4, 3]); line('lower', LKs.bbLow, [4, 3]); line('mid', LKs.bbMid, null, 1.4); }
+      drawLookOverlays(bars, vis, start, x, y);   // 이평선 · 겹쳐 그리는 보조지표
       ctx.lineWidth = 1;
       drawCustomInd(bars, vis, start, x, y, g);   // AI가 만든 지표
       drawStrategyMarks(bars, vis, start, x, y);   // 매도선 · 매수 신호
@@ -1173,13 +1183,18 @@
       const bw = Math.max(1, slot * 0.66);
       vis.forEach((b, j) => {
         const xx = x(start + j), upc = b.c >= b.o;
-        ctx.strokeStyle = ctx.fillStyle = upc ? '#e5383b' : '#1e6bd6';
-        ctx.beginPath(); ctx.moveTo(xx, y(b.h)); ctx.lineTo(xx, y(b.l)); ctx.stroke();
+        ctx.strokeStyle = ctx.fillStyle = upc ? LKs.up : LKs.down;
         const y1 = y(Math.max(b.o, b.c)), y2 = y(Math.min(b.o, b.c));
-        ctx.fillRect(xx - bw / 2, y1, bw, Math.max(1, y2 - y1));
-        const vh = vmax ? b.v / vmax * (g.h - g.volTop - g.axisH) : 0;
-        ctx.globalAlpha = 0.35; ctx.fillRect(xx - bw / 2, g.h - g.axisH - vh, bw, vh); ctx.globalAlpha = 1;
+        if (upc && LKs.hollow && bw >= 3) {   // 속 빈 양봉: 꼬리는 몸통 밖만
+          ctx.beginPath(); ctx.moveTo(xx, y(b.h)); ctx.lineTo(xx, y1); ctx.moveTo(xx, y2); ctx.lineTo(xx, y(b.l)); ctx.stroke();
+          ctx.strokeRect(Math.round(xx - bw / 2) + 0.5, y1 + 0.5, Math.max(1, Math.round(bw) - 1), Math.max(1, y2 - y1 - 1));
+        } else {
+          ctx.beginPath(); ctx.moveTo(xx, y(b.h)); ctx.lineTo(xx, y(b.l)); ctx.stroke();
+          ctx.fillRect(xx - bw / 2, y1, bw, Math.max(1, y2 - y1));
+        }
+        if (LKs.vol) { const vh = vmax ? b.v / vmax * (g.volBot - g.volTop) : 0; ctx.globalAlpha = 0.35; ctx.fillRect(xx - bw / 2, g.volBot - vh, bw, vh); ctx.globalAlpha = 1; }
       });
+      drawLookSubs(bars, vis, start, x, g, hover && !drag && !glide ? Math.round(endF + 0.5 - (g.left + plotW - hover.x) / slot) : null);   // 아래 칸 보조지표
       drawRanges(bars, x, y, g, slot);   // 내가 표시한 구간
       ctx.restore();
       // 모의 보유 종목: 평단 · 매도 기준선(N일선) (모든 봉 주기에 표시)
@@ -1244,7 +1259,7 @@
       // 현재가 선 · 가격축 표시
       const last = bars[bars.length - 1], prevC = bars.length > 1 ? bars[bars.length - 2].c : last.o;
       if (last.c >= lo && last.c <= hi) {
-        const col = last.c >= prevC ? '#e5383b' : '#1e6bd6', yy = y(last.c);
+        const col = last.c >= prevC ? state.look.up : state.look.down, yy = y(last.c);
         ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.setLineDash([1, 2]);
         ctx.beginPath(); ctx.moveTo(g.left, yy); ctx.lineTo(g.w - g.right, yy); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
         axisTag(won(last.c), yy, col, g);
@@ -1294,7 +1309,8 @@
       document.getElementById('chartSub').textContent = b ? `${tfInfo(state.tf).label}봉 · ${fmtT(b.t)} 기준 · ${bars.length.toLocaleString()}봉${local} · BB${state.cfg.bbPeriod} 상단 ${b.ready ? won(b.upper) : '-'} · 중심 ${b.ready ? won(b.mid) : '-'}` : '';
       document.getElementById('chartSignal').innerHTML = info ? (info.signal ? '<span class="px-1.5 bg-[#e5383b] text-white">일봉 상단 돌파 신호</span>' :
         info.toUpper != null ? `<span class="text-[#666666]">일봉 상단선까지 ${info.toUpper >= 0 ? '이미 위' : pct(info.toUpper, 1)}</span>` : '') : '';
-      document.getElementById('maLegend').innerHTML = '<span style="color:#111">━</span>중심 <span style="color:#e5383b">┅</span>상단 <span style="color:#1e6bd6">┅</span>하단 ' + (state.tf === 'D' ? `<b style="color:#1e6bd6">━</b>매도 ${state.cfg.exitMa}선 <span style="color:#e5383b">△</span>매수 신호 ` : '') + MA_LIST.map((m) => `<span style="color:${m.c}">━</span>${m.p}`).join(' ') + drawLegend();
+      const LKs = state.look;
+      document.getElementById('maLegend').innerHTML = (LKs.bb ? `<span style="color:${LKs.bbMid}">━</span>중심 <span style="color:${LKs.bbUp}">┅</span>상단 <span style="color:${LKs.bbLow}">┅</span>하단 ` : '') + (state.tf === 'D' ? `<b style="color:#1e6bd6">━</b>매도 ${state.cfg.exitMa}선 <span style="color:#e5383b">△</span>매수 신호 ` : '') + lookLegend() + drawLegend();
     }
 
     function selectCode(code) {
@@ -2530,7 +2546,7 @@
       try { localStorage.setItem(SYNC_KEY, JSON.stringify({ rev: sync.rev, saved: sync.saved, device: sync.device, dirty: sync.dirty, hash: sync.hash })); } catch (_) {}
     }
     function syncPayload() {
-      return { cfg: state.cfg, watch: state.watch, universe: state.universe, paper: state.paper, names: state.names, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw };
+      return { cfg: state.cfg, watch: state.watch, universe: state.universe, paper: state.paper, names: state.names, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look };
     }
     function hasActivity() {
       const p = state.paper;
@@ -4039,12 +4055,14 @@
       return x.replace(/<<[^>]{0,20}>>|<\/?[a-z][^>]*>/gi, '').replace(/\n{3,}/g, '\n\n').trim();
     }
     function describeAct(a) {
+      if (a.undo && a.look) return '되돌리기 — 차트 모양';
       if (a.undo) {
         const nm = { exitMa: '매도선', volFilter: '거래량 확인', volMult: '거래량 배수', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxFilter: 'ADX 확인', adxMin: 'ADX', nearPct: '후보 범위' };
         return `되돌리기 — ${Object.entries(a.set || {}).map(([k, v]) => `${nm[k] || k} ${v === true ? '켬' : v === false ? '끔' : v}`).join(', ')}`;
       }
       if (a.do === '규칙적용') return `${a.kind === 'exit' ? '매도' : '매수'} 규칙 적용 (${RULE_MODE[a.kind === 'exit' ? 'exit' : 'entry'][a.mode] || a.mode})`;
       if (a.do === '종목') return `${a.name || nameOf(a.code)} 차트 보기`;
+      if (a.do === '차트설정' || a.do === '보조지표') return a.undo ? '차트 모양 되돌리기' : '차트 모양 바꾸기';
       if (a.do === '관심추가') return `찾은 종목 ${(a.codes || []).length}개 관심종목에 넣기`;
       if (a.do === '규칙삭제') return `${a.kind === 'exit' ? '매도' : '매수'} 규칙 끄기`;
       if (a.do === '설정') {
@@ -4161,6 +4179,7 @@
         case '관심추가': { const cs = (a.codes || []).filter((c) => /^[0-9A-Z]{6}$/.test(c)).slice(0, 30); cs.forEach((c) => toggleWatch(c, true)); return cs.length ? `✔ 관심종목에 ${cs.length}개를 넣었어요` : '✖ 넣을 종목이 없어요'; }
         case '그리기': if (src === 'widget') return '✖ 위젯은 차트에 그릴 수 없어요'; return drawAct(a);
         case '그림삭제': return drawClearAct(a);
+        case '차트설정': case '보조지표': return lookAct(a);
         case '일지': return journalWhyAct(a);
         case '규칙추출': return runExtract();
         case '규칙적용': {
@@ -4318,7 +4337,7 @@
         if (d.pane === 'sub') {   // 거래량 영역에 자기 범위로 맞춰 그림
           const fin = vals.filter((v) => v != null);
           if (!fin.length) return;
-          const mn = Math.min(...fin), mx = Math.max(...fin), top = g.volTop, bot = g.h - g.axisH;
+          const mn = Math.min(...fin), mx = Math.max(...fin), top = g.volTop, bot = g.volBot;
           yy = (v) => bot - (mx === mn ? 0.5 : (v - mn) / (mx - mn)) * (bot - top);
         }
         ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.3;
@@ -5431,6 +5450,283 @@ onmessage = (e) => { const { body, sets } = e.data;
     }
     document.getElementById('btnExport').addEventListener('click', exportRecords);
     document.getElementById('inpImport').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importRecords(f); e.target.value = ''; });
+    // ---- 차트 꾸미기: 봉·볼린저·이평선 색, 이평선 기간, 보조지표 (차트 위 겹쳐 그리기 / 아래 칸) ----
+    //  전략 계산(ma5·20·60·120)과는 별개 — 보이는 모양만 바꿈. 설정은 state.look 에 저장·동기화
+    const LOOK_COLORS = { ...DRAW_COLORS, 분홍: '#f472b6', 노랑: '#eab308', 하늘: '#0ea5e9', 검정: '#111111', 갈색: '#92400e', 남색: '#1e3a8a', 민트: '#10b981' };
+    const lookColor = (c, fb) => (LOOK_COLORS[c] || (/^#[0-9a-f]{6}$/i.test(String(c)) ? String(c).toLowerCase() : fb));
+    const MA_PALETTE = ['#f472b6', '#f59e0b', '#10b981', '#8b5cf6', '#0ea5e9', '#92400e', '#64748b', '#e11d48'];
+    // 보조지표 계산 도구 (값이 없는 칸은 null)
+    const LK = {
+      sma(a, p) { const o = Array(a.length).fill(null); let s = 0, n = 0; for (let i = 0; i < a.length; i++) { if (a[i] == null) { s = 0; n = 0; continue; } s += a[i]; n++; if (n > p) { s -= a[i - p]; n = p; } if (n === p) o[i] = s / p; } return o; },
+      ema(a, p, k = 2 / (p + 1)) { const o = Array(a.length).fill(null); let e = null, n = 0, s = 0; for (let i = 0; i < a.length; i++) { const v = a[i]; if (v == null) { e = null; n = 0; s = 0; continue; } if (e == null) { s += v; if (++n === p) o[i] = e = s / p; } else o[i] = e = v * k + e * (1 - k); } return o; },
+      rma(a, p) { return LK.ema(a, p, 1 / p); },
+      hh(b, i, p) { let m = -Infinity; for (let k = Math.max(0, i - p + 1); k <= i; k++) m = Math.max(m, b[k].h); return m; },
+      ll(b, i, p) { let m = Infinity; for (let k = Math.max(0, i - p + 1); k <= i; k++) m = Math.min(m, b[k].l); return m; },
+      shift(a, s) { return a.map((_, i) => (i - s >= 0 && i - s < a.length ? a[i - s] : null)); },
+    };
+    const cl = (b) => b.map((x) => x.c);
+    const IND_LIB = [
+      // 차트 위에 겹쳐 그리기
+      { k: 'ema', name: '지수이평', pane: 'price', params: [['기간', 20, 2, 400]], c: '#0ea5e9',
+        calc: (b, [p], c) => ({ lines: [{ v: LK.ema(cl(b), p), c }] }) },
+      { k: 'bb', name: '볼린저', pane: 'price', params: [['기간', 20, 5, 400], ['배수', 2, 0.5, 5]], c: '#7c3aed',
+        calc: (b, [p, m], c) => { const mid = LK.sma(cl(b), p), up = [], dn = []; b.forEach((x, i) => { if (mid[i] == null) { up.push(null); dn.push(null); return; } let s = 0; for (let k = i - p + 1; k <= i; k++) s += (b[k].c - mid[i]) ** 2; const sd = Math.sqrt(s / p); up.push(mid[i] + m * sd); dn.push(mid[i] - m * sd); }); return { lines: [{ v: up, c }, { v: mid, c, dash: [2, 2] }, { v: dn, c }], fill: [0, 2, c] }; } },
+      { k: 'env', name: '엔벨로프', pane: 'price', params: [['기간', 20, 2, 400], ['%', 10, 1, 50]], c: '#16a34a',
+        calc: (b, [p, q], c) => { const m = LK.sma(cl(b), p); return { lines: [{ v: m.map((x) => (x == null ? null : x * (1 + q / 100))), c }, { v: m, c, dash: [2, 2] }, { v: m.map((x) => (x == null ? null : x * (1 - q / 100))), c }] }; } },
+      { k: 'ichi', name: '일목균형표', pane: 'price', params: [['전환', 9, 2, 60], ['기준', 26, 2, 120], ['선행', 52, 2, 240]], c: '#e11d48',
+        calc: (b, [p1, p2, p3], c) => {
+          const mid = (p) => b.map((_, i) => (i >= p - 1 ? (LK.hh(b, i, p) + LK.ll(b, i, p)) / 2 : null));
+          const t = mid(p1), k = mid(p2), s = p2 - 1;
+          const a = LK.shift(t.map((x, i) => (x == null || k[i] == null ? null : (x + k[i]) / 2)), s), bb = LK.shift(mid(p3), s);
+          return { lines: [{ v: t, c, name: '전환' }, { v: k, c: '#1e6bd6', name: '기준' }, { v: a, c: '#f59e0b', name: '선행1' }, { v: bb, c: '#64748b', name: '선행2' }, { v: LK.shift(cl(b), -s), c: '#16a34a', name: '후행', w: 0.8 }], fill: [2, 3, null] };
+        } },
+      { k: 'sar', name: '파라볼릭', pane: 'price', params: [['가속', 0.02, 0.005, 0.2], ['최대', 0.2, 0.05, 1]], c: '#f08c00',
+        calc: (b, [st, mx], c) => {
+          const o = Array(b.length).fill(null);
+          if (b.length > 2) {
+            let up = b[1].c >= b[0].c, af = st, ep = up ? b[0].h : b[0].l, sar = up ? b[0].l : b[0].h;
+            for (let i = 1; i < b.length; i++) {
+              sar += af * (ep - sar);
+              const p = b[i - 1], pp = b[Math.max(0, i - 2)];
+              if (up) { sar = Math.min(sar, p.l, pp.l); if (b[i].l < sar) { up = false; sar = ep; ep = b[i].l; af = st; } else if (b[i].h > ep) { ep = b[i].h; af = Math.min(mx, af + st); } }
+              else { sar = Math.max(sar, p.h, pp.h); if (b[i].h > sar) { up = true; sar = ep; ep = b[i].h; af = st; } else if (b[i].l < ep) { ep = b[i].l; af = Math.min(mx, af + st); } }
+              o[i] = sar;
+            }
+          }
+          return { lines: [{ v: o, c, dot: true }] };
+        } },
+      // 아래 칸
+      { k: 'rsi', name: 'RSI', pane: 'sub', params: [['기간', 14, 2, 100], ['신호', 9, 1, 50]], c: '#7c3aed', range: [0, 100], levels: [30, 70],
+        calc: (b, [p, s], c) => { const g = [null], l = [null]; for (let i = 1; i < b.length; i++) { const d = b[i].c - b[i - 1].c; g.push(Math.max(d, 0)); l.push(Math.max(-d, 0)); } const ag = LK.rma(g, p), al = LK.rma(l, p); const r = ag.map((x, i) => (x == null ? null : al[i] === 0 ? 100 : 100 - 100 / (1 + x / al[i]))); return { lines: [{ v: r, c }, { v: LK.sma(r, s), c: '#f59e0b', w: 0.9 }] }; } },
+      { k: 'macd', name: 'MACD', pane: 'sub', params: [['단기', 12, 2, 100], ['장기', 26, 3, 200], ['신호', 9, 1, 50]], c: '#1e6bd6', levels: [0],
+        calc: (b, [f, s, g], c) => { const ef = LK.ema(cl(b), f), es = LK.ema(cl(b), s), m = ef.map((x, i) => (x == null || es[i] == null ? null : x - es[i])), sg = LK.ema(m, g); return { lines: [{ v: m.map((x, i) => (x == null || sg[i] == null ? null : x - sg[i])), hist: true }, { v: m, c }, { v: sg, c: '#f59e0b' }] }; } },
+      { k: 'stoch', name: '스토캐스틱', pane: 'sub', params: [['기간', 14, 2, 100], ['%K', 3, 1, 20], ['%D', 3, 1, 20]], c: '#e11d48', range: [0, 100], levels: [20, 80],
+        calc: (b, [p, k, d], c) => { const f = b.map((x, i) => { if (i < p - 1) return null; const h = LK.hh(b, i, p), l = LK.ll(b, i, p); return h === l ? 50 : (x.c - l) / (h - l) * 100; }); const sk = LK.sma(f, k); return { lines: [{ v: sk, c }, { v: LK.sma(sk, d), c: '#1e6bd6' }] }; } },
+      { k: 'cci', name: 'CCI', pane: 'sub', params: [['기간', 20, 2, 100]], c: '#0ea5e9', levels: [-100, 0, 100],
+        calc: (b, [p], c) => { const tp = b.map((x) => (x.h + x.l + x.c) / 3), m = LK.sma(tp, p); return { lines: [{ v: m.map((x, i) => { if (x == null) return null; let d = 0; for (let k = i - p + 1; k <= i; k++) d += Math.abs(tp[k] - x); d /= p; return d ? (tp[i] - x) / (0.015 * d) : 0; }), c }] }; } },
+      { k: 'willr', name: '윌리엄스 %R', pane: 'sub', params: [['기간', 14, 2, 100]], c: '#92400e', range: [-100, 0], levels: [-80, -20],
+        calc: (b, [p], c) => ({ lines: [{ v: b.map((x, i) => { if (i < p - 1) return null; const h = LK.hh(b, i, p), l = LK.ll(b, i, p); return h === l ? -50 : (h - x.c) / (h - l) * -100; }), c }] }) },
+      { k: 'mfi', name: 'MFI', pane: 'sub', params: [['기간', 14, 2, 100]], c: '#16a34a', range: [0, 100], levels: [20, 80],
+        calc: (b, [p], c) => { const tp = b.map((x) => (x.h + x.l + x.c) / 3); return { lines: [{ v: b.map((x, i) => { if (i < p) return null; let pos = 0, neg = 0; for (let k = i - p + 1; k <= i; k++) { const f = tp[k] * b[k].v; if (tp[k] > tp[k - 1]) pos += f; else if (tp[k] < tp[k - 1]) neg += f; } return neg ? 100 - 100 / (1 + pos / neg) : 100; }), c }] }; } },
+      { k: 'adx', name: 'DMI·ADX', pane: 'sub', params: [['기간', 14, 2, 100]], c: '#111111', levels: [20],
+        calc: (b, [p], c) => { const tr = [null], pd = [null], md = [null]; for (let i = 1; i < b.length; i++) { const x = b[i], q = b[i - 1], u = x.h - q.h, d = q.l - x.l; tr.push(Math.max(x.h - x.l, Math.abs(x.h - q.c), Math.abs(x.l - q.c))); pd.push(u > d && u > 0 ? u : 0); md.push(d > u && d > 0 ? d : 0); } const t = LK.rma(tr, p), P = LK.rma(pd, p), M = LK.rma(md, p); const pdi = P.map((x, i) => (x == null || !t[i] ? null : 100 * x / t[i])), mdi = M.map((x, i) => (x == null || !t[i] ? null : 100 * x / t[i])); const dx = pdi.map((x, i) => (x == null || mdi[i] == null ? null : x + mdi[i] ? 100 * Math.abs(x - mdi[i]) / (x + mdi[i]) : 0)); return { lines: [{ v: LK.rma(dx, p), c, w: 1.5, name: 'ADX' }, { v: pdi, c: '#e5383b', name: '+DI' }, { v: mdi, c: '#1e6bd6', name: '-DI' }] }; } },
+      { k: 'atr', name: 'ATR', pane: 'sub', params: [['기간', 14, 2, 100]], c: '#64748b',
+        calc: (b, [p], c) => ({ lines: [{ v: LK.rma(b.map((x, i) => (i ? Math.max(x.h - x.l, Math.abs(x.h - b[i - 1].c), Math.abs(x.l - b[i - 1].c)) : null)), p), c }] }) },
+      { k: 'obv', name: 'OBV', pane: 'sub', params: [], c: '#0f766e',
+        calc: (b, _, c) => { let s = 0; return { lines: [{ v: b.map((x, i) => (i ? (s += x.c > b[i - 1].c ? x.v : x.c < b[i - 1].c ? -x.v : 0) : 0)), c }] }; } },
+      { k: 'disp', name: '이격도', pane: 'sub', params: [['기간', 20, 2, 400]], c: '#f08c00', levels: [100],
+        calc: (b, [p], c) => { const m = LK.sma(cl(b), p); return { lines: [{ v: m.map((x, i) => (x == null ? null : b[i].c / x * 100)), c }] }; } },
+      { k: 'vr', name: '거래량 비율', pane: 'sub', params: [['기간', 20, 2, 100]], c: '#8b5cf6', levels: [100],
+        calc: (b, [p], c) => ({ lines: [{ v: b.map((x, i) => { if (i < p) return null; let u = 0, d = 0, e = 0; for (let k = i - p + 1; k <= i; k++) { const ch = b[k].c - b[k - 1].c; if (ch > 0) u += b[k].v; else if (ch < 0) d += b[k].v; else e += b[k].v; } return d + e / 2 ? (u + e / 2) / (d + e / 2) * 100 : null; }), c }] }) },
+    ];
+    const IND_ALIAS = { 볼린저: 'bb', 엔벨로프: 'env', 일목: 'ichi', 일목균형표: 'ichi', 파라볼릭: 'sar', 지수이평: 'ema', 스토캐스틱: 'stoch', 윌리엄스: 'willr', dmi: 'adx', 이격도: 'disp', 거래량비율: 'vr', 'vr': 'vr' };
+    const indDef = (k) => { const s = String(k || '').toLowerCase().replace(/\s/g, ''); return IND_LIB.find((d) => d.k === s || d.k === IND_ALIAS[s] || d.name.replace(/\s/g, '').toLowerCase() === s); };
+    const indLabel = (d) => { const L = indDef(d.k); return `${L.name}${d.p.length ? `(${d.p.join(',')})` : ''}`; };
+    const LOOK_DEF = { up: '#e5383b', down: '#1e6bd6', hollow: false, bb: true, bbUp: '#e5383b', bbMid: '#111111', bbLow: '#1e6bd6', vol: true, grid: true,
+      mas: MA_LIST.map((m) => ({ p: m.p, c: m.c, on: true })), ind: [] };
+    const clone = (o) => JSON.parse(JSON.stringify(o));
+    function normalizeLook(d) {
+      const o = clone(LOOK_DEF);
+      if (!d || typeof d !== 'object') return o;
+      ['up', 'down', 'bbUp', 'bbMid', 'bbLow'].forEach((k) => { o[k] = lookColor(d[k], o[k]); });
+      ['hollow', 'bb', 'vol', 'grid'].forEach((k) => { if (typeof d[k] === 'boolean') o[k] = d[k]; });
+      if (Array.isArray(d.mas)) o.mas = d.mas.slice(0, 8).map((m, i) => ({ p: Math.round(Math.min(400, Math.max(1, Number(m.p) || 5))), c: lookColor(m.c, MA_PALETTE[i % 8]), on: m.on !== false }));
+      if (Array.isArray(d.ind)) o.ind = d.ind.map((x) => { const L = indDef(x && x.k); if (!L) return null; return { k: L.k, p: L.params.map((q, j) => { const v = Number(x.p && x.p[j]); return isFinite(v) && x.p[j] !== '' ? Math.min(q[3], Math.max(q[2], v)) : q[1]; }), c: lookColor(x.c, L.c), on: x.on !== false }; }).filter(Boolean).slice(0, 8);
+      return o;
+    }
+    state.look = clone(LOOK_DEF);
+    const lookSubs = () => state.look.ind.filter((d) => d.on && indDef(d.k).pane === 'sub');
+    // 계산값 캐시 — 마우스 움직임마다 다시 그려도 다시 계산하지 않음
+    let lookCache = { key: '', mas: [], ind: [] };
+    function lookSeries(bars) {
+      const L = state.look, last = bars[bars.length - 1];
+      const key = `${state.selected}|${state.tf}|${bars.length}|${last.t}|${last.c}|${last.h}|${last.l}|${JSON.stringify(L.mas)}|${JSON.stringify(L.ind)}`;
+      if (lookCache.key === key) return lookCache;
+      const c = cl(bars);
+      lookCache = { key, mas: L.mas.map((m) => (m.on ? LK.sma(c, m.p) : null)), ind: L.ind.map((d) => { if (!d.on) return null; try { return indDef(d.k).calc(bars, d.p, d.c); } catch (_) { return null; } }) };
+      return lookCache;
+    }
+    function strokeSeries(vals, start, n, x, yy, c, opt = {}) {
+      ctx.strokeStyle = ctx.fillStyle = c; ctx.lineWidth = opt.w || 1.1; ctx.setLineDash(opt.dash || []);
+      if (opt.dot) { for (let j = 0; j < n; j++) { const v = vals[start + j]; if (v != null) { ctx.beginPath(); ctx.arc(x(start + j), yy(v), 1.6, 0, 7); ctx.fill(); } } ctx.setLineDash([]); return; }
+      ctx.beginPath(); let pen = false;
+      for (let j = Math.max(0, -1); j < n; j++) { const v = vals[start + j]; if (v == null) { pen = false; continue; } const px = x(start + j), py = yy(v); if (!pen) { ctx.moveTo(px, py); pen = true; } else ctx.lineTo(px, py); }
+      ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+    }
+    function fillBetween(a, b, start, n, x, yy, c) {
+      for (let j = 0; j < n - 1; j++) {
+        const i = start + j, a0 = a[i], b0 = b[i], a1 = a[i + 1], b1 = b[i + 1];
+        if (a0 == null || b0 == null || a1 == null || b1 == null) continue;
+        ctx.fillStyle = c || (a0 >= b0 ? '#ef4444' : '#3b82f6'); ctx.globalAlpha = 0.09;
+        ctx.beginPath(); ctx.moveTo(x(i), yy(a0)); ctx.lineTo(x(i + 1), yy(a1)); ctx.lineTo(x(i + 1), yy(b1)); ctx.lineTo(x(i), yy(b0)); ctx.closePath(); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    // 차트 위: 이평선 + 겹쳐 그리는 지표
+    function drawLookOverlays(bars, vis, start, x, y) {
+      const S = lookSeries(bars), L = state.look, n = vis.length;
+      L.ind.forEach((d, k) => {
+        const r = S.ind[k];
+        if (!r || indDef(d.k).pane !== 'price') return;
+        if (r.fill) fillBetween(r.lines[r.fill[0]].v, r.lines[r.fill[1]].v, start, n, x, y, r.fill[2]);
+        r.lines.forEach((l) => strokeSeries(l.v, start, n, x, y, l.c, l));
+      });
+      L.mas.forEach((m, k) => { if (S.mas[k]) strokeSeries(S.mas[k], start, n, x, y, m.c, { w: 1 }); });
+    }
+    // 아래 칸: 칸마다 자기 범위로 맞춰 그리고, 왼쪽 위에 값(마우스가 있는 봉, 없으면 마지막 봉)
+    function drawLookSubs(bars, vis, start, x, g, hi) {
+      const S = lookSeries(bars), n = vis.length, subs = state.look.ind.map((d, k) => ({ d, r: S.ind[k] })).filter((o) => o.d.on && indDef(o.d.k).pane === 'sub');
+      const at = hi != null && hi >= start && hi < start + n ? hi : bars.length - 1;
+      subs.forEach(({ d, r }, k) => {
+        const P = g.subs[k], L = indDef(d.k);
+        if (!P) return;
+        ctx.strokeStyle = '#e6e6e6'; ctx.beginPath(); ctx.moveTo(g.left, P.top - 3); ctx.lineTo(g.w - g.right, P.top - 3); ctx.stroke();
+        if (!r) return;
+        let mn, mx;
+        if (L.range) [mn, mx] = L.range;
+        else {
+          mn = Infinity; mx = -Infinity;
+          r.lines.forEach((l) => { for (let j = 0; j < n; j++) { const v = l.v[start + j]; if (v != null) { mn = Math.min(mn, v); mx = Math.max(mx, v); } } });
+          (L.levels || []).forEach((v) => { if (mn <= v * 1.5 + 1 && mx >= v * 0.5 - 1) { mn = Math.min(mn, v); mx = Math.max(mx, v); } });
+          if (!isFinite(mn)) return;
+          if (mx === mn) { mx += 1; mn -= 1; }
+          const pd = (mx - mn) * 0.08; mx += pd; mn -= pd;
+        }
+        const yy = (v) => P.bot - (v - mn) / (mx - mn) * (P.bot - P.top);
+        ctx.font = '9px DM Mono, monospace';
+        (L.levels || []).forEach((v) => { if (v < mn || v > mx) return; ctx.strokeStyle = '#d4d4d4'; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(g.left, yy(v)); ctx.lineTo(g.w - g.right, yy(v)); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#aaaaaa'; ctx.fillText(String(v), g.w - g.right + 6, yy(v) + 3); });
+        if (!L.levels) { ctx.fillStyle = '#aaaaaa'; ctx.fillText(numShort(mx), g.w - g.right + 6, P.top + 8); ctx.fillText(numShort(mn), g.w - g.right + 6, P.bot); }
+        ctx.save(); ctx.beginPath(); ctx.rect(g.left, P.top - 2, g.w - g.left - g.right, P.bot - P.top + 4); ctx.clip();
+        r.lines.forEach((l) => {
+          if (l.hist) {
+            const bw = Math.max(1, chartView.slot * 0.6), z = yy(Math.min(mx, Math.max(mn, 0)));
+            for (let j = 0; j < n; j++) { const v = l.v[start + j]; if (v == null) continue; ctx.fillStyle = v >= 0 ? state.look.up : state.look.down; ctx.globalAlpha = 0.45; ctx.fillRect(x(start + j) - bw / 2, Math.min(z, yy(v)), bw, Math.abs(yy(v) - z)); }
+            ctx.globalAlpha = 1;
+          } else strokeSeries(l.v, start, n, x, yy, l.c, l);
+        });
+        ctx.restore();
+        ctx.font = '10px Noto Sans KR, sans-serif';
+        let tx = g.left + 4;
+        const head = indLabel(d);
+        ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillRect(tx - 2, P.top - 1, ctx.measureText(head).width + 4, 12);
+        ctx.fillStyle = '#666666'; ctx.fillText(head, tx, P.top + 9); tx += ctx.measureText(head).width + 6;
+        r.lines.forEach((l) => { if (l.hist) return; const v = l.v[at]; if (v == null) return; const s = `${l.name ? `${l.name} ` : ''}${numShort(v)}`; ctx.fillStyle = l.c; ctx.fillText(s, tx, P.top + 9); tx += ctx.measureText(s).width + 6; });
+      });
+    }
+    const numShort = (v) => { const a = Math.abs(v); return a >= 1e8 ? `${(v / 1e8).toFixed(1)}억` : a >= 1e4 ? `${(v / 1e4).toFixed(1)}만` : a >= 100 ? v.toFixed(0) : a >= 1 ? v.toFixed(1) : v.toFixed(3); };
+    function lookLegend() {
+      const L = state.look;
+      return L.mas.filter((m) => m.on).map((m) => `<span style="color:${m.c}">━</span>${m.p}`).join(' ') +
+        L.ind.filter((d) => d.on && indDef(d.k).pane === 'price').map((d) => ` <span style="color:${d.c}">━</span>${indLabel(d)}`).join('');
+    }
+
+    // 설정 창 (차트 오른쪽 위)
+    const lkCard = document.getElementById('lookCard');
+    function renderLookCard() {
+      if (lkCard.classList.contains('hidden')) return;
+      const L = state.look;
+      const col = (p, v) => `<input type="color" data-lk="${p}" value="${v}" class="w-6 h-5 p-0 border border-[#e6e6e6] bg-white cursor-pointer align-middle" title="색 고르기">`;
+      const chk = (p, v, t = '') => `<label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" data-lk="${p}" ${v ? 'checked' : ''}>${t}</label>`;
+      const num = (p, v, q) => `<input type="number" data-lk="${p}" value="${v}" min="${q[2]}" max="${q[3]}" step="${q[1] < 1 ? 0.005 : q[1] % 1 ? 0.1 : 1}" class="w-12 px-1 border border-[#e6e6e6] num" title="${q[0]}">`;
+      const sec = (t) => `<div class="mt-2 mb-1 font-semibold text-[#111111]">${t}</div>`;
+      const opts = (pane) => IND_LIB.filter((d) => d.pane === pane).map((d) => `<option value="${d.k}">${d.name}</option>`).join('');
+      lkCard.innerHTML = `<div class="flex items-center gap-1 mb-1"><b class="text-[12px]">차트 설정</b><span class="flex-1"></span><button type="button" data-lk-reset class="btn px-1.5 py-0 text-[10px]">기본값</button><button type="button" data-lk-close class="btn px-1.5 py-0 text-[10px]" aria-label="닫기">✕</button></div>
+        ${sec('봉')}<div class="flex items-center gap-3">양봉 ${col('up', L.up)} 음봉 ${col('down', L.down)} ${chk('hollow', L.hollow, '양봉 속 비우기')}</div>
+        <div class="flex items-center gap-3 mt-1">${chk('vol', L.vol, '거래량')} ${chk('grid', L.grid, '격자')}</div>
+        ${sec(`볼린저 ${state.cfg.bbPeriod} (전략선)`)}<div class="flex items-center gap-2">${chk('bb', L.bb, '보기')} 상단 ${col('bbUp', L.bbUp)} 중심 ${col('bbMid', L.bbMid)} 하단 ${col('bbLow', L.bbLow)}</div>
+        ${sec('이동평균선')}${L.mas.map((m, i) => `<div class="flex items-center gap-1.5 mb-0.5">${chk(`mas.${i}.on`, m.on)} ${num(`mas.${i}.p`, m.p, ['기간', 1, 1, 400])}일 ${col(`mas.${i}.c`, m.c)}<span class="flex-1"></span><button type="button" data-lk-del-ma="${i}" class="text-[#999999] hover:text-[#e5383b] px-1" aria-label="이평선 지우기">✕</button></div>`).join('')}
+        ${L.mas.length < 8 ? '<button type="button" data-lk-add-ma class="btn px-1.5 py-0 text-[10px]">+ 이평선 추가</button>' : ''}
+        ${sec('보조지표')}${L.ind.length ? L.ind.map((d, i) => { const D = indDef(d.k); return `<div class="flex items-center gap-1 mb-0.5 flex-wrap">${chk(`ind.${i}.on`, d.on)} <span class="min-w-[64px]">${D.name}</span><span class="text-[9px] text-[#999999]">${D.pane === 'sub' ? '아래' : '위'}</span> ${D.params.map((q, j) => num(`ind.${i}.p.${j}`, d.p[j], q)).join('')} ${col(`ind.${i}.c`, d.c)}<span class="flex-1"></span><button type="button" data-lk-del-ind="${i}" class="text-[#999999] hover:text-[#e5383b] px-1" aria-label="지표 지우기">✕</button></div>`; }).join('') : '<p class="text-[#999999]">아직 없어요 — 아래에서 고르세요</p>'}
+        ${L.ind.length < 8 ? `<select data-lk-add-ind class="mt-1 w-full border border-[#e6e6e6] px-1 py-0.5 bg-white"><option value="">+ 보조지표 추가…</option><optgroup label="차트 위에 겹쳐 그리기">${opts('price')}</optgroup><optgroup label="아래 칸">${opts('sub')}</optgroup></select>` : ''}
+        <p class="mt-2 text-[10px] text-[#999999]">비서에게 "봉 색 초록·빨강으로", "RSI 넣어줘"처럼 말해도 바꿔요. 전략·백테스트 계산에는 영향 없어요.</p>`;
+    }
+    function lookChanged(save) {
+      lookCache.key = '';
+      drawChart(); renderChartHeader();
+      if (save) saveStore();
+    }
+    function openLook(on = lkCard.classList.contains('hidden')) {
+      lkCard.classList.toggle('hidden', !on);
+      document.getElementById('btnLook').classList.toggle('btn-on', on);
+      renderLookCard();
+    }
+    document.getElementById('btnLook').addEventListener('click', () => openLook());
+    function lkSet(el) {
+      const path = el.dataset.lk.split('.');
+      let o = state.look;
+      for (let i = 0; i < path.length - 1; i++) o = o[path[i]];
+      const k = path[path.length - 1];
+      if (el.type === 'checkbox') o[k] = el.checked;
+      else if (el.type === 'number') { if (el.value === '' || !isFinite(+el.value)) return false; o[k] = +el.value; }
+      else o[k] = el.value;
+      return true;
+    }
+    lkCard.addEventListener('input', (e) => { if (e.target.dataset.lk && lkSet(e.target)) lookChanged(false); });
+    lkCard.addEventListener('change', (e) => {
+      const t = e.target;
+      if (t.dataset.lk) { lkSet(t); state.look = normalizeLook(state.look); lookChanged(true); if (t.type === 'number' || t.type === 'checkbox') renderLookCard(); return; }
+      if (t.matches('[data-lk-add-ind]') && t.value) { const D = indDef(t.value); state.look.ind.push({ k: D.k, p: D.params.map((q) => q[1]), c: D.c, on: true }); state.look = normalizeLook(state.look); lookChanged(true); renderLookCard(); }
+    });
+    lkCard.addEventListener('click', (e) => {
+      const t = e.target.closest('button');
+      if (!t) return;
+      const L = state.look;
+      if (t.matches('[data-lk-close]')) return openLook(false);
+      if (t.matches('[data-lk-reset]')) state.look = clone(LOOK_DEF);
+      else if (t.matches('[data-lk-add-ma]')) { const used = L.mas.map((m) => m.p); const p = [10, 40, 200, 3, 240, 30, 90, 300].find((v) => !used.includes(v)) || 50; L.mas.push({ p, c: MA_PALETTE.find((c) => !L.mas.some((m) => m.c === c)) || MA_PALETTE[0], on: true }); L.mas.sort((a, b) => a.p - b.p); }
+      else if (t.dataset.lkDelMa != null) L.mas.splice(+t.dataset.lkDelMa, 1);
+      else if (t.dataset.lkDelInd != null) L.ind.splice(+t.dataset.lkDelInd, 1);
+      else return;
+      lookChanged(true); renderLookCard();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lkCard.classList.contains('hidden')) openLook(false); });
+
+    // 비서·위젯 명령: {"do":"차트설정", set, ma, maSet, maDel, add, del, reset}
+    function lookAct(a) {
+      const prev = clone(state.look);
+      const L = a.undo && a.look ? clone(a.look) : a.reset ? clone(LOOK_DEF) : clone(state.look);
+      const done = [], bad = [];
+      if (a.undo) done.push('이전 모양으로');
+      else if (a.reset) done.push('기본 모양으로');
+      const s = a.set || {};
+      const CN = { up: '양봉', down: '음봉', bbUp: 'BB 상단', bbMid: 'BB 중심', bbLow: 'BB 하단' }, BN = { hollow: '양봉 속 비우기', bb: '볼린저', vol: '거래량', grid: '격자' };
+      Object.entries(s).forEach(([k, v]) => {
+        if (CN[k]) { const c = lookColor(v, null); if (c) { L[k] = c; done.push(`${CN[k]} 색`); } else bad.push(`${k}=${v}`); }
+        else if (BN[k]) { L[k] = v === true || v === 'true'; done.push(`${BN[k]} ${L[k] ? '켬' : '끔'}`); }
+        else bad.push(k);
+      });
+      const maOne = (m, i) => ({ p: Math.round(Number(m.p)), c: lookColor(m.c || m.color, MA_PALETTE[i % 8]), on: m.on !== false });
+      if (Array.isArray(a.ma)) { L.mas = a.ma.filter((m) => Number(m.p) >= 1).map(maOne); done.push(`이평선 ${L.mas.map((m) => m.p).join('·')}`); }
+      (Array.isArray(a.maSet) ? a.maSet : a.maSet ? [a.maSet] : []).forEach((m) => {
+        const p = Math.round(Number(m.p)); if (!(p >= 1)) return;
+        const o = L.mas.find((x) => x.p === p);
+        if (o) { if (m.c || m.color) o.c = lookColor(m.c || m.color, o.c); if (typeof m.on === 'boolean') o.on = m.on; }
+        else L.mas.push(maOne(m, L.mas.length));
+        done.push(`${p}일선`);
+      });
+      [].concat(a.maDel ?? []).forEach((p) => { L.mas = L.mas.filter((x) => x.p !== Math.round(Number(p))); done.push(`${p}일선 지움`); });
+      L.mas.sort((x, y) => x.p - y.p);
+      [].concat(a.del ?? []).forEach((k) => {
+        if (k === 'all' || k === '전부') { L.ind = []; done.push('보조지표 모두 지움'); return; }
+        const D = indDef(k); if (!D) { bad.push(String(k)); return; }
+        L.ind = L.ind.filter((x) => x.k !== D.k); done.push(`${D.name} 지움`);
+      });
+      [].concat(a.add ?? []).forEach((x) => {
+        const o = typeof x === 'string' ? { k: x } : x || {};
+        const D = indDef(o.k || o.name); if (!D) { bad.push(String(o.k || o.name)); return; }
+        const p = Array.isArray(o.params) ? o.params : Array.isArray(o.p) ? o.p : D.params.map((q) => q[1]);
+        const e = { k: D.k, p, c: lookColor(o.color || o.c, D.c), on: true }, old = L.ind.findIndex((y) => y.k === D.k);
+        if (old >= 0 && !o.again) L.ind[old] = e; else L.ind.push(e);
+        done.push(`${D.name} 추가`);
+      });
+      if (!done.length) return `✖ 바꿀 차트 모양이 없어요${bad.length ? ` (모르는 값: ${bad.join(', ')})` : ''}`;
+      state.look = normalizeLook(L);
+      lookChanged(true); renderLookCard();
+      runAction.undo = { do: '차트설정', look: prev, undo: true };
+      return `✔ 차트 모양을 바꿨어요 — ${done.join(' · ')}${bad.length ? ` (모르는 값: ${bad.join(', ')})` : ''}`;
+    }
+    const lookFacts = () => { const L = state.look; return { 봉색: { 양봉: L.up, 음봉: L.down, 속비우기: L.hollow }, 볼린저선: L.bb ? { 상단: L.bbUp, 중심: L.bbMid, 하단: L.bbLow } : '숨김', 이평선: L.mas.map((m) => `${m.p}일 ${m.c}${m.on ? '' : ' (꺼짐)'}`), 보조지표: L.ind.map((d) => `${indLabel(d)} ${d.c}${d.on ? '' : ' (꺼짐)'}`), 거래량: L.vol, 격자: L.grid }; };
+
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
@@ -5440,7 +5736,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       chat.msgs.push({ role: 'user', text, at: Date.now() });
       chat.busy = true; renderChat(); saveChat();
       let reply;
-      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
+      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
       catch (err) { reply = `(오류) ${err.message}`; }
       const bl = splitBlocks(reply);
       const { text: said, acts, prop } = splitActions(bl.text);
