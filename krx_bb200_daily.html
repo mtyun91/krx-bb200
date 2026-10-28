@@ -327,7 +327,7 @@
     const STORE_KEY = 'krx.bb200.v1';
     const UNIVERSE_ETF = { K200: '069500', Q150: '229200' };   // KODEX 200 · KODEX 코스닥150 구성종목으로 지수 종목 목록 대용
     const DEFAULTS = {
-      capital: 10000000, slotPct: 20, maxPos: 5,
+      capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true,
       bbPeriod: 200, bbStd: 2.0,
       exitMa: 5, pullbackPct: 1.5,
       w1: 100, w2: 0, w3: 0,
@@ -343,7 +343,8 @@
       { group: '자금 관리', items: [
         { k: 'capital', label: '모의 자금 (원)', min: 100000, max: 10000000000, step: 100000 },
         { k: 'slotPct', label: '종목당 비중 %', min: 1, max: 100, step: 1 },
-        { k: 'maxPos', label: '최대 보유 종목', min: 1, max: 50, step: 1 }] },
+        { k: 'maxPos', label: '최대 보유 종목', min: 1, max: 50, step: 1 },
+        { k: 'slotAuto', label: '복리 배분 — 종목당 = 평가자산 ÷ 최대 보유 (켜면 비중 % 무시)', type: 'bool' }] },
       { group: '진입 — BB 상단 종가 돌파 (롱만)', items: [
         { k: 'bbPeriod', label: 'BB 기간', min: 20, max: 400, step: 1 },
         { k: 'bbStd', label: 'BB 표준편차 배수', min: 0.5, max: 4, step: 0.1 },
@@ -741,6 +742,8 @@
     //    진입: BB 상단 돌파 (기본 1차 100% — 2·3차 비중을 주면 눌림 반등·전고점 돌파 때 추가 매수)
     //    청산: 손절·목표가 없음. 매수 다음 날부터 종가가 N일선(기본 5일) 아래면 매도
     // =========================================================================
+    // 종목당 비중: 복리 배분이면 100 ÷ 최대 보유. 금액은 매수할 때마다 그 시점 평가자산(현금+보유 평가)에 곱함 → 불어나면 다음 매수도 커짐
+    const slotPctNow = () => (state.cfg.slotAuto ? 100 / Math.max(1, state.cfg.maxPos) : state.cfg.slotPct);
     function costBuy() { return (state.cfg.buyFee + state.cfg.slipPct) / 100; }
     function costSell() { return (state.cfg.sellFee + state.cfg.taxPct + state.cfg.slipPct) / 100; }
 
@@ -862,7 +865,7 @@
         const equityNow = cash + Object.entries(pos).reduce((s, [k, q]) => { const i = idx[k].get(t); const px = i != null ? state.data[k].bars[i].c : q.avg; return s + q.qty * px; }, 0);
         for (const cd of cands) {
           const free = cash - unspent();
-          const slot = Math.min(equityNow * c.slotPct / 100, free);
+          const slot = Math.min(equityNow * slotPctNow() / 100, free);
           const b = state.data[cd.k].bars[cd.i];
           if (Object.keys(pos).length >= c.maxPos || slot < b.c * 1.01) { skipped.push({ code: cd.k, t, price: b.c }); continue; }
           const seq = newSeq(cd.k, b, cd.i, slot);
@@ -1451,7 +1454,7 @@
       const kp = document.getElementById('btKpis');
       if (!bt || !bt.curve.length) { kp.innerHTML = ''; document.getElementById('tradeBody').innerHTML = ''; drawEquity(); return; }
       const s = bt.stats, c = state.cfg;
-      note.innerHTML = `${{ WATCH: '관심종목', K200: '코스피200', Q150: '코스닥150', ALL: '전체' }[state.universe]} ${bt.codes.length}종목 · ${fmtDate(bt.firstT)} ~ ${fmtDate(bt.lastT)} (${bt.years.toFixed(1)}년) · 자금 ${won(c.capital)}원 · 종목당 ${c.slotPct}% · 최대 ${c.maxPos}종목 · 왕복 비용 약 ${((costBuy() + costSell()) * 100).toFixed(2)}%` +
+      note.innerHTML = `${{ WATCH: '관심종목', K200: '코스피200', Q150: '코스닥150', ALL: '전체' }[state.universe]} ${bt.codes.length}종목 · ${fmtDate(bt.firstT)} ~ ${fmtDate(bt.lastT)} (${bt.years.toFixed(1)}년) · 자금 ${won(c.capital)}원 · 종목당 ${c.slotAuto ? `평가자산÷${c.maxPos} (복리)` : `${c.slotPct}%`} · 최대 ${c.maxPos}종목 · 왕복 비용 약 ${((costBuy() + costSell()) * 100).toFixed(2)}%` +
         (s.n < 30 ? ' · <span class="text-[#e5383b]">⚠ 거래 30건 미만 — 우연일 수 있음</span>' : '') +
         (state.bridge.demo ? ' · <span class="text-[#e5383b]">데모 데이터</span>' : '');
       const tile = (k, v, cls = '') => `<div class="border border-[#e6e6e6] px-2 py-1.5"><div class="text-[10px] text-[#888888]">${k}</div><div class="num text-sm ${cls}">${v}</div></div>`;
@@ -1816,7 +1819,7 @@
       let bought = 0;
       for (const cd of cands) {
         const b = state.data[cd.code].bars[cd.i];
-        const slot = Math.min(equity * c.slotPct / 100, p.cash - unspent() - reservedCash());
+        const slot = Math.min(equity * slotPctNow() / 100, p.cash - unspent() - reservedCash());
         if (Object.keys(p.positions).length >= c.maxPos || slot < b.c * 1.01) { plog('신호 건너뜀', cd.code, '보유 자리 또는 현금 부족'); continue; }
         const seq = newSeq(cd.code, b, cd.i, slot);
         seq.lastStepT = b.t;
@@ -1844,7 +1847,7 @@
       const val = Object.entries(p.positions).reduce((s, [code, q]) => s + q.qty * (lastPrice(code) || q.avg), 0) + manualValue();
       const eq = p.cash + val;
       const ret = (eq / p.startCapital - 1) * 100;
-      const row = (k, v, cls = '') => `<div class="flex justify-between"><span class="text-[#666666] font-sans">${k}</span><span class="${cls}">${v}</span></div>`;
+      const row = (k, v, cls = '', tip = '') => `<div class="flex justify-between"${tip ? ` title="${tip}"` : ''}><span class="text-[#666666] font-sans">${k}</span><span class="${cls}">${v}</span></div>`;
       const realized = p.closed.reduce((s, x) => s + x.pnl, 0);
       document.getElementById('paperAcct').innerHTML = [
         row('평가 자산', `${won(eq)}원`, 'font-semibold'),
@@ -1852,6 +1855,7 @@
         row('현금', `${won(p.cash)}원`),
         row('주식 평가', `${won(val)}원`),
         row('주문 가능', `${won(buyingPower())}원`),
+        row('다음 1종목 금액', `${won(Math.round(eq * slotPctNow() / 100))}원`, '', `평가자산 ${won(eq)}원 × ${+slotPctNow().toFixed(1)}%${state.cfg.slotAuto ? ` (÷ ${state.cfg.maxPos}종목, 복리)` : ''} — 현금이 모자라면 남은 현금만큼`),
         row('미체결', `${p.orders.length}건`),
         row('실현 손익', `${realized >= 0 ? '+' : ''}${won(realized)}원 (${p.closed.length}건)`, realized >= 0 ? 'up' : 'down'),
         row('마지막 판단', p.lastDecision ? fmtDate(p.lastDecision) : '없음'),
@@ -3335,7 +3339,7 @@
           if (!((watched && price <= avgPx) || deadline)) continue;
           const equity = p.cash + Object.entries(p.positions).reduce((s, [cd, q]) => s + q.qty * (lastPrice(cd) || q.avg), 0) + manualValue();
           const unspent = Object.values(p.positions).reduce((s, q) => s + Math.max(0, q.slot - q.invested), 0);
-          const slot = Math.min(equity * c.slotPct / 100, p.cash - unspent - reservedCash());
+          const slot = Math.min(equity * slotPctNow() / 100, p.cash - unspent - reservedCash());
           w.done = true; changed = true;
           if (Object.keys(p.positions).length >= c.maxPos || slot < price * 1.01) { plog('신호 건너뜀', code, '보유 자리 또는 현금 부족'); continue; }
           const seq = newSeq(code, bars[i], i, slot);
