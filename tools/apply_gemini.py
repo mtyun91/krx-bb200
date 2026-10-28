@@ -51,6 +51,21 @@ def strip_nl(s):
     return s[:-1] if s.endswith("\n") else s
 
 
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})[\w-]*\s*$")
+
+
+def unfence(s):
+    """블록 안 코드를 ```로 감싼 답도 받아 줌 — 맨 앞·맨 뒤의 코드 상자 줄만 뗌"""
+    lines = s.split("\n")
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if len(lines) >= 2 and FENCE.match(lines[0]) and FENCE.match(lines[-1]):
+        lines = lines[1:-1]
+    return "\n".join(lines)
+
+
 def find_span(text, old):
     """정확히 한 곳 → (시작, 끝). 없으면 줄 끝 공백·줄바꿈 차이를 무시하고 줄 단위로 다시 찾음"""
     n = text.count(old)
@@ -127,7 +142,13 @@ def main():
     answer = answer.replace("\r\n", "\n")
     blocks = BLOCK.findall(answer)
     if not blocks:
-        say(["✖ 적용할 코드 블록이 없어요.", "Gemini 답 전체를 복사(Ctrl+C)했는지 확인하세요. 블록은 '<<<<<<< 파일: 이름' ~ '=======' ~ '>>>>>>>' 형식이어야 해요."])
+        if "<<<<<<<" in answer and not re.search(r"^={7}\s*$", answer, re.M):
+            say(["✖ 적용할 수 없어요 — 화면에 보이는 글자를 그대로 복사해서 '=======' 같은 구분 줄이 사라졌어요.",
+                 "Gemini 화면은 코드 상자 밖의 HTML을 그려 버리고 구분 줄을 지워요. 아래를 Gemini에게 붙여 넣고, 다시 받은 답에서 코드 상자의 '복사' 버튼으로 복사하세요:", "",
+                 "방금 답을 적용할 수 없었어. 커밋 줄과 모든 수정 블록(<<<<<<< 파일: … ======= … >>>>>>>)을 ```text 코드 상자 하나 안에 통째로 넣어서 다시 줘. "
+                 "'지금 코드'는 첨부한 소스에 실제로 있는 코드 그대로 쓰고, 아직 없는 요소·함수는 지금 코드로 쓰지 마. 한 번에 기능 하나씩 줘."])
+        else:
+            say(["✖ 적용할 코드 블록이 없어요.", "Gemini 답의 코드 상자 '복사' 버튼으로 복사했는지 확인하세요. 블록은 '<<<<<<< 파일: 이름' ~ '=======' ~ '>>>>>>>' 형식이어야 해요."])
         return 1
     m = re.search(r"^커밋:\s*(.+)$", answer, re.M)
     msg = m.group(1).strip() if m else "Gemini 수정"
@@ -147,7 +168,7 @@ def main():
                 files[name] = raw.replace("\r\n", "\n")
             else:
                 eol[name], files[name] = "\n", None
-        old, new = strip_nl(old), strip_nl(new)
+        old, new = unfence(strip_nl(old)), unfence(strip_nl(new))
         if files[name] is None:
             if old.strip():
                 errors.append(f"블록 {k} ({name}): 파일이 없어요")
