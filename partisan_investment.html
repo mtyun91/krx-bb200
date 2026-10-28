@@ -1308,7 +1308,7 @@
         const c = state.cfg;
         const lv = [{ p: held.avg, c: '#111111', t: `평단 ${won(held.avg)}` }];
         const db = state.data[state.selected] && state.data[state.selected].bars, ma = db && maN(db, db.length - 1, c.exitMa);
-        if (ma) lv.push({ p: ma, c: '#1e6bd6', t: `매도 기준 ${c.exitMa}일선 ${won(Math.round(ma))}` });
+        if (ma && state.look.exitLine) lv.push({ p: ma, c: state.look.exitColor, t: `매도 기준 ${c.exitMa}일선 ${won(Math.round(ma))}` });
         ctx.font = '10px Noto Sans KR, sans-serif';
         lv.forEach((l) => {
           if (l.p < lo || l.p > hi) return;
@@ -1416,7 +1416,7 @@
       document.getElementById('chartSignal').innerHTML = info ? (info.signal ? '<span class="px-1.5 bg-[#e5383b] text-white">일봉 상단 돌파 신호</span>' :
         info.toUpper != null ? `<span class="text-[#666666]">일봉 상단선까지 ${info.toUpper >= 0 ? '이미 위' : pct(info.toUpper, 1)}</span>` : '') : '';
       const LKs = state.look;
-      document.getElementById('maLegend').innerHTML = (LKs.bb ? `<span style="color:${LKs.bbMid}">━</span>중심 <span style="color:${LKs.bbUp}">┅</span>상단 <span style="color:${LKs.bbLow}">┅</span>하단 ` : '') + (state.tf === 'D' ? `<b style="color:#1e6bd6">━</b>매도 ${state.cfg.exitMa}선 <span style="color:#e5383b">△</span>매수${state.cfg.entryMode === 'SQ' ? '(스퀴즈만)' : ''} <span style="color:#7c3aed">◆</span>스퀴즈 ${state.cfg.lcWait ? '<span style="color:#999">□</span>장대양봉 대기 ' : ''}` : '') + lookLegend() + drawLegend();
+      document.getElementById('maLegend').innerHTML = (LKs.bb ? `<span style="color:${LKs.bbMid}">━</span>중심 <span style="color:${LKs.bbUp}">┅</span>상단 <span style="color:${LKs.bbLow}">┅</span>하단 ` : '') + (state.tf === 'D' ? `${LKs.exitLine ? `<b style="color:${LKs.exitColor}">━</b>매도 ${state.cfg.exitMa}선 ` : ''}<span style="color:#e5383b">△</span>매수${state.cfg.entryMode === 'SQ' ? '(스퀴즈만)' : ''} <span style="color:#7c3aed">◆</span>스퀴즈 ${state.cfg.lcWait ? '<span style="color:#999">□</span>장대양봉 대기 ' : ''}` : '') + lookLegend() + drawLegend();
     }
 
     function selectCode(code) {
@@ -4911,7 +4911,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.14', APP_DATE = '2026-10-28';
+    const APP_VERSION = '1.15', APP_DATE = '2026-10-28';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5060,10 +5060,12 @@ onmessage = (e) => { const { body, sets } = e.data;
     function drawStrategyMarks(bars, vis, start, x, y) {
       if (state.tf !== 'D') return;
       const n = state.cfg.exitMa, rx = ruleOn('exit');
-      ctx.beginPath(); ctx.strokeStyle = '#1e6bd6'; ctx.lineWidth = 1.6; ctx.setLineDash([]);
-      let on = false;
-      vis.forEach((b, j) => { const m = maN(bars, start + j, n); if (m == null) { on = false; return; } const xx = x(start + j), yy = y(m); if (!on) { ctx.moveTo(xx, yy); on = true; } else ctx.lineTo(xx, yy); });
-      ctx.stroke(); ctx.lineWidth = 1;
+      if (state.look.exitLine) {   // 매도 기준선(N일선) — 차트 설정에서 숨기기·색 바꾸기
+        ctx.beginPath(); ctx.strokeStyle = state.look.exitColor; ctx.lineWidth = 1.6; ctx.setLineDash([]);
+        let on = false;
+        vis.forEach((b, j) => { const m = maN(bars, start + j, n); if (m == null) { on = false; return; } const xx = x(start + j), yy = y(m); if (!on) { ctx.moveTo(xx, yy); on = true; } else ctx.lineTo(xx, yy); });
+        ctx.stroke(); ctx.lineWidth = 1;
+      }
       let sqTx = -1e9;   // 스퀴즈 글자가 겹치지 않게 (가까우면 ◆만)
       vis.forEach((b, j) => {
         const i = start + j, xx = x(i);
@@ -5663,14 +5665,14 @@ onmessage = (e) => { const { body, sets } = e.data;
     const IND_ALIAS = { 그물망: 'mesh', 그물: 'mesh', 볼린저: 'bb', 엔벨로프: 'env', 일목: 'ichi', 일목균형표: 'ichi', 파라볼릭: 'sar', 지수이평: 'ema', 스토캐스틱: 'stoch', 윌리엄스: 'willr', dmi: 'adx', 이격도: 'disp', 거래량비율: 'vr', 'vr': 'vr' };
     const indDef = (k) => { const s = String(k || '').toLowerCase().replace(/\s/g, ''); return IND_LIB.find((d) => d.k === s || d.k === IND_ALIAS[s] || d.name.replace(/\s/g, '').toLowerCase() === s); };
     const indLabel = (d) => { const L = indDef(d.k); return `${L.name}${d.p.length ? `(${d.p.join(',')})` : ''}`; };
-    const LOOK_DEF = { up: '#e5383b', down: '#1e6bd6', hollow: false, bb: true, bbUp: '#e5383b', bbMid: '#111111', bbLow: '#1e6bd6', vol: true, grid: true,
+    const LOOK_DEF = { up: '#e5383b', down: '#1e6bd6', hollow: false, exitLine: true, exitColor: '#1e6bd6', bb: true, bbUp: '#e5383b', bbMid: '#111111', bbLow: '#1e6bd6', vol: true, grid: true,
       mas: MA_LIST.map((m) => ({ p: m.p, c: m.c, on: true })), ind: [{ k: 'mesh', p: [5, 120, 5], c: '#86efac', on: true }], v: 2 };
     const clone = (o) => JSON.parse(JSON.stringify(o));
     function normalizeLook(d) {
       const o = clone(LOOK_DEF);
       if (!d || typeof d !== 'object') return o;
-      ['up', 'down', 'bbUp', 'bbMid', 'bbLow'].forEach((k) => { o[k] = lookColor(d[k], o[k]); });
-      ['hollow', 'bb', 'vol', 'grid'].forEach((k) => { if (typeof d[k] === 'boolean') o[k] = d[k]; });
+      ['up', 'down', 'bbUp', 'bbMid', 'bbLow', 'exitColor'].forEach((k) => { o[k] = lookColor(d[k], o[k]); });
+      ['hollow', 'exitLine', 'bb', 'vol', 'grid'].forEach((k) => { if (typeof d[k] === 'boolean') o[k] = d[k]; });
       if (Array.isArray(d.mas)) o.mas = d.mas.slice(0, 8).map((m, i) => ({ p: Math.round(Math.min(400, Math.max(1, Number(m.p) || 5))), c: lookColor(m.c, MA_PALETTE[i % 8]), on: m.on !== false }));
       // v2: 그물망(5~120일선, 연한 초록)을 한 번 켜 줌 — 그 뒤 지우면 다시 생기지 않음
       const addMesh = (d.v || 1) < 2;
@@ -5778,6 +5780,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       lkCard.innerHTML = `<div class="flex items-center gap-1 mb-1"><b class="text-[12px]">차트 설정</b><span class="flex-1"></span><button type="button" data-lk-reset class="btn px-1.5 py-0 text-[10px]">기본값</button><button type="button" data-lk-close class="btn px-1.5 py-0 text-[10px]" aria-label="닫기">✕</button></div>
         ${sec('봉')}<div class="flex items-center gap-3">양봉 ${col('up', L.up)} 음봉 ${col('down', L.down)} ${chk('hollow', L.hollow, '양봉 속 비우기')}</div>
         <div class="flex items-center gap-3 mt-1">${chk('vol', L.vol, '거래량')} ${chk('grid', L.grid, '격자')}</div>
+        ${sec(`매도 기준선 (${state.cfg.exitMa}일선 · 굵은 선)`)}<div class="flex items-center gap-2">${chk('exitLine', L.exitLine, '보기')} 색 ${col('exitColor', L.exitColor)}<span class="text-[10px] text-[#999999]">기간은 설정 탭 '매도선'</span></div>
         ${sec(`볼린저 ${state.cfg.bbPeriod} (전략선)`)}<div class="flex items-center gap-2">${chk('bb', L.bb, '보기')} 상단 ${col('bbUp', L.bbUp)} 중심 ${col('bbMid', L.bbMid)} 하단 ${col('bbLow', L.bbLow)}</div>
         ${sec('이동평균선')}${L.mas.map((m, i) => `<div class="flex items-center gap-1.5 mb-0.5">${chk(`mas.${i}.on`, m.on)} ${num(`mas.${i}.p`, m.p, ['기간', 1, 1, 400])}일 ${col(`mas.${i}.c`, m.c)}<span class="flex-1"></span><button type="button" data-lk-del-ma="${i}" class="text-[#999999] hover:text-[#e5383b] px-1" aria-label="이평선 지우기">✕</button></div>`).join('')}
         ${L.mas.length < 8 ? '<button type="button" data-lk-add-ma class="btn px-1.5 py-0 text-[10px]">+ 이평선 추가</button>' : ''}
@@ -5834,7 +5837,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (a.undo) done.push('이전 모양으로');
       else if (a.reset) done.push('기본 모양으로');
       const s = a.set || {};
-      const CN = { up: '양봉', down: '음봉', bbUp: 'BB 상단', bbMid: 'BB 중심', bbLow: 'BB 하단' }, BN = { hollow: '양봉 속 비우기', bb: '볼린저', vol: '거래량', grid: '격자' };
+      const CN = { up: '양봉', down: '음봉', bbUp: 'BB 상단', bbMid: 'BB 중심', bbLow: 'BB 하단', exitColor: '매도 기준선' }, BN = { hollow: '양봉 속 비우기', exitLine: '매도 기준선', bb: '볼린저', vol: '거래량', grid: '격자' };
       Object.entries(s).forEach(([k, v]) => {
         if (CN[k]) { const c = lookColor(v, null); if (c) { L[k] = c; done.push(`${CN[k]} 색`); } else bad.push(`${k}=${v}`); }
         else if (BN[k]) { L[k] = v === true || v === 'true'; done.push(`${BN[k]} ${L[k] ? '켬' : '끔'}`); }
@@ -5870,7 +5873,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       runAction.undo = { do: '차트설정', look: prev, undo: true };
       return `✔ 차트 모양을 바꿨어요 — ${done.join(' · ')}${bad.length ? ` (모르는 값: ${bad.join(', ')})` : ''}`;
     }
-    const lookFacts = () => { const L = state.look; return { 봉색: { 양봉: L.up, 음봉: L.down, 속비우기: L.hollow }, 볼린저선: L.bb ? { 상단: L.bbUp, 중심: L.bbMid, 하단: L.bbLow } : '숨김', 이평선: L.mas.map((m) => `${m.p}일 ${m.c}${m.on ? '' : ' (꺼짐)'}`), 보조지표: L.ind.map((d) => `${indLabel(d)} ${d.c}${d.on ? '' : ' (꺼짐)'}`), 거래량: L.vol, 격자: L.grid }; };
+    const lookFacts = () => { const L = state.look; return { 매도기준선: L.exitLine ? `${state.cfg.exitMa}일선 굵은 선 ${L.exitColor} (이평선 목록과 별개 — set.exitLine·exitColor 로 바꿈)` : '숨김', 봉색: { 양봉: L.up, 음봉: L.down, 속비우기: L.hollow }, 볼린저선: L.bb ? { 상단: L.bbUp, 중심: L.bbMid, 하단: L.bbLow } : '숨김', 이평선: L.mas.map((m) => `${m.p}일 ${m.c}${m.on ? '' : ' (꺼짐)'}`), 보조지표: L.ind.map((d) => `${indLabel(d)} ${d.c}${d.on ? '' : ' (꺼짐)'}`), 거래량: L.vol, 격자: L.grid }; };
 
     async function chatSend(text) {
       text = String(text || '').trim();
