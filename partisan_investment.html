@@ -805,13 +805,30 @@
       if (!state.cfg.ma5Confirm) return rawSignal(bars, i);
       return i >= 3 && rawSignal(bars, i - 2) && above5(bars[i - 1]) && above5(bars[i]);
     }
+    // 장대양봉 대기 뒤 전고점 돌파: 최근 60일 안에 '대기'였던 장대양봉(k)이 있고, 그 뒤 장대양봉 종가 아래로 한 번 내려왔다가,
+    //  오늘 양봉 종가가 k 이후 최고가(전고점)를 처음 넘으면 바로 매수 — 오늘 봉이 또 장대양봉이어도 기다리지 않음
+    function reBreakFrom(bars, i) {
+      const b = bars[i];
+      if (!(b.c > b.o)) return null;
+      for (let k = Math.max(1, i - 60); k <= i - 3; k++) {
+        if (!waitBase(bars, k)) continue;
+        let hh = bars[k].h, dip = false, first = true;
+        for (let j = k + 1; j < i; j++) {
+          if (bars[j].c > hh && dip) { first = false; break; }   // 이미 전에 넘었음
+          if (bars[j].c < bars[k].c) dip = true;
+          hh = Math.max(hh, bars[j].h);
+        }
+        if (first && dip && b.c > hh) return k;
+      }
+      return null;
+    }
     function rawSignal(bars, i) {
       const c = state.cfg;
       if (baseBreakout(bars, i)) {
         if (c.entryMode === 'SQ' && !isSqueeze(bars, i)) return false;
         if (!(c.lcWait && isLongCandle(bars, i))) return true;
       }
-      return c.lcWait ? waitFrom(bars, i) != null : false;
+      return c.lcWait ? waitFrom(bars, i) != null || reBreakFrom(bars, i) != null : false;
     }
     function entryLabel(bars, i) {
       if (state.cfg.ma5Confirm) return `${rawLabel(bars, i - 2)} → 5일선 위 2일 확인`;
@@ -819,7 +836,7 @@
     }
     function rawLabel(bars, i) {
       if (baseBreakout(bars, i) && !(state.cfg.lcWait && isLongCandle(bars, i))) return isSqueeze(bars, i) ? '200일 스퀴즈 돌파' : `BB${state.cfg.bbPeriod} 상단 돌파`;
-      return '장대양봉 뒤 눌림 반등';
+      return reBreakFrom(bars, i) != null ? '장대양봉 대기 뒤 전고점 돌파' : '장대양봉 뒤 눌림 반등';
     }
 
     // =========================================================================
@@ -4894,7 +4911,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.12', APP_DATE = '2026-10-28';
+    const APP_VERSION = '1.13', APP_DATE = '2026-10-28';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5055,7 +5072,7 @@ onmessage = (e) => { const { body, sets } = e.data;
           ctx.strokeStyle = '#e5383b'; ctx.beginPath(); ctx.moveTo(xx, yy - 5); ctx.lineTo(xx - 4, yy + 2); ctx.lineTo(xx + 4, yy + 2); ctx.closePath(); ctx.stroke();
         }
         if (i >= 1 && baseBreakout(bars, i)) {
-          const sq = isSqueeze(bars, i), lc = state.cfg.lcWait && isLongCandle(bars, i);
+          const sq = isSqueeze(bars, i), lc = state.cfg.lcWait && isLongCandle(bars, i) && reBreakFrom(bars, i) == null;   // 전고점 돌파 봉은 대기 아님
           if (sq || lc) {
             const yy = y(b.l) + 32;
             ctx.font = '9px Noto Sans KR, sans-serif';
