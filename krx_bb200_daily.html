@@ -1233,7 +1233,7 @@
         const marks = [];
         [...state.bt.trades, ...state.bt.open].filter((tr) => tr.code === state.selected).forEach((tr) => {
           tr.entries.forEach((e) => marks.push({ t: e.t, p: e.price, kind: 'buy', label: `${e.stage}차` }));
-          tr.exits.forEach((e) => marks.push({ t: e.t, p: e.price, kind: 'sell', label: tr.pnl >= 0 ? `+${tr.ret.toFixed(1)}%` : `${tr.ret.toFixed(1)}%` }));
+          tr.exits.forEach((e) => marks.push({ t: e.t, p: e.price, kind: 'sell', label: tr.pnl >= 0 ? `+${tr.ret.toFixed(1)}%` : `${tr.ret.toFixed(1)}%`, up: tr.pnl >= 0 }));
         });
         state.bt.skipped.filter((s) => s.code === state.selected).forEach((s) => marks.push({ t: s.t, p: s.price, kind: 'skip' }));
         const pos = new Map(bars.map((b, i) => [b.t, i]));
@@ -1246,6 +1246,7 @@
             const yy = y(b.h) - 8;
             ctx.fillStyle = '#1e6bd6';
             ctx.beginPath(); ctx.moveTo(xx, yy + 6); ctx.lineTo(xx - 5, yy - 2); ctx.lineTo(xx + 5, yy - 2); ctx.fill();
+            ctx.fillStyle = m.up ? '#e5383b' : '#1e6bd6';   // 수익률 글자: 이익 빨강 · 손실 파랑
             ctx.fillText(m.label, xx - 12, yy - 6);
           } else {
             const yy = y(b.l) + 8;
@@ -4744,14 +4745,14 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
         const x0 = x(Math.min(ia, ib)) - slot / 2, x1 = x(Math.max(ia, ib)) + slot / 2;
         ctx.globalAlpha = alpha; ctx.fillStyle = col; ctx.fillRect(x0, g.top, x1 - x0, g.priceH - g.top); ctx.globalAlpha = 1;
       };
-      const legs = (ia, ib, pa, pb, col, label) => {
+      const legs = (ia, ib, pa, pb, col, label, tcol = col) => {
         const xa = x(ia), xb = x(ib), ya = y(pa), yb = y(pb);
         ctx.strokeStyle = col; ctx.setLineDash([4, 3]); ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(xb, yb); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
         ctx.fillStyle = col;
         ctx.beginPath(); ctx.arc(xa, ya, 3.5, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(xb, yb, 3.5, 0, Math.PI * 2); ctx.fill();
-        ctx.font = '10px Noto Sans KR, sans-serif'; ctx.fillText(label, Math.min(xa, xb) + 2, g.top + 12);
+        ctx.font = '10px Noto Sans KR, sans-serif'; ctx.fillStyle = tcol; ctx.fillText(label, Math.min(xa, xb) + 2, g.top + 12);   // 수익률 글자: 오르면 빨강 · 내리면 파랑
       };
       if (rangeFocus && rangeFocus.code === state.selected && rangeFocus.tf === state.tf && pos.has(rangeFocus.b)) {   // 목록에서 고른 구간으로 화면 이동
         const ia = pos.get(rangeFocus.a) ?? pos.get(rangeFocus.b), ib = pos.get(rangeFocus.b), w = Math.max(5, ib - ia);
@@ -4764,7 +4765,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
         if (ia == null || ib == null) return;
         const col = m.label === 'good' ? '#16a34a' : m.label === 'bad' ? '#e5383b' : '#6b7280';
         band(ia, ib, col, m === rangeCur ? 0.12 : 0.07);
-        legs(ia, ib, m.pa, m.pb, col, `${m.label === 'good' ? '👍 ' : m.label === 'bad' ? '👎 ' : ''}${pctTxt(m.ret)}`);
+        legs(ia, ib, m.pa, m.pb, col, `${m.label === 'good' ? '👍 ' : m.label === 'bad' ? '👎 ' : ''}${pctTxt(m.ret)}`, m.ret > 0 ? '#e5383b' : m.ret < 0 ? '#1e6bd6' : '#666666');
       });
       if (rangeSel) {
         const a = bars[rangeSel.a], b = bars[rangeSel.b];
