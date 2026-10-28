@@ -42,6 +42,7 @@
     <button id="btnLoad" type="button" class="btn px-2 py-0.5 text-[11px]" disabled title="저장된 시세 이후 바뀐 부분만 받아옵니다">업데이트</button>
     <span id="loadStatus" class="text-[11px] text-[#666666] truncate max-w-[280px]"></span>
     <div class="ml-auto flex items-center gap-3 text-[11px]">
+      <button id="agendaBadge" type="button" class="hidden px-1.5 py-0.5 bg-[#e5383b] text-white text-[11px] font-semibold" title="결재할 안건 — 눌러서 결재함 열기"></button>
       <button id="paperMini" type="button" class="num text-[#444444] hover:underline" title="모의투자 패널 열기"></button>
       <span id="clockKst" class="num text-[#666666]"></span>
       <span id="marketState" class="text-[#666666]"></span>
@@ -204,6 +205,7 @@
           </div>
           <div id="syncState" class="text-[10px] text-[#888888]"></div>
           <div id="paperAcct" class="num text-[11px] bg-[#fafafa] border border-[#e6e6e6] px-2 py-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5"></div>
+          <div id="agendaBox" class="space-y-1.5"></div>
 
           <!-- 선택 종목이 보유 중이면: 보유 정보 · 즉시 매도 -->
           <div id="holdInfo" class="hidden border border-[#111111] px-2 py-1.5 text-[11px] space-y-0.5"></div>
@@ -327,7 +329,7 @@
     const STORE_KEY = 'krx.bb200.v1';
     const UNIVERSE_ETF = { K200: '069500', Q150: '229200' };   // KODEX 200 · KODEX 코스닥150 구성종목으로 지수 종목 목록 대용
     const DEFAULTS = {
-      capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true,
+      capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true, approval: true,
       entryMode: 'ALL', sqPct: 15, sqDrop: 30, sqRange: 60, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false,
       bbPeriod: 200, bbStd: 2.0,
       exitMa: 5, pullbackPct: 1.5,
@@ -389,7 +391,8 @@
         { k: 'rtMax', label: '실시간 체결 구독 종목 수 (나무 상한 30)', min: 1, max: 30, step: 1 }] },
       { group: '모의투자', items: [
         { k: 'winStart', label: '매매 시간대 시작 (KST)', type: 'time' },
-        { k: 'winEnd', label: '매매 시간대 끝 (KST)', type: 'time' }] }
+        { k: 'winEnd', label: '매매 시간대 끝 (KST)', type: 'time' },
+        { k: 'approval', label: '결재제 — 모의 자동매매의 매수·매도를 내 결재 뒤에만 실행 (끄면 완전 자동)', type: 'bool' }] }
     ];
     const MA_LIST = [{ p: 5, c: '#f472b6' }, { p: 20, c: '#f59e0b' }, { p: 60, c: '#10b981' }, { p: 120, c: '#8b5cf6' }];
     // 봉 주기 — 전략·백테스트·모의투자는 항상 일봉, 나머지는 차트 보기 전용
@@ -421,6 +424,7 @@
       rules: { entry: null, exit: null },   // 비서가 만든 내 매수·매도 규칙
       journal: [],       // 매매 일지 (모든 주문 + 이유 + 매도 수익)
       draw: {},          // 비서가 차트에 그린 선·메모 (종목별)
+      agenda: [],        // 결재 안건 (신호 → 내 결재 → 실행) + 결정 기록
       view: { end: null, span: 160 },
       paper: null,
       tab: 'bt'
@@ -439,6 +443,7 @@
       if (Array.isArray(d.journal)) state.journal = d.journal;
       if (d.draw && typeof d.draw === 'object') state.draw = d.draw;
       if (d.look && typeof d.look === 'object') state.look = normalizeLook(d.look);
+      if (Array.isArray(d.agenda)) state.agenda = d.agenda;
     }
     function loadStore() {
       try {
@@ -463,7 +468,7 @@
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify({
           cfg: state.cfg, watch: state.watch, universe: state.universe, bridgeUrl: state.bridge.url,
-          paper: state.paper, names: state.names, tab: state.tab, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look,
+          paper: state.paper, names: state.names, tab: state.tab, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look, agenda: state.agenda,
           lists: state.lists, listsAt: state.listsAt, sel: state.selected, tf: state.tf, ui: state.ui, lastMode: state.lastMode
         }));
       } catch (_) {}
@@ -1896,6 +1901,26 @@
       }
       // 데모: 오늘 봉이 없으면 마지막 봉을 오늘처럼 사용
       const idxOf = (code) => (todayIdx[code] != null ? todayIdx[code] : state.data[code].bars.length - 1);
+      if (agendaOn()) {   // 결재제: 사고팔지 않고 결재함에 안건만 올림 (2·3차 추가 매수는 이미 결재한 계획대로)
+        let n = 0;
+        for (const code of Object.keys(p.positions)) {
+          const d = state.data[code]; if (!d) continue;
+          const i = idxOf(code), seq = p.positions[code];
+          if (seq.lastStepT !== d.bars[i].t) {
+            const r = stepSeq(seq, d.bars, i, { skipExit: true }); seq.lastStepT = d.bars[i].t; p.cash += r.cash;
+          }
+          const ex = exitSignal(d.bars, i);
+          if (ex.hit && seq.startT !== k.ymd && !agendaFind(code, 'SELL')) { agendaCreate(code, 'SELL', { note: ex.note, price: lastPrice(code), src: 'manual' }); n++; }
+        }
+        codes.filter((code) => state.data[code] && !p.positions[code] && !priceBroken(state.data[code].bars)).forEach((code) => {
+          const i = idxOf(code), bars = state.data[code].bars;
+          if (i >= 1 && isBreakout(bars, i) && !agendaFind(code, 'BUY')) { agendaCreate(code, 'BUY', { note: entryLabel(bars, i), price: lastPrice(code) || bars[i].c, src: 'manual' }); n++; }
+        });
+        plog('판단 완료', '', `결재제 — 새 안건 ${n}건을 결재함에 올림`);
+        saveStore(); renderPaper(); renderAgenda(true);
+        toast(n ? `[모의] 결재할 안건 ${n}건을 올렸어요 — 모의투자 탭 결재함` : '[모의] 새 안건이 없어요');
+        return;
+      }
       for (const code of Object.keys(p.positions)) {
         const d = state.data[code];
         if (!d) continue;
@@ -2664,7 +2689,7 @@
       try { localStorage.setItem(SYNC_KEY, JSON.stringify({ rev: sync.rev, saved: sync.saved, device: sync.device, dirty: sync.dirty, hash: sync.hash })); } catch (_) {}
     }
     function syncPayload() {
-      return { cfg: state.cfg, watch: state.watch, universe: state.universe, paper: state.paper, names: state.names, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look };
+      return { cfg: state.cfg, watch: state.watch, universe: state.universe, paper: state.paper, names: state.names, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look, agenda: state.agenda };
     }
     function hasActivity() {
       const p = state.paper;
@@ -3404,13 +3429,16 @@
         const i = liveBar(code);
         if (i == null) return;
         const ex = exitSignal(state.data[code].bars, i);
-        if (ex.hit && !win.watch[code]) win.watch[code] = { side: 'SELL', since: Date.now(), n: 0, sum: 0, lastAt: 0, done: false, note: ex.note };
+        if (ex.hit && !win.watch[code]) { win.watch[code] = { side: 'SELL', since: Date.now(), n: 0, sum: 0, lastAt: 0, done: false, note: ex.note }; if (agendaOn()) agendaCreate(code, 'SELL', { note: ex.note, price: lastPrice(code), src: 'window' }); }
       });
       win.near.forEach((code) => {
         if (p.positions[code] || win.watch[code]) return;
         const i = liveBar(code);
         if (i == null || i < 1 || priceBroken(state.data[code].bars)) return;
-        if (isBreakout(state.data[code].bars, i)) win.watch[code] = { side: 'BUY', since: Date.now(), n: 0, sum: 0, lastAt: 0, done: false, note: entryLabel(state.data[code].bars, i), s: rankScore(state.data[code].bars, i) };
+        if (isBreakout(state.data[code].bars, i)) {
+          win.watch[code] = { side: 'BUY', since: Date.now(), n: 0, sum: 0, lastAt: 0, done: false, note: entryLabel(state.data[code].bars, i), s: rankScore(state.data[code].bars, i) };
+          if (agendaOn()) agendaCreate(code, 'BUY', { note: win.watch[code].note, price: lastPrice(code), src: 'window' });
+        }
       });
       rtSubscribe(); renderPaper();
     }
@@ -3443,16 +3471,23 @@
           if (!ex.hit) { w.note = '매도 조건 풀림 — 매도 보류'; continue; }
           w.note = `${ex.note} · 관찰 평균 ${won(Math.round(avgPx))}`;
           if ((watched && price >= avgPx) || deadline) {
-            paperExit(code, price, `${k.hm} ${deadline ? '마감 전 매도' : '반등 매도'} — 현재가 ${won(price)} · ${ex.note}`);
+            let ag = null;
+            if (agendaOn()) { const g = agendaGate(code, 'SELL', ex.note, price); if (g.st !== 'go') { w.note = `${g.msg} · ${ex.note}`; if (g.stop) w.done = true; continue; } ag = g.a; }
+            if (ag) jWhy = `결재: ${ag.reason}`;
+            try { paperExit(code, price, `${k.hm} ${deadline ? '마감 전 매도' : '반등 매도'} — 현재가 ${won(price)} · ${ex.note}`); } finally { jWhy = ''; }
+            if (ag) agendaDone(ag, price);
             w.done = true; changed = true;
           }
         } else {
           if (!isBreakout(bars, i)) { w.note = '돌파 풀림 — 매수 보류'; continue; }
           w.note = `BB 상단 ${won(Math.round(bars[i].upper))} 위 · 관찰 평균 ${won(Math.round(avgPx))}`;
           if (!((watched && price <= avgPx) || deadline)) continue;
+          let ag = null;
+          if (agendaOn()) { const g = agendaGate(code, 'BUY', w.note, price); if (g.st !== 'go') { w.note = `${g.msg} · ${w.note}`; if (g.stop) w.done = true; continue; } ag = g.a; }
           const equity = p.cash + Object.entries(p.positions).reduce((s, [cd, q]) => s + q.qty * (lastPrice(cd) || q.avg), 0) + manualValue();
           const unspent = Object.values(p.positions).reduce((s, q) => s + Math.max(0, q.slot - q.invested), 0);
-          const slot = Math.min(equity * slotPctNow() / 100, p.cash - unspent - reservedCash());
+          let slot = Math.min(equity * slotPctNow() / 100, p.cash - unspent - reservedCash());
+          if (ag && ag.qtyApproved) slot = Math.min(ag.qtyApproved * price * (1 + costBuy()) / (c.w1 / 100) + 1, (p.cash - unspent - reservedCash()) / (c.w1 / 100));   // 결재한 수량대로
           w.done = true; changed = true;
           if (Object.keys(p.positions).length >= c.maxPos || slot < price * 1.01) { plog('신호 건너뜀', code, '보유 자리 또는 현금 부족'); continue; }
           const seq = newSeq(code, bars[i], i, slot);
@@ -3462,7 +3497,9 @@
           p.cash -= spent;
           seq.ctx = entryCtx(code, price);
           p.positions[code] = seq;
-          assistOnTrade(code, 'BUY', seq.qty, price, `자동 매수 (${k.hm})`);
+          if (ag) jWhy = `결재: ${ag.reason}`;
+          try { assistOnTrade(code, 'BUY', seq.qty, price, `자동 매수 (${k.hm})`); } finally { jWhy = ''; }
+          if (ag) agendaDone(ag, price);
           plog('매수', code, `${seq.qty}주 @ ${won(price)} · ${deadline ? '마감 전' : `관찰 평균 ${won(Math.round(avgPx))} 이하로 눌림`} · 슬롯 ${won(slot)}원`);
           toast(`[모의] ${nameOf(code)} ${seq.qty}주 매수 @ ${won(price)}`);
         }
@@ -3486,6 +3523,7 @@
       });
       const w = Object.values(win.watch);
       plog('매매 시간 종료', '', `후보 ${win.near.length}종목 · 매수 관찰 ${w.filter((x) => x.side === 'BUY').length} · 매도 관찰 ${w.filter((x) => x.side === 'SELL').length} · 보유 ${Object.keys(p.positions).length}종목`);
+      state.agenda.forEach((a) => { if (a.day === k.ymd && a.src === 'window' && (a.status === 'pending' || a.status === 'approved')) { a.note = a.status === 'approved' ? '시간대 안에 조건이 안 맞음' : '결재 없음'; a.status = 'expired'; } });
       p.lastDecision = k.ymd;
       win.ended = k.ymd;
       saveStore(); renderPaper();
@@ -4920,7 +4958,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.16', APP_DATE = '2026-10-28';
+    const APP_VERSION = '1.17', APP_DATE = '2026-10-28';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5884,6 +5922,229 @@ onmessage = (e) => { const { body, sets } = e.data;
     }
     const lookFacts = () => { const L = state.look; return { 매도기준선: L.exitLine ? `${state.cfg.exitMa}일선 굵은 선 ${L.exitColor} (이평선 목록과 별개 — set.exitLine·exitColor 로 바꿈)` : '숨김', 봉색: { 양봉: L.up, 음봉: L.down, 속비우기: L.hollow }, 볼린저선: L.bb ? { 상단: L.bbUp, 중심: L.bbMid, 하단: L.bbLow } : '숨김', 이평선: L.mas.map((m) => `${m.p}일 ${m.c}${m.on ? '' : ' (꺼짐)'}`), 보조지표: L.ind.map((d) => `${indLabel(d)} ${d.c}${d.on ? '' : ' (꺼짐)'}`), 거래량: L.vol, 격자: L.grid }; };
 
+    // ---- 투자위원회 결재: 신호 → 안건 상정 → 리스크 점검표 + AI 리스크 브리핑(꼭 읽기) → 비서와 토론 → 내 결재 → 실행 → 사후 평가 ----
+    //  결재제(기본)에서는 모의 자동매매가 매수·매도 모두 결재 없이는 실행하지 않음. 비서·위젯은 대신 결재할 수 없음
+    //  아래 함수들은 renderPaper 가 처음 불릴 때(이 코드보다 먼저)도 안전하도록 함수 선언 + 요소 dataset 만 씀
+    function agendaOn() { return state.cfg.approval !== false; }
+    function agendaKey(code, side) { return `${kstNow().ymd}|${code}|${side}`; }
+    function agendaFind(code, side) { const k = agendaKey(code, side); return state.agenda.find((a) => a.key === k); }
+    function equityNow() { const p = paper(); return p.cash + Object.entries(p.positions).reduce((s, [cd, q]) => s + q.qty * (lastPrice(cd) || q.avg), 0) + manualValue(); }
+    function freeCash() { const p = paper(); return p.cash - Object.values(p.positions).reduce((s, q) => s + Math.max(0, q.slot - q.invested), 0) - reservedCash(); }
+    function planBuyQty(price) {
+      const c = state.cfg, slot = Math.min(equityNow() * slotPctNow() / 100, freeCash());
+      return Math.max(0, Math.floor(slot * c.w1 / 100 / (price * (1 + costBuy()))));
+    }
+    // 리스크 점검표: 주문 실수 점검(guardCheck) + 결재용 항목
+    function agendaChecks(a) {
+      const c = state.cfg, p = paper(), px = lastPrice(a.code) || a.price, d = state.data[a.code], b = d && d.bars, i = b ? b.length - 1 : -1;
+      const out = [];
+      const add = (lv, msg) => out.push({ lv, msg });
+      const qty = a.side === 'BUY' ? (a.qtyDraft || a.qty) : ((p.positions[a.code] || {}).qty || 0);
+      guardCheck({ code: a.code, side: a.side, type: 'MKT', price: 0, qty }).forEach((w) => add(w.lv, w.msg + (w.stat ? ` (과거: ${w.stat})` : '')));
+      const ma = b ? maN(b, i, c.exitMa) : null;
+      if (a.side === 'BUY') {
+        const amt = qty * px, eq = equityNow();
+        add('info', `제안 ${qty.toLocaleString()}주 × ${won(px)}원 = ${won(Math.round(amt))}원 (평가자산의 ${eq ? (amt / eq * 100).toFixed(1) : '-'}%)`);
+        if (ma && px > ma) add(px / ma - 1 > 0.08 ? 'mid' : 'info', `매도 기준 ${c.exitMa}일선 ${won(Math.round(ma))}원까지 ${((px / ma - 1) * 100).toFixed(1)}% — 다음 날 바로 이탈하면 약 ${won(Math.round((px - ma) * qty))}원 손실 (갭 하락이면 더 커질 수 있음)`);
+        if (b && isLongCandle(b, i)) add('mid', '오늘 봉이 장대양봉 — 돌파 뒤 되돌림이 자주 나오는 자리');
+        if (b && baseBreakout(b, i) && isSqueeze(b, i)) add('info', '200일 스퀴즈 돌파 — 장기 추세 시작 신호일 수 있지만 절대적이지 않음');
+        if (c.w2 || c.w3) add('info', `승인하면 계획에 따라 눌림 반등 때 2차 ${c.w2}%${c.w3 ? `, 전고점 돌파 때 3차 ${c.w3}%` : ''}를 자동으로 더 삼`);
+        const bt = state.bt && state.bt.stats;
+        if (bt) add('info', `지금 전략 백테스트: 승률 ${bt.win.toFixed(0)}% · 거래당 평균 ${pctTxt(bt.avgRet)} · 최대낙폭 -${bt.mdd.toFixed(1)}% — 대부분의 거래는 작은 손실로 끝남`);
+      } else {
+        const seq = p.positions[a.code];
+        if (seq) {
+          const g = (px / seq.avg - 1) * 100;
+          add('info', `보유 ${seq.qty.toLocaleString()}주 · 평단 ${won(Math.round(seq.avg))}원 · 지금 ${pctTxt(g)} (${won(Math.round((px - seq.avg) * seq.qty))}원)`);
+          if (ma) add('info', `종가 기준 ${c.exitMa}일선 ${won(Math.round(ma))}원 아래 — 전략 매도 조건`);
+          add('mid', `결재하지 않으면 ${c.winEnd} 이후에도 계속 보유합니다 — 하락이 이어지면 손실이 커질 수 있음`);
+        }
+      }
+      return out;
+    }
+    function agendaCreate(code, side, info) {
+      const old = agendaFind(code, side);
+      if (old) return old;
+      const price = info.price || lastPrice(code) || 0;
+      const a = { id: Math.random().toString(36).slice(2, 9), key: agendaKey(code, side), day: kstNow().ymd, at: Date.now(), code, name: nameOf(code), side,
+        status: 'pending', src: info.src || 'window', signal: String(info.note || '').slice(0, 80), price, qty: side === 'BUY' ? planBuyQty(price) : 0, read: false };
+      a.checks = agendaChecks(a);
+      state.agenda.unshift(a);
+      if (state.agenda.length > 300) state.agenda.length = 300;
+      saveStore(); renderAgenda(true);
+      agendaBrief(a);
+      raiseAlert({ lv: 'high', code, text: `결재 안건 — ${a.name} ${side === 'BUY' ? '매수' : '매도'} (${a.signal}). 리스크 브리핑을 읽고 결재해 주세요.`, say: `${a.name} ${side === 'BUY' ? '매수' : '매도'} 안건이 올라왔어요. 결재해 주세요.` });
+      return a;
+    }
+    async function agendaBrief(a) {
+      a.briefing = true; a.briefErr = ''; renderAgenda(true);
+      if (!aiReady()) { a.brief = ''; a.briefErr = 'AI가 설정되지 않아 점검표만 있어요 (설정 탭 → AI 분석)'; a.briefing = false; renderAgenda(true); return; }
+      try {
+        const bt = state.bt && state.bt.stats;
+        a.brief = await askAi('risk', {
+          안건: { 종목: `${a.name} (${a.code})`, 구분: a.side === 'BUY' ? '매수' : '매도', 신호: a.signal, 상정가: a.price, 제안수량: a.side === 'BUY' ? (a.qtyDraft || a.qty) : null },
+          점검표: a.checks.map((x) => `${x.lv === 'high' ? '[중요] ' : x.lv === 'mid' ? '[주의] ' : ''}${x.msg}`),
+          종목: stockFacts(a.code), 전략백테스트: bt ? { 승률: +bt.win.toFixed(0), 거래당평균: +bt.avgRet.toFixed(2), 최대낙폭: +bt.mdd.toFixed(1), 거래: bt.n } : null,
+          계좌: { 평가자산: Math.round(equityNow()), 현금: Math.round(paper().cash), 보유종목수: Object.keys(paper().positions).length, 최대보유: state.cfg.maxPos },
+        });
+      } catch (err) { a.briefErr = `브리핑을 받지 못했어요: ${err.message}`; }
+      a.briefing = false; saveStore(); renderAgenda(true);
+    }
+    // 자동매매가 실행 직전에 묻는 곳: go / wait(결재 대기) / no(거절·완료)
+    function agendaGate(code, side, note, price) {
+      const a = agendaFind(code, side) || agendaCreate(code, side, { note, price, src: 'window' });
+      if (a.status === 'approved') return { st: 'go', a };
+      if (a.status === 'rejected') return { st: 'no', stop: true, msg: '결재: 거절', a };
+      if (a.status === 'done') return { st: 'no', stop: true, msg: '실행 완료', a };
+      if (a.status === 'expired') return { st: 'no', stop: true, msg: '결재 기한 지남', a };
+      return { st: 'wait', msg: '결재 대기', a };
+    }
+    function agendaDone(a, price) { a.status = 'done'; a.execPrice = price; a.execAt = Date.now(); saveStore(); renderAgenda(true); }
+    function winActiveFor(code) { const k = kstNow(), r = winRange(); return k.min >= r.s - 10 && k.min < r.e && win.watch[code] && !win.watch[code].done && win.ended !== k.ymd; }
+    // 결재 시간대 밖(지금 판단 실행 등)에서 승인하면 바로 지금 가격으로
+    function paperBuyNow(code, price, rule, qty) {
+      const p = paper(), c = state.cfg, d = state.data[code];
+      if (!d || !d.bars.length) return '시세 없음';
+      if (p.positions[code]) return '이미 보유 중';
+      if (Object.keys(p.positions).length >= c.maxPos) return '보유 자리 부족';
+      const unit = price * (1 + costBuy()), free = freeCash();
+      const slot = qty ? Math.min(qty * unit / (c.w1 / 100) + 1, free / (c.w1 / 100)) : Math.min(equityNow() * slotPctNow() / 100, free);
+      if (slot < unit) return '현금 부족';
+      const i = d.bars.length - 1, seq = newSeq(code, d.bars[i], i, slot);
+      seq.lastStepT = d.bars[i].t;
+      const spent = seqBuy(seq, price, c.w1 / 100, rule, d.bars[i].t);
+      if (spent <= 0) return '매수 수량이 1주 미만';
+      p.cash -= spent; seq.ctx = entryCtx(code, price); p.positions[code] = seq;
+      assistOnTrade(code, 'BUY', seq.qty, price, rule);
+      plog('매수', code, `${seq.qty}주 @ ${won(price)} · ${rule}`);
+      toast(`[모의] ${nameOf(code)} ${seq.qty}주 매수 @ ${won(price)}`);
+      return seq;
+    }
+    function agendaExecNow(a) {
+      const px = lastPrice(a.code);
+      if (!(px > 0)) return '✖ 지금 가격을 알 수 없어요';
+      jWhy = `결재: ${a.reason}`;
+      try {
+        if (a.side === 'BUY') {
+          const r = paperBuyNow(a.code, px, `결재 매수 — ${a.signal}`, a.qtyApproved);
+          if (typeof r === 'string') { a.status = 'expired'; a.note = r; saveStore(); renderAgenda(true); return `✖ 매수하지 못했어요 — ${r}`; }
+        } else {
+          if (!paper().positions[a.code]) { a.status = 'expired'; a.note = '보유 없음'; saveStore(); renderAgenda(true); return '✖ 보유 중이 아니에요'; }
+          paperExit(a.code, px, `결재 매도 — ${a.signal}`);
+        }
+      } finally { jWhy = ''; }
+      agendaDone(a, px); renderPaper(); renderSymbols(); drawChart();
+      return `✔ ${a.name} ${a.side === 'BUY' ? '매수' : '매도'}를 실행했어요`;
+    }
+    function agendaDecide(id, ok) {
+      const a = state.agenda.find((x) => x.id === id);
+      if (!a || a.status !== 'pending') return;
+      if (!a.read) return toast('리스크 브리핑을 먼저 읽고 체크해 주세요');
+      const reason = String(a.reasonDraft || '').trim();
+      if (reason.length < 2) return toast('결정 이유를 한 줄 적어 주세요');
+      a.reason = reason.slice(0, 120); a.decidedAt = Date.now(); a.decPrice = lastPrice(a.code) || a.price;
+      a.status = ok ? 'approved' : 'rejected';
+      if (ok && a.side === 'BUY') { const q = Math.floor(Number(a.qtyDraft || a.qty)); if (q >= 1) a.qtyApproved = q; }
+      saveStore(); renderAgenda(true);
+      if (!ok) return toast(`${a.name} ${a.side === 'BUY' ? '매수' : '매도'} 안건을 거절했어요 — 이후 성과는 계속 추적해요`);
+      if (a.src === 'window' && winActiveFor(a.code)) return toast(`결재했어요 — ${state.cfg.winStart}~${state.cfg.winEnd} 매매 규칙대로 실행돼요`);
+      toast(agendaExecNow(a));
+    }
+    function agendaExpire() {
+      const today = kstNow().ymd;
+      let n = 0;
+      state.agenda.forEach((a) => { if (a.status === 'pending' && a.day !== today) { a.status = 'expired'; n++; } });
+      return n;
+    }
+    // 사후 평가: 결정한 뒤 지금까지 등락 (거절한 안건도)
+    function agendaOutcome(a) {
+      const base = a.execPrice || a.decPrice, px = lastPrice(a.code);
+      return base && px ? (px / base - 1) * 100 : null;
+    }
+    const AG_ST = { pending: '결재 대기', approved: '승인 — 실행 대기', rejected: '거절', done: '실행', expired: '기한 지남' };
+    function agendaHistLine(a) {
+      const o = agendaOutcome(a), sd = a.side === 'BUY' ? '매수' : '매도';
+      const what = a.side === 'BUY' ? (a.status === 'done' ? '산 뒤' : '안 산 뒤') : (a.status === 'done' ? '판 뒤' : '계속 보유 뒤');
+      return `<div class="flex justify-between gap-1 text-[10px] py-0.5 border-t border-[#f3f3f3]"><span class="truncate"><b class="${a.side === 'BUY' ? 'up' : 'down'}">${sd}</b> ${esc(a.name)} <span class="text-[#999999]">${a.day.slice(4, 6)}.${a.day.slice(6)} · ${AG_ST[a.status]}${a.reason ? ` · "${esc(a.reason)}"` : ''}</span></span><span class="num whitespace-nowrap ${o > 0 ? 'up' : o < 0 ? 'down' : 'text-[#999999]'}" title="결정한 뒤 지금까지">${o == null || a.status === 'expired' ? '' : `${what} ${pctTxt(o)}`}</span></div>`;
+    }
+    function renderAgenda(force) {
+      const el = document.getElementById('agendaBox');
+      if (!el || !state.agenda) return;
+      if (agendaExpire()) saveStore();
+      const open = state.agenda.filter((a) => a.status === 'pending' || a.status === 'approved');
+      const badge = document.getElementById('agendaBadge');
+      const pend = open.filter((a) => a.status === 'pending').length;
+      if (badge) { badge.classList.toggle('hidden', !pend); badge.textContent = `결재 ${pend}`; }
+      // 진행 상황 글자만 매번 갱신 (입력 중인 칸이 지워지지 않게 전체 다시 그리기는 내용이 바뀔 때만)
+      el.querySelectorAll('[data-agnote]').forEach((s) => { const w = win.watch[s.dataset.agcode]; s.textContent = w && !w.done ? `지금: ${w.note || ''}` : ''; });
+      const sig = JSON.stringify([agendaOn(), open.map((a) => [a.id, a.status, a.briefing, (a.brief || '').length, a.briefErr, a.read]), state.agenda.length, kstNow().ymd]);
+      if (!force && el.dataset.sig === sig) return;
+      el.dataset.sig = sig;
+      const decided = state.agenda.filter((a) => a.status !== 'pending' && a.status !== 'approved').slice(0, 30);
+      const sum = (f) => { const xs = decided.filter(f).map(agendaOutcome).filter((x) => x != null); return xs.length ? `${xs.length}건 평균 ${pctTxt(xs.reduce((s, x) => s + x, 0) / xs.length)}` : '-'; };
+      const card = (a) => {
+        const sd = a.side === 'BUY' ? '매수' : '매도', ready = a.read && !a.briefing;
+        const chk = (a.checks || []).map((x) => `<li class="py-0.5"><span class="px-1 text-[9px] ${x.lv === 'high' ? 'bg-[#e5383b] text-white' : x.lv === 'mid' ? 'bg-[#fde68a]' : 'bg-[#f0f0f0] text-[#666666]'}">${x.lv === 'high' ? '중요' : x.lv === 'mid' ? '주의' : '참고'}</span> ${esc(x.msg)}</li>`).join('');
+        return `<div class="border ${a.status === 'approved' ? 'border-[#16a34a]' : 'border-[#111111]'} p-1.5 space-y-1" data-ag="${a.id}">
+          <div class="flex items-center gap-1"><b class="${a.side === 'BUY' ? 'up' : 'down'}">${sd}</b><b class="truncate">${esc(a.name)}</b><span class="text-[10px] text-[#888888] num">${a.code}</span><span class="ml-auto text-[10px] ${a.status === 'approved' ? 'text-[#16a34a] font-semibold' : 'text-[#e5383b]'}">${AG_ST[a.status]}</span></div>
+          <div class="text-[10px] text-[#666666]">${esc(a.signal)} · ${new Date(a.at + 9 * 3600000).toISOString().slice(11, 16)} 상정 · ${a.src === 'window' ? `기한 ${state.cfg.winEnd}` : '오늘 안'} <span data-agnote data-agcode="${a.code}" class="text-[#7c3aed]"></span></div>
+          <div class="text-[10px] font-semibold mt-1">리스크 점검표</div><ul class="text-[10px] leading-snug">${chk || '<li class="text-[#999999]">특이 사항 없음</li>'}</ul>
+          <div class="text-[10px] font-semibold">AI 리스크 브리핑 <span class="font-normal text-[#999999]">(반대 의견)</span> <button type="button" data-agbrief class="underline text-[#888888] font-normal">다시 받기</button></div>
+          <div class="text-[11px] leading-relaxed whitespace-pre-wrap bg-[#fafafa] border border-[#eeeeee] px-1.5 py-1 max-h-48 overflow-y-auto scroll">${a.briefing ? '리스크 브리핑을 쓰는 중…' : a.brief ? esc(plainSay(a.brief)) : `<span class="text-[#999999]">${esc(a.briefErr || '')}</span>`}</div>
+          ${a.status === 'pending' ? `
+          <label class="flex items-center gap-1 text-[11px] ${a.briefing ? 'opacity-40' : ''}"><input type="checkbox" data-agread ${a.read ? 'checked' : ''} ${a.briefing ? 'disabled' : ''}> 리스크 점검표와 브리핑을 읽었습니다</label>
+          ${a.side === 'BUY' ? `<div class="flex items-center gap-1 text-[11px]">수량 <input type="number" min="1" data-agqty value="${a.qtyDraft || a.qty}" class="w-20 num"> 주 <span class="text-[10px] text-[#999999]">(제안 ${a.qty}주)</span></div>` : ''}
+          <input type="text" data-agwhy value="${esc(a.reasonDraft || '')}" placeholder="결정 이유 한 줄 (필수)" class="w-full text-[11px]">
+          <div class="flex gap-1"><button type="button" data-agok class="flex-1 py-1 text-[11px] border ${ready ? 'bg-[#111111] text-white border-[#111111]' : 'border-[#d4d4d4] text-[#bbbbbb]'}" ${ready ? '' : 'disabled'}>승인</button>
+            <button type="button" data-agno class="flex-1 py-1 text-[11px] border ${ready ? 'border-[#111111]' : 'border-[#d4d4d4] text-[#bbbbbb]'}" ${ready ? '' : 'disabled'}>거절</button>
+            <button type="button" data-agtalk class="px-2 py-1 text-[11px] btn">💬 비서와 토론</button></div>`
+          : `<div class="text-[10px] text-[#16a34a]">결재 이유: "${esc(a.reason || '')}"${a.side === 'BUY' && a.qtyApproved ? ` · ${a.qtyApproved}주` : ''} — 매매 규칙대로 실행돼요</div>`}
+        </div>`;
+      };
+      el.innerHTML = `<div class="flex items-center gap-1"><span class="text-[11px] font-semibold">결재함</span><span class="text-[10px] text-[#888888]">${agendaOn() ? '결재제 — 매수·매도 모두 내 결재 뒤 실행' : '완전 자동 (설정에서 결재제를 켤 수 있어요)'}</span></div>
+        ${open.length ? open.map(card).join('') : `<div class="text-[10px] text-[#999999]">${agendaOn() ? `신호가 나오면 여기에 안건이 올라와요 (${state.cfg.winStart} 10분 전부터 예고).` : '결재제가 꺼져 있어요.'}</div>`}
+        ${decided.length ? `<details class="mt-1"><summary class="cursor-pointer text-[10px] text-[#666666] select-none">결재 기록 ${decided.length}건 · 승인 매수 ${sum((a) => a.side === 'BUY' && a.status === 'done')} · 거절 매수 ${sum((a) => a.side === 'BUY' && a.status === 'rejected')}</summary>
+          ${decided.map(agendaHistLine).join('')}<button type="button" data-agreview class="btn w-full mt-1 px-2 py-0.5 text-[10px]">📋 결재 기록 돌아보기 (비서)</button></details>` : ''}`;
+    }
+    const agBox = document.getElementById('agendaBox');
+    agBox.addEventListener('input', (e) => {
+      const card = e.target.closest('[data-ag]'), a = card && state.agenda.find((x) => x.id === card.dataset.ag);
+      if (!a) return;
+      if (e.target.matches('[data-agwhy]')) a.reasonDraft = e.target.value;
+      if (e.target.matches('[data-agqty]')) { a.qtyDraft = Math.max(1, Math.floor(Number(e.target.value) || 0)); }
+    });
+    agBox.addEventListener('change', (e) => {
+      const card = e.target.closest('[data-ag]'), a = card && state.agenda.find((x) => x.id === card.dataset.ag);
+      if (!a) return;
+      if (e.target.matches('[data-agread]')) { a.read = e.target.checked; a.readAt = Date.now(); saveStore(); renderAgenda(true); }
+      if (e.target.matches('[data-agqty]')) { a.checks = agendaChecks(a); saveStore(); renderAgenda(true); }
+    });
+    agBox.addEventListener('click', (e) => {
+      if (e.target.closest('[data-agreview]')) { state.ui.right = true; applyPanes(); setTab('assist'); chatSend('결재 기록을 돌아봐줘 — 승인한 것과 거절한 것의 이후 성과, 내 결정 습관, 다음에 조심할 점을 정리해줘'); return; }
+      const card = e.target.closest('[data-ag]'), a = card && state.agenda.find((x) => x.id === card.dataset.ag);
+      if (!a) return;
+      if (e.target.closest('[data-agok]')) agendaDecide(a.id, true);
+      else if (e.target.closest('[data-agno]')) agendaDecide(a.id, false);
+      else if (e.target.closest('[data-agbrief]')) { a.read = false; a.checks = agendaChecks(a); agendaBrief(a); }
+      else if (e.target.closest('[data-agtalk]')) {
+        chat.ctxAgenda = a.id;
+        state.ui.right = true; applyPanes(); setTab('assist');
+        const inp = document.getElementById('chatInput');
+        inp.value = `${a.name} ${a.side === 'BUY' ? '매수' : '매도'} 안건 — 가장 걱정되는 위험이 뭐야?`;
+        inp.focus();
+      }
+    });
+    document.getElementById('agendaBadge').addEventListener('click', () => { state.ui.right = true; saveStore(); applyPanes(); setTab('paper'); document.getElementById('agendaBox').scrollIntoView({ block: 'start' }); });
+    const agendaFacts = () => {
+      const open = state.agenda.filter((a) => a.status === 'pending' || a.status === 'approved');
+      const one = (a) => ({ 종목: `${a.name} (${a.code})`, 구분: a.side === 'BUY' ? '매수' : '매도', 상태: AG_ST[a.status], 신호: a.signal, 상정가: a.price, 제안수량: a.qty || null,
+        점검표: (a.checks || []).map((x) => x.msg), 리스크브리핑: a.brief ? plainSay(a.brief).slice(0, 600) : null, 결정이유: a.reason || null, 결정뒤등락: agendaOutcome(a) == null ? null : +agendaOutcome(a).toFixed(1) });
+      return { 결재제: agendaOn(), 지금토론안건: chat.ctxAgenda ? (state.agenda.find((a) => a.id === chat.ctxAgenda) ? one(state.agenda.find((a) => a.id === chat.ctxAgenda)) : null) : null,
+        열린안건: open.map(one), 최근결정: state.agenda.filter((a) => a.status !== 'pending' && a.status !== 'approved').slice(0, 20).map(one) };
+    };
+    setInterval(() => renderAgenda(), 1000);
+    renderAgenda(true);
+
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
@@ -5893,7 +6154,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       chat.msgs.push({ role: 'user', text, at: Date.now() });
       chat.busy = true; renderChat(); saveChat();
       let reply;
-      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
+      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 결재함: agendaFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
       catch (err) { reply = `(오류) ${err.message}`; }
       const bl = splitBlocks(reply);
       const { text: said, acts, prop } = splitActions(bl.text);
