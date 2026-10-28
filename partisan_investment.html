@@ -22,6 +22,9 @@
     .tab-panel { display: none; } .tab-panel.active { display: block; }
     .tf { padding: 1px 6px; border: 1px solid transparent; color: #666666; white-space: nowrap; }
     header button, header span { white-space: nowrap; }
+    .resizer { width: 4px; margin: 0 -2px; cursor: col-resize; flex-shrink: 0; position: relative; z-index: 15; background: transparent; }
+    .resizer:hover, .resizer.on { background: #d4d4d4; }
+    .badge-sm { display: inline-block; font-size: 9px; line-height: 13px; padding: 0 4px; white-space: nowrap; }
     .tf:hover { border-color: #d4d4d4; color: #111111; }
     .tf-on, .tf-on:hover { background: #111111; border-color: #111111; color: #ffffff; }
     .pane-hidden { display: none !important; }
@@ -106,19 +109,22 @@
         <button type="button" data-filter="all" class="flt btn px-1.5 py-0.5">전체</button>
         <button type="button" data-filter="signal" class="flt btn px-1.5 py-0.5">오늘 신호</button>
         <button type="button" data-filter="near" class="flt btn px-1.5 py-0.5">상단 근접</button>
+        <button type="button" data-filter="squeeze" class="flt btn px-1.5 py-0.5" title="200일 스퀴즈 상태로 상단 −8%~+3% 근처">스퀴즈</button>
         <button type="button" data-filter="held" class="flt btn px-1.5 py-0.5">보유</button>
       </div>
       <div class="flex-1 overflow-y-auto overflow-x-hidden scroll">
         <table class="w-full num text-[11px] table-fixed">
           <colgroup><col /><col class="w-[64px]" /><col class="w-[50px]" /><col class="w-[54px]" /></colgroup>
           <thead class="sticky top-0 bg-[#fafafa] text-[#888888] z-10">
-            <tr><th class="text-left px-2 py-1">종목</th><th class="text-right px-1">현재가</th><th class="text-right px-1">등락</th><th class="text-right px-2" title="BB200 상단선까지 거리">상단比</th></tr>
+            <tr id="symbolHead" class="cursor-pointer select-none" title="눌러서 정렬 (한 번 더: 반대로 · 세 번: 원래대로)"><th data-sort="name" class="text-left px-2 py-1">종목</th><th data-sort="price" class="text-right px-1">현재가</th><th data-sort="chg" class="text-right px-1">등락</th><th data-sort="toUpper" class="text-right px-2" title="BB200 상단선까지 거리">상단比</th></tr>
           </thead>
           <tbody id="symbolBody"></tbody>
         </table>
         <p id="symbolEmpty" class="p-3 text-[11px] text-[#888888]"></p>
       </div>
     </aside>
+
+    <div id="resizerL" class="resizer" title="드래그해서 종목 목록 폭 조절 (두 번 누르면 기본 폭)"></div>
 
     <!-- 가운데: 차트 -->
     <section class="flex-1 flex flex-col min-w-0">
@@ -152,6 +158,7 @@
     </section>
 
     <!-- 오른쪽: 리서치 / 백테스트 / 모의투자 / 설정 (접을 수 있음) -->
+    <div id="resizerR" class="resizer" title="드래그해서 오른쪽 패널 폭 조절 (두 번 누르면 기본 폭)"></div>
     <aside id="rightPane" class="w-[300px] shrink-0 border-l border-[#e6e6e6] flex flex-col min-h-0">
       <div class="flex border-b border-[#e6e6e6]" role="tablist" aria-label="패널">
         <button type="button" data-tab="assist" class="side-tab flex-1 py-1.5">비서</button>
@@ -165,7 +172,9 @@
         <!-- AI 비서: 지금 종목 · 묻기 · 코멘트 기록 · 매매 분석 -->
         <div data-panel="assist" class="tab-panel p-2.5 space-y-2">
           <div id="chatBox" class="border border-[#111111]">
-            <div class="flex items-center justify-between px-2 py-0.5 text-[10px] text-[#888888] bg-[#fafafa]"><span>비서와 대화</span><button id="btnChatClear" type="button" class="underline">지우기</button></div>
+            <div class="flex items-center justify-between px-2 py-0.5 text-[10px] text-[#888888] bg-[#fafafa]"><span>비서와 대화</span><span class="flex items-center gap-1.5"><button id="btnCopyBrief" type="button" class="underline text-[#111111]" title="지금 화면 상황(계좌·신호·스퀴즈·차트)을 복사 — 외부 Gemini 대화창에 붙여 넣기">📋 상황 복사</button><button id="btnPasteCmd" type="button" class="underline text-[#111111]" title="외부 Gemini에서 받은 답(명령·규칙·위젯)을 붙여 넣어 실행">📥 답 적용</button><button id="btnChatClear" type="button" class="underline">지우기</button></span></div>
+            <div id="pasteCmdBox" class="hidden p-1.5 bg-[#fafafa] border-b border-[#e6e6e6] space-y-1"><textarea id="inpPasteCmd" rows="3" class="w-full text-[10px] border border-[#d4d4d4] p-1" placeholder="외부 Gemini에서 받은 답(<<명령>>, <<규칙>>, <<위젯>> 포함)을 붙여 넣고 '실행'을 누르세요. 주문·설정은 똑같이 확인 창을 거쳐요."></textarea><div class="flex justify-end gap-1"><button type="button" id="btnRunPaste" class="btn-on px-2 py-0.5 text-[10px]">실행</button><button type="button" id="btnClosePaste" class="btn px-2 py-0.5 text-[10px]">닫기</button></div></div>
+            <div id="quickPrompts" class="flex flex-wrap gap-1 px-1.5 py-1 border-b border-[#f0f0f0]"><button type="button" data-qp="radar" class="btn px-1.5 py-0.5 text-[10px]" title="오늘 돌파 신호·스퀴즈 종목 중 눈여겨볼 후보 비교">🎯 오늘 후보 비교</button><button type="button" data-qp="hold" class="btn px-1.5 py-0.5 text-[10px]" title="보유 종목의 매도선 거리·위험 점검">🛡 보유 점검</button><button type="button" data-qp="draw" class="btn px-1.5 py-0.5 text-[10px]" title="지금 종목 차트에 지지·저항선과 메모 그리기">📏 지지·저항</button><button type="button" data-qp="lab" class="btn px-1.5 py-0.5 text-[10px]" title="스퀴즈·장대양봉 대기 방식을 백테스트로 비교">🧪 전략 비교</button></div>
             <div id="chatList" class="max-h-72 min-h-[90px] overflow-y-auto scroll p-2 space-y-1.5"></div>
             <div class="flex gap-1 p-1.5 border-t border-[#f0f0f0]"><input id="chatInput" type="text" class="flex-1 min-w-0 text-[11px]" placeholder="비서에게 묻기…" autocomplete="off" /><button id="btnChatSend" type="button" class="btn-on px-2 text-[11px]">보내기</button></div>
             <div class="flex flex-wrap gap-1 px-1.5 pb-1.5"><button id="btnAlert" type="button" class="btn px-2 py-0.5 text-[11px]" title="장중에 비서가 먼저 알림 — 누를 때마다 소리 켬 → 화면만 → 끔"></button><button id="btnConvo" type="button" class="btn px-2 py-0.5 text-[11px]" title="말하면 듣고, 소리로 답한 뒤 다시 듣기 — 버튼을 누르지 않고 대화">🗣 대화 모드</button><button id="btnMic" type="button" class="btn px-2 py-0.5 text-[11px]">🎤 말하기</button><button id="btnSpeak" type="button" class="btn px-2 py-0.5 text-[11px]"></button></div>
@@ -333,7 +342,7 @@
       entryMode: 'ALL', sqPct: 15, sqDrop: 30, sqRange: 60, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false,
       bbPeriod: 200, bbStd: 2.0,
       exitMa: 5, pullbackPct: 1.5,
-      w1: 100, w2: 0, w3: 0,
+      w1: 50, w2: 50, w3: 0,
       scrMarket: 'ALL', scrMinValue: 10, scrMinPrice: 1000, mktBars: 300, nearPct: 15,
       winStart: '15:00', winEnd: '15:20',
       volFilter: false, volMult: 1.5, adxFilter: false, adxMin: 20,
@@ -416,7 +425,8 @@
       chart: null,       // 분·주·월봉 차트 { code, tf, bars, loading, error }
       selected: null,
       tf: 'D',
-      ui: { left: true, right: true },
+      ui: { left: true, right: true, leftW: 244, rightW: 300 },
+      sort: { key: '', dir: 'desc' },   // 종목 목록 정렬 (저장 안 함)
       lastMode: 'real',
       bridge: { url: 'http://127.0.0.1:8766', token: '', ok: false, demo: false, chart: false, rt: false, research: false },
       bt: null,
@@ -432,7 +442,7 @@
 
     // 컴퓨터끼리 동기화되는 부분 (설정 · 관심종목 · 종목군 · 모의 계좌 · 종목명)
     function applySynced(d) {
-      if (d.cfg && d.cfg.exitMa === undefined) { d.cfg = { ...d.cfg, w1: 100, w2: 0, w3: 0 }; }
+      if (d.cfg && d.cfg.exitMa === undefined) { d.cfg = { ...d.cfg, w1: 50, w2: 50, w3: 0 }; }
       if (d.cfg) Object.keys(DEFAULTS).forEach((k) => { if (typeof d.cfg[k] === typeof DEFAULTS[k]) state.cfg[k] = d.cfg[k]; });
       if (Array.isArray(d.watch)) state.watch = d.watch.filter((c) => /^[0-9A-Z]{6}$/.test(c));
       if (d.universe) state.universe = d.universe;
@@ -455,7 +465,7 @@
         if (d.lists && Array.isArray(d.lists.K200) && Array.isArray(d.lists.Q150)) { state.lists = d.lists; state.listsAt = d.listsAt || 0; }
         if (d.sel && /^[0-9A-Z]{6}$/.test(d.sel)) state.selected = d.sel;
         if (d.tf && TFS.some((x) => x.k === d.tf)) state.tf = d.tf;
-        if (d.ui) state.ui = { left: d.ui.left !== false, right: d.ui.right !== false };
+        if (d.ui) state.ui = { left: d.ui.left !== false, right: d.ui.right !== false, leftW: Math.min(480, Math.max(200, Number(d.ui.leftW) || 244)), rightW: Math.min(560, Math.max(280, Number(d.ui.rightW) || 300)) };
         else if (window.innerWidth < 1280) state.ui.right = false;   // 좁은 화면 첫 실행: 차트를 넓게
         if (d.lastMode === 'demo' || d.lastMode === 'real') state.lastMode = d.lastMode;
       } catch (_) {}
@@ -860,10 +870,10 @@
     }
 
     // ctx.buy(seq, price, weight, rule, t) / ctx.sellAll(seq, price, reason, t)
-    function seqBuy(seq, price, weight, rule, t) {
+    function seqBuy(seq, price, weight, rule, t, maxCash = Infinity) {
       const budget = seq.slot * weight;
       const unit = price * (1 + costBuy());
-      const qty = Math.floor(Math.min(budget, seq.slot - seq.invested) / unit);
+      const qty = Math.floor(Math.min(budget, seq.slot - seq.invested, maxCash) / unit);
       seq.stage += 1;
       if (qty < 1) return 0;
       const cash = qty * unit;
@@ -889,7 +899,7 @@
       return s2 / n;
     }
     function stepSeq(seq, bars, i, opt = {}) {
-      const c = state.cfg, b = bars[i], prev = bars[i - 1];
+      const c = state.cfg, b = bars[i], prev = bars[i - 1], maxCash = opt.maxCash ?? Infinity;   // 추가 매수는 남은 현금 안에서만
       let cash = 0;
       let entered = false;
       if (seq.stage === 1) {
@@ -897,14 +907,14 @@
         const dipped = b.l <= seq.extreme * (1 - c.pullbackPct / 100);
         if (b.c < b.o || dipped) seq.pullbackSeen = true;
         if (seq.pullbackSeen && i >= seq.startIdx + 2 && b.c > b.o && b.c > prev.c && b.c > b.mid && b.c < seq.extreme) {
-          cash -= seqBuy(seq, b.c, c.w2 / 100, `눌림 후 양봉 반등 (2차 ${c.w2}% · 전고점 ${won(seq.extreme)} 조준)`, b.t);
+          cash -= seqBuy(seq, b.c, c.w2 / 100, `눌림 후 양봉 반등 (2차 ${c.w2}% · 전고점 ${won(seq.extreme)} 조준)`, b.t, maxCash);
           entered = true;
         }
       } else if (seq.stage === 2) {
         if (b.c > seq.extreme && b.c > b.o) {
           const peak = seq.extreme;
           seq.extreme = Math.max(seq.extreme, b.h);
-          cash -= seqBuy(seq, b.c, c.w3 / 100, `전고점(${won(peak)}) 돌파 (3차 ${c.w3}%)`, b.t);
+          cash -= seqBuy(seq, b.c, c.w3 / 100, `전고점(${won(peak)}) 돌파 (3차 ${c.w3}%)`, b.t, maxCash);
           entered = true;
         }
       } else if (b.h > seq.extreme) {
@@ -955,7 +965,7 @@
         for (const k of Object.keys(pos)) {
           const i = idx[k].get(t);
           if (i == null || i < 1) continue;
-          const r = stepSeq(pos[k], state.data[k].bars, i);
+          const r = stepSeq(pos[k], state.data[k].bars, i, { maxCash: Math.max(0, cash) });
           cash += r.cash;
           if (r.exited) { trades.push(seqResult(pos[k])); delete pos[k]; }
         }
@@ -1058,10 +1068,11 @@
       const chg = p ? (price - p.c) / p.c * 100 : 0;
       const toUpper = b.ready ? (price - b.upper) / b.upper * 100 : null;
       const signal = i >= 1 && isBreakout(bars, i);
-      const held = !!(state.paper && state.paper.positions[code]);
+      const held = !!(state.paper && (state.paper.positions[code] || (state.paper.manual && state.paper.manual[code])));
       if (d._bkLen !== bars.length) { d._bk = priceBroken(bars); d._bkLen = bars.length; }
       const broken = d._bk;
-      return { price, chg, toUpper, signal: signal && !broken, near: toUpper != null && toUpper < 0 && toUpper > -3, held, broken };
+      const squeeze = !broken && i >= 1 && toUpper != null && toUpper >= -8 && toUpper <= 3 && isSqueeze(bars, i);   // 200일 스퀴즈 상태로 상단 근처
+      return { price, chg, toUpper, signal: signal && !broken, squeeze, near: toUpper != null && toUpper < 0 && toUpper > -3, held, broken };
     }
 
     function renderSymbols() {
@@ -1069,15 +1080,19 @@
         const on = b.dataset.universe === state.universe;
         b.className = `uni-tab flex-1 py-2 text-[11px] ${on ? 'font-semibold border-b-2 border-[#111111]' : 'text-[#888888]'}`;
       });
-      document.querySelectorAll('.flt').forEach((b) => { b.className = `flt px-2 py-0.5 ${b.dataset.filter === state.filter ? 'btn-on' : 'btn'}`; });
+      document.querySelectorAll('.flt').forEach((b) => { b.className = `flt px-1.5 py-0.5 ${b.dataset.filter === state.filter ? 'btn-on' : 'btn'}`; });
+      const SORT_L = { name: '종목', price: '현재가', chg: '등락', toUpper: '상단比' };
+      document.querySelectorAll('#symbolHead th[data-sort]').forEach((th) => { const k = th.dataset.sort, on = state.sort.key === k; th.textContent = SORT_L[k] + (on ? (state.sort.dir === 'asc' ? '▲' : '▼') : ''); th.classList.toggle('text-[#111111]', on); th.classList.toggle('font-semibold', on); });
       const codes = universeCodes();
       const rows = codes.map((code) => ({ code, info: rowInfo(code) })).filter(({ info }) => {
         if (state.filter === 'all') return true;
         if (!info) return false;
-        return state.filter === 'signal' ? info.signal : state.filter === 'near' ? info.near : info.held;
+        return state.filter === 'signal' ? info.signal : state.filter === 'squeeze' ? info.squeeze : state.filter === 'near' ? info.near : info.held;
       });
       const LIMIT = 300;
-      if (state.universe === 'ALL') rows.sort((a, b) => ((b.info && b.info.toUpper) ?? -999) - ((a.info && a.info.toUpper) ?? -999));
+      const sk = state.sort.key, mul = state.sort.dir === 'asc' ? 1 : -1;
+      if (sk) rows.sort((a, b) => (sk === 'name' ? nameOf(a.code).localeCompare(nameOf(b.code), 'ko') : ((a.info && a.info[sk]) ?? -Infinity) - ((b.info && b.info[sk]) ?? -Infinity)) * mul);
+      else if (state.universe === 'ALL') rows.sort((a, b) => ((b.info && b.info.toUpper) ?? -999) - ((a.info && a.info.toUpper) ?? -999));
       const total = rows.length;
       if (rows.length > LIMIT) rows.length = LIMIT;
       renderScrBar(codes.length);
@@ -1085,7 +1100,8 @@
       body.innerHTML = rows.map(({ code, info }) => {
         const sel = code === state.selected ? 'bg-[#f3f3f3]' : '';
         const cls = info ? (info.chg > 0 ? 'up' : info.chg < 0 ? 'down' : '') : '';
-        const tag = info ? (info.broken ? `<span class="ml-1 text-[9px] px-1 border border-[#e5383b] text-[#e5383b]" title="${fmtDate(info.broken)} 가격이 하루 30% 넘게 변해 수정주가 오류로 보고 매매에서 제외">⚠ 제외</span>` : info.held ?'<span class="ml-1 text-[9px] px-1 border border-[#111111]">보유</span>' : info.signal ? '<span class="ml-1 text-[9px] px-1 bg-[#e5383b] text-white">신호</span>' : '') : '';
+        const tag = !info ? '' : info.broken ? `<span class="ml-1 text-[9px] px-1 border border-[#e5383b] text-[#e5383b]" title="${fmtDate(info.broken)} 가격이 하루 30% 넘게 변해 수정주가 오류로 보고 매매에서 제외">⚠ 제외</span>`
+          : (info.held ? '<span class="ml-1 text-[9px] px-1 border border-[#111111]">보유</span>' : '') + (info.signal ? '<span class="ml-1 text-[9px] px-1 bg-[#e5383b] text-white">신호</span>' : '') + (info.squeeze ? '<span class="ml-1 text-[9px] px-1 bg-[#f3e8ff] text-[#7c3aed]" title="200일 스퀴즈 상태로 상단 근처">스퀴즈</span>' : '');
         const rm = state.universe === 'WATCH' ? `<button type="button" data-remove="${code}" class="ml-1 text-[#bbbbbb] hover:text-[#111111]" aria-label="관심종목 삭제">×</button>` : '';
         return `<tr data-code="${code}" class="cursor-pointer border-t border-[#f3f3f3] hover:bg-[#fafafa] ${sel}">
           <td class="px-2 py-1 overflow-hidden"><div class="font-sans text-[11px] text-[#111111] truncate">${esc(nameOf(code))}${tag}${rm}</div><div class="text-[9px] text-[#999999]">${code}</div></td>
@@ -1224,7 +1240,7 @@
       const g = chartGeom();
       const tf = state.tf, info = tfInfo(tf);
       // 보기 범위: 끝 위치(endF)·봉 수(span) 모두 소수 허용 → 드래그·휠이 픽셀 단위로 부드럽게 움직임
-      const endF = state.view.end == null ? bars.length - 1 : Math.max(0, Math.min(bars.length - 1, state.view.end));
+      const endF = state.view.end == null ? bars.length - 1 + rightPad() : Math.max(0, Math.min(bars.length - 1 + 30, state.view.end));   // 오른쪽 빈칸 최대 30봉
       const span = Math.max(30, Math.min(Math.max(bars.length, 30), state.view.span));
       const end = Math.min(bars.length - 1, Math.ceil(endF));
       const start = Math.max(0, Math.floor(endF - span + 0.5));
@@ -1418,7 +1434,7 @@
       const b = bars && bars.length ? bars[bars.length - 1] : null;
       const local = state.chart && state.chart.local ? ' · 일봉으로 만든 봉' : '';
       document.getElementById('chartSub').textContent = b ? `${tfInfo(state.tf).label}봉 · ${fmtT(b.t)} 기준 · ${bars.length.toLocaleString()}봉${local} · BB${state.cfg.bbPeriod} 상단 ${b.ready ? won(b.upper) : '-'} · 중심 ${b.ready ? won(b.mid) : '-'}` : '';
-      document.getElementById('chartSignal').innerHTML = info ? (info.signal ? '<span class="px-1.5 bg-[#e5383b] text-white">일봉 상단 돌파 신호</span>' :
+      document.getElementById('chartSignal').innerHTML = info ? (info.signal ? `<span class="px-1.5 bg-[#e5383b] text-white">돌파 신호</span>${info.squeeze ? ' <span class="px-1 bg-[#f3e8ff] text-[#7c3aed]">스퀴즈</span>' : ''}` : info.squeeze ? '<span class="px-1 bg-[#f3e8ff] text-[#7c3aed]" title="200일 스퀴즈 상태로 상단 근처">스퀴즈 · 상단 근처</span>' :
         info.toUpper != null ? `<span class="text-[#666666]">일봉 상단선까지 ${info.toUpper >= 0 ? '이미 위' : pct(info.toUpper, 1)}</span>` : '') : '';
       const LKs = state.look;
       document.getElementById('maLegend').innerHTML = (LKs.bb ? `<span style="color:${LKs.bbMid}">━</span>중심 <span style="color:${LKs.bbUp}">┅</span>상단 <span style="color:${LKs.bbLow}">┅</span>하단 ` : '') + (state.tf === 'D' ? `${LKs.exitLine ? `<b style="color:${LKs.exitColor}">━</b>매도 ${state.cfg.exitMa}선 ` : ''}<span style="color:#e5383b">△</span>매수${state.cfg.entryMode === 'SQ' ? '(스퀴즈만)' : ''} <span style="color:#7c3aed">◆</span>스퀴즈 ${state.cfg.lcWait ? '<span style="color:#999">□</span>장대양봉 대기 ' : ''}` : '') + lookLegend() + drawLegend();
@@ -1444,16 +1460,19 @@
     }
 
     // 보기 끝 위치를 정함 — 가장 최신 봉이면 null (새 봉이 오면 따라감)
+    // 일목균형표가 켜져 있으면 선행스팬(26봉 앞)이 보이게 기본으로 오른쪽을 비움
+    function rightPad() { return state.look && state.look.ind.some((d) => d.on && d.k === 'ichi') ? 26 : 0; }
     function setViewEnd(e) {
       const bars = chartBars();
       if (!bars || !bars.length) return false;
-      const lo = Math.min(bars.length - 1, Math.max(0, Math.min(state.view.span, bars.length) - 1)), hi = bars.length - 1;
+      const def = bars.length - 1 + rightPad();
+      const lo = Math.min(bars.length - 1, Math.max(0, Math.min(state.view.span, bars.length) - 1)), hi = bars.length - 1 + 30;
       const v = Math.max(lo, Math.min(hi, e));
-      state.view.end = v >= hi - 1e-3 ? null : v;
+      state.view.end = Math.abs(v - def) < 1e-3 ? null : v;
       drawChart();
       return v > lo && v < hi;   // 끝에 닿았으면 false
     }
-    const curEnd = () => { const b = chartBars(); return state.view.end == null ? (b ? b.length - 1 : 0) : state.view.end; };
+    const curEnd = () => { const b = chartBars(); return state.view.end == null ? (b ? b.length - 1 + rightPad() : 0) : state.view.end; };
     const stopGlide = () => { if (glide) { cancelAnimationFrame(glide.raf); glide = null; } };
     cv.addEventListener('mousemove', (e) => {
       if (drag) return;
@@ -1907,7 +1926,9 @@
           const d = state.data[code]; if (!d) continue;
           const i = idxOf(code), seq = p.positions[code];
           if (seq.lastStepT !== d.bars[i].t) {
-            const r = stepSeq(seq, d.bars, i, { skipExit: true }); seq.lastStepT = d.bars[i].t; p.cash += r.cash;
+            const r = stepSeq(seq, d.bars, i, { skipExit: true, maxCash: Math.max(0, p.cash - reservedCash()) });
+            if (r.cash !== 0 || !manual) seq.lastStepT = d.bars[i].t;   // 수동 실행에서 아무 일 없으면 그날 자동 판단 몫을 남김
+            p.cash += r.cash;
           }
           const ex = exitSignal(d.bars, i);
           if (ex.hit && seq.startT !== k.ymd && !agendaFind(code, 'SELL')) { agendaCreate(code, 'SELL', { note: ex.note, price: lastPrice(code), src: 'manual' }); n++; }
@@ -1928,8 +1949,8 @@
         const seq = p.positions[code];
         if (seq.lastStepT === d.bars[i].t) continue;
         const before = seq.entries.length;
-        const r = stepSeq(seq, d.bars, i);
-        seq.lastStepT = d.bars[i].t;
+        const r = stepSeq(seq, d.bars, i, { maxCash: Math.max(0, p.cash - reservedCash()) });
+        if (r.cash !== 0 || r.exited || !manual) seq.lastStepT = d.bars[i].t;
         p.cash += r.cash;
         if (seq.entries.length > before) { const e = seq.entries[seq.entries.length - 1]; plog('추가 매수', code, `${e.stage}차 ${e.qty}주 @ ${won(e.price)} · ${e.rule}`); }
         if (r.exited) {
@@ -2106,12 +2127,38 @@
     }
     // 좌·우 패널 접기 — 접으면 차트가 그만큼 넓어짐
     function applyPanes() {
-      document.getElementById('leftPane').classList.toggle('pane-hidden', !state.ui.left);
-      document.getElementById('rightPane').classList.toggle('pane-hidden', !state.ui.right);
+      const lp = document.getElementById('leftPane'), rp = document.getElementById('rightPane');
+      lp.style.width = `${state.ui.leftW || 244}px`; rp.style.width = `${state.ui.rightW || 300}px`;
+      lp.classList.toggle('pane-hidden', !state.ui.left);
+      rp.classList.toggle('pane-hidden', !state.ui.right);
+      document.getElementById('resizerL').classList.toggle('pane-hidden', !state.ui.left);
+      document.getElementById('resizerR').classList.toggle('pane-hidden', !state.ui.right);
       document.getElementById('btnToggleLeft').className = `${state.ui.left ? 'btn-on' : 'btn'} px-1.5 py-0.5 text-[11px]`;
       document.getElementById('btnToggleRight').className = `${state.ui.right ? 'btn-on' : 'btn'} px-1.5 py-0.5 ml-1`;
       drawChart(); if (state.ui.right) drawEquity();
     }
+    // 패널 폭 조절: 경계선을 드래그 (두 번 누르면 기본 폭)
+    function bindResizer(el, side) {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault(); el.classList.add('on');
+        const x0 = e.clientX, w0 = side === 'L' ? (state.ui.leftW || 244) : (state.ui.rightW || 300);
+        const mv = (m) => { const d = m.clientX - x0; if (side === 'L') state.ui.leftW = Math.min(480, Math.max(200, w0 + d)); else state.ui.rightW = Math.min(560, Math.max(280, w0 - d)); applyPanes(); };
+        const up = () => { el.classList.remove('on'); window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); saveStore(); };
+        window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+      });
+      el.addEventListener('dblclick', () => { if (side === 'L') state.ui.leftW = 244; else state.ui.rightW = 300; saveStore(); applyPanes(); });
+    }
+    bindResizer(document.getElementById('resizerL'), 'L');
+    bindResizer(document.getElementById('resizerR'), 'R');
+    document.getElementById('symbolHead').addEventListener('click', (e) => {
+      const th = e.target.closest('th[data-sort]');
+      if (!th) return;
+      const k = th.dataset.sort, first = k === 'name' ? 'asc' : 'desc';
+      if (state.sort.key !== k) state.sort = { key: k, dir: first };
+      else if (state.sort.dir === first) state.sort.dir = first === 'asc' ? 'desc' : 'asc';
+      else state.sort = { key: '', dir: 'desc' };
+      renderSymbols();
+    });
     document.getElementById('btnToggleLeft').addEventListener('click', () => { state.ui.left = !state.ui.left; saveStore(); applyPanes(); });
     document.getElementById('btnToggleRight').addEventListener('click', () => { state.ui.right = !state.ui.right; saveStore(); applyPanes(); });
     document.getElementById('paperMini').addEventListener('click', () => { state.ui.right = true; saveStore(); applyPanes(); setTab('paper'); });
@@ -3301,7 +3348,7 @@
       refreshResearch();
       renderCenter();
       if (center.tab === 'scen' || center.tab === 'brief') loadScenarioNews();
-      if (center.tab === 'brief') { loadBriefNews().then(() => loadAi()); }
+      if (center.tab === 'brief') { loadBriefNews().then(() => { if (!document.getElementById('centerPop').classList.contains('hidden')) loadAi(); }); }
     }
     async function runNews(q) {
       center.newsQ = q; renderCenter();
@@ -3333,7 +3380,7 @@
       const t = e.target;
       if (t.id === 'centerPop') { t.classList.add('hidden'); return; }
       const tab = t.closest('[data-ctab]');
-      if (tab) { center.tab = tab.dataset.ctab; renderCenter(); if (center.tab === 'scen') loadScenarioNews(); if (center.tab === 'brief') loadBriefNews().then(() => loadAi()); return; }
+      if (tab) { center.tab = tab.dataset.ctab; renderCenter(); if (center.tab === 'scen') loadScenarioNews(); if (center.tab === 'brief') loadBriefNews().then(() => { if (!document.getElementById('centerPop').classList.contains('hidden')) loadAi(); }); return; }
       if (t.id === 'btnAiRe') { loadAi(true); return; }
       if (t.id === 'btnAiSettings') { document.getElementById('centerPop').classList.add('hidden'); state.ui.right = true; saveStore(); applyPanes(); setTab('set'); renderAiBox(); document.getElementById('aiBox').scrollIntoView({ block: 'nearest' }); return; }
       const gs = t.closest('[data-gosec]');
@@ -3516,7 +3563,7 @@
         const i = liveBar(code);
         if (i == null) return;
         const before = seq.entries.length;
-        const r = stepSeq(seq, d.bars, i, { skipExit: true });
+        const r = stepSeq(seq, d.bars, i, { skipExit: true, maxCash: Math.max(0, p.cash - reservedCash()) });
         seq.lastStepT = d.bars[i].t;
         p.cash += r.cash;
         if (seq.entries.length > before) { const en = seq.entries[seq.entries.length - 1]; plog('추가 매수', code, `${en.stage}차 ${en.qty}주 @ ${won(en.price)} · ${en.rule}`); }
@@ -3959,8 +4006,13 @@
       const mine = (state.bt ? state.bt.trades : []).filter((t) => t.code === code);
       const held = paper().positions[code] || paper().manual[code];
       const secSt = sectorStats().find((s) => s.sec === f.sector);
+      const nh = newsCache[nameOf(code)] || newsCache[`${nameOf(code)} 주가`];
       return {
         종목: `${nameOf(code)} (${code})`, 현재가: px, 오늘등락: f.dayChg, 수익률: { '5일': ret(5), '20일': ret(20), '60일': ret(60) },
+        BB상단: x.ready ? Math.round(x.upper) : null, BB중심: x.ready ? Math.round(x.mid) : null, '5일선': x.ma5 ? Math.round(x.ma5) : null, '20일선': x.ma20 ? Math.round(x.ma20) : null,
+        스퀴즈돌파: i >= 1 && baseBreakout(b, i) && isSqueeze(b, i), '1년고점': hi || null,
+        최근20봉: b.slice(-20).map((y) => ({ 날짜: y.t, 시: y.o, 고: y.h, 저: y.l, 종: y.c, 거래량: y.v })),
+        최근뉴스: nh && nh.items ? nh.items.slice(0, 5).map((n) => n.title) : null,
         BB상단대비: f.toUpper, 오늘돌파신호: sig, '5일선대비': f.ma5gap, 거래량_20일평균대비: f.volRatio, '20일평균거래대금_억': f.value20,
         '1년고점대비': hi ? +((px / hi - 1) * 100).toFixed(1) : null,
         섹터: f.sector, 섹터_20일수익률: secSt && secSt.r20 != null ? +secSt.r20.toFixed(1) : null,
@@ -4130,11 +4182,30 @@
     const chat = { msgs: [], busy: false, speak: false, rec: null, recOn: false };
     try { const d = JSON.parse(localStorage.getItem(CHAT_KEY) || 'null'); if (d) { chat.msgs = (d.msgs || []).slice(-40); chat.speak = !!d.speak; } } catch (_) {}
     function saveChat() { try { localStorage.setItem(CHAT_KEY, JSON.stringify({ msgs: chat.msgs.slice(-40), speak: chat.speak })); } catch (_) {} }
+    // 지금 종목군 전체에서 오늘 신호 · 스퀴즈 상태 상단 근처 · 상단 근접 상위 (비서가 시장 전체를 보고 비교·추천하는 재료)
+    function marketRadarFacts() {
+      const codes = [...new Set([...state.watch, ...universeCodes()])].filter((c) => state.data[c] && state.data[c].bars && state.data[c].bars.length > state.cfg.bbPeriod + 2);
+      const sigs = [], sqs = [], nears = [];
+      codes.forEach((c) => {
+        const info = rowInfo(c);
+        if (!info || info.broken) return;
+        const b = state.data[c].bars, i = b.length - 1, f = featuresAt(c, i, info.price);
+        const it = { 종목: `${nameOf(c)}(${c})`, 현재가: info.price, 등락: +info.chg.toFixed(1), 상단대비: info.toUpper != null ? +info.toUpper.toFixed(1) : null, '5일선대비': f.ma5gap, 거래량배수: f.volRatio, 거래대금_억: f.value20, 섹터: f.sector, 스퀴즈: !!info.squeeze };
+        if (info.signal) sigs.push({ ...it, 신호종류: entryLabel(b, i) });
+        else if (info.squeeze) sqs.push(it);
+        else if (info.near) nears.push(it);
+      });
+      sigs.sort((a, b) => (b.거래대금_억 || 0) - (a.거래대금_억 || 0));
+      sqs.sort((a, b) => (b.상단대비 ?? -99) - (a.상단대비 ?? -99));
+      nears.sort((a, b) => (b.상단대비 ?? -99) - (a.상단대비 ?? -99));
+      return { 오늘돌파신호: sigs.slice(0, 15), 스퀴즈상단근처: sqs.slice(0, 15), 상단근접: nears.slice(0, 12) };
+    }
     function assistFacts() {
       const j = journal(), r = research.res, p = paper(), sm = styleModel.m;
       return {
         시각: `${kstNow().ymd} ${kstNow().hm} KST`, 장상태: marketOpenNow() ? '정규장' : '장 마감',
         선택종목: state.selected ? stockFacts(state.selected) : null,
+        시장후보요약: marketRadarFacts(),
         시장국면: r ? { 판정: REGIME[r.regime].t, 점수: r.score, 근거: r.items.map((x) => `${x.group} ${x.label} ${x.value}`) } : null,
         계좌: { 현금: Math.round(p.cash), 전략보유: Object.entries(p.positions).map(([c, q]) => ({ 종목: nameOf(c), 수량: q.qty, 평단: Math.round(q.avg), 현재가: lastPrice(c) })),
           수동보유: Object.entries(p.manual).map(([c, m]) => ({ 종목: nameOf(c), 수량: m.qty, 평단: Math.round(m.avg), 현재가: lastPrice(c) })), 미체결: p.orders.length },
@@ -4958,7 +5029,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.22', APP_DATE = '2026-10-28';
+    const APP_VERSION = '1.23', APP_DATE = '2026-10-28';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5667,7 +5738,8 @@ onmessage = (e) => { const { body, sets } = e.data;
         calc: (b, [p1, p2, p3], c) => {
           const mid = (p) => b.map((_, i) => (i >= p - 1 ? (LK.hh(b, i, p) + LK.ll(b, i, p)) / 2 : null));
           const t = mid(p1), k = mid(p2), s = p2 - 1;
-          const a = LK.shift(t.map((x, i) => (x == null || k[i] == null ? null : (x + k[i]) / 2)), s), bb = LK.shift(mid(p3), s);
+          const ahead = (arr) => Array(s).fill(null).concat(arr);   // 선행스팬: 마지막 봉 뒤로 s봉 더 그림
+          const a = ahead(t.map((x, i) => (x == null || k[i] == null ? null : (x + k[i]) / 2))), bb = ahead(mid(p3));
           return { lines: [{ v: t, c, name: '전환' }, { v: k, c: '#1e6bd6', name: '기준' }, { v: a, c: '#f59e0b', name: '선행1' }, { v: bb, c: '#64748b', name: '선행2' }, { v: LK.shift(cl(b), -s), c: '#16a34a', name: '후행', w: 0.8 }], fill: [2, 3, null] };
         } },
       { k: 'sar', name: '파라볼릭', pane: 'price', params: [['가속', 0.02, 0.005, 0.2], ['최대', 0.2, 0.05, 1]], c: '#f08c00',
@@ -5762,8 +5834,9 @@ onmessage = (e) => { const { body, sets } = e.data;
       L.ind.forEach((d, k) => {
         const r = S.ind[k];
         if (!r || indDef(d.k).pane !== 'price') return;
-        if (r.fill) fillBetween(r.lines[r.fill[0]].v, r.lines[r.fill[1]].v, start, n, x, y, r.fill[2]);
-        r.lines.forEach((l) => strokeSeries(l.v, start, n, x, y, l.c, l));
+        const nn = (v) => Math.max(n, Math.min(v.length, Math.ceil(chartView.endF) + 1) - start);   // 봉보다 긴 값(선행스팬)은 오른쪽 빈칸까지
+        if (r.fill) fillBetween(r.lines[r.fill[0]].v, r.lines[r.fill[1]].v, start, nn(r.lines[r.fill[0]].v), x, y, r.fill[2]);
+        r.lines.forEach((l) => strokeSeries(l.v, start, nn(l.v), x, y, l.c, l));
       });
       L.mas.forEach((m, k) => { if (S.mas[k]) strokeSeries(S.mas[k], start, n, x, y, m.c, { w: 1 }); });
     }
@@ -6086,14 +6159,14 @@ onmessage = (e) => { const { body, sets } = e.data;
         const sd = a.side === 'BUY' ? '매수' : '매도', ready = a.read && !a.briefing;
         const chk = (a.checks || []).map((x) => `<li class="py-0.5"><span class="px-1 text-[9px] ${x.lv === 'high' ? 'bg-[#e5383b] text-white' : x.lv === 'mid' ? 'bg-[#fde68a]' : 'bg-[#f0f0f0] text-[#666666]'}">${x.lv === 'high' ? '중요' : x.lv === 'mid' ? '주의' : '참고'}</span> ${esc(x.msg)}</li>`).join('');
         return `<div class="border ${a.status === 'approved' ? 'border-[#16a34a]' : 'border-[#111111]'} p-1.5 space-y-1" data-ag="${a.id}">
-          <div class="flex items-center gap-1"><b class="${a.side === 'BUY' ? 'up' : 'down'}">${sd}</b><b class="truncate">${esc(a.name)}</b><span class="text-[10px] text-[#888888] num">${a.code}</span><span class="ml-auto text-[10px] ${a.status === 'approved' ? 'text-[#16a34a] font-semibold' : 'text-[#e5383b]'}">${AG_ST[a.status]}</span></div>
+          <div class="flex items-center gap-1"><b class="${a.side === 'BUY' ? 'up' : 'down'}">${sd}</b><button type="button" data-agchart class="font-semibold underline truncate text-left" title="차트 보기">${esc(a.name)}</button><span class="text-[10px] text-[#888888] num">${a.code}</span><span class="ml-auto text-[10px] ${a.status === 'approved' ? 'text-[#16a34a] font-semibold' : 'text-[#e5383b]'}">${AG_ST[a.status]}</span></div>
           <div class="text-[10px] text-[#666666]">${esc(a.signal)} · ${new Date(a.at + 9 * 3600000).toISOString().slice(11, 16)} 상정 · ${a.src === 'window' ? `기한 ${state.cfg.winEnd}` : '오늘 안'} <span data-agnote data-agcode="${a.code}" class="text-[#7c3aed]"></span></div>
           <div class="text-[10px] font-semibold mt-1">리스크 점검표</div><ul class="text-[10px] leading-snug">${chk || '<li class="text-[#999999]">특이 사항 없음</li>'}</ul>
           <div class="text-[10px] font-semibold">AI 리스크 브리핑 <span class="font-normal text-[#999999]">(반대 의견)</span> <button type="button" data-agbrief class="underline text-[#888888] font-normal">다시 받기</button></div>
           <div class="text-[11px] leading-relaxed whitespace-pre-wrap bg-[#fafafa] border border-[#eeeeee] px-1.5 py-1 max-h-48 overflow-y-auto scroll">${a.briefing ? '리스크 브리핑을 쓰는 중…' : a.brief ? esc(plainSay(a.brief)) : `<span class="text-[#999999]">${esc(a.briefErr || '')}</span>`}</div>
           ${a.status === 'pending' ? `
           <label class="flex items-center gap-1 text-[11px] ${a.briefing ? 'opacity-40' : ''}"><input type="checkbox" data-agread ${a.read ? 'checked' : ''} ${a.briefing ? 'disabled' : ''}> 리스크 점검표와 브리핑을 읽었습니다</label>
-          ${a.side === 'BUY' ? `<div class="flex items-center gap-1 text-[11px]">수량 <input type="number" min="1" data-agqty value="${a.qtyDraft || a.qty}" class="w-20 num"> 주 <span class="text-[10px] text-[#999999]">(제안 ${a.qty}주)</span></div>` : ''}
+          ${a.side === 'BUY' ? `<div class="flex items-center gap-1 text-[11px]">수량 <input type="number" min="1" data-agqty value="${a.qtyDraft || a.qty}" class="w-20 num"> 주 <span class="text-[10px] text-[#999999]">(제안 ${a.qty}주)</span><button type="button" data-agqset="${Math.max(1, Math.floor(a.qty / 2))}" class="btn px-1 text-[9px]">절반</button><button type="button" data-agqset="${Math.max(1, a.qty)}" class="btn px-1 text-[9px]">제안대로</button></div>` : ''}
           <input type="text" data-agwhy value="${esc(a.reasonDraft || '')}" placeholder="결정 이유 한 줄 (필수)" class="w-full text-[11px]">
           <div class="flex gap-1"><button type="button" data-agok class="flex-1 py-1 text-[11px] border ${ready ? 'bg-[#111111] text-white border-[#111111]' : 'border-[#d4d4d4] text-[#bbbbbb]'}" ${ready ? '' : 'disabled'}>승인</button>
             <button type="button" data-agno class="flex-1 py-1 text-[11px] border ${ready ? 'border-[#111111]' : 'border-[#d4d4d4] text-[#bbbbbb]'}" ${ready ? '' : 'disabled'}>거절</button>
@@ -6123,6 +6196,9 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (e.target.closest('[data-agreview]')) { state.ui.right = true; applyPanes(); setTab('assist'); chatSend('결재 기록을 돌아봐줘 — 승인한 것과 거절한 것의 이후 성과, 내 결정 습관, 다음에 조심할 점을 정리해줘'); return; }
       const card = e.target.closest('[data-ag]'), a = card && state.agenda.find((x) => x.id === card.dataset.ag);
       if (!a) return;
+      if (e.target.closest('[data-agchart]')) { selectCode(a.code); return; }
+      const qs = e.target.closest('[data-agqset]');
+      if (qs) { a.qtyDraft = Number(qs.dataset.agqset); a.checks = agendaChecks(a); saveStore(); renderAgenda(true); return; }
       if (e.target.closest('[data-agok]')) agendaDecide(a.id, true);
       else if (e.target.closest('[data-agno]')) agendaDecide(a.id, false);
       else if (e.target.closest('[data-agbrief]')) { a.read = false; a.checks = agendaChecks(a); agendaBrief(a); }
@@ -6145,6 +6221,47 @@ onmessage = (e) => { const { body, sets } = e.data;
     setInterval(() => renderAgenda(), 1000);
     renderAgenda(true);
 
+    // ---- 비서 단축 버튼 · 외부 Gemini 대화창 연동(지금 상황 복사 📋 / 받은 답 붙여 넣어 실행 📥) ----
+    async function copyGeminiBrief() {
+      if (state.selected && state.bridge.ok && state.bridge.research && !newsCache[nameOf(state.selected)]) { try { await getNews(nameOf(state.selected), 10); } catch (_) {} }
+      const pack = {
+        안내: '파르티잔 인베스트먼트 화면의 지금 상태입니다. 이 수치를 근거로 분석·비교·추천해 주세요(근거 수치와 위험을 함께, 보장 표현 없이 — 결정은 사용자가 결재). 화면 조작·차트 작도·설정이 필요하면 <<명령>> [ ... ] 형식으로, 매매 규칙은 <<규칙 ...>>...<</규칙>>, 위젯은 <<위젯 ...>>...<</위젯>> 형식으로 답하면 사용자가 앱의 "📥 답 적용"에 붙여 넣어 실행합니다.',
+        ...assistFacts(), 화면: screenFacts(), 매매규칙: rulesFacts(), 결재함: agendaFacts(), 표시구간: marksFacts(), 차트모양: lookFacts(),
+      };
+      const text = `[파르티잔 인베스트먼트 지금 상황 — ${pack.시각}]\n${JSON.stringify(pack, null, 2)}`;
+      try { await navigator.clipboard.writeText(text); toast('📋 지금 화면 상황을 복사했어요 — Gemini 대화창에 붙여 넣고 물어보세요'); }
+      catch (_) { const ta = document.getElementById('inpPasteCmd'); document.getElementById('pasteCmdBox').classList.remove('hidden'); ta.value = text; ta.select(); toast('아래 칸을 Ctrl+C로 복사하세요'); }
+    }
+    async function applyExternalReply(raw) {
+      raw = String(raw || '').trim();
+      if (!raw) return toast('붙여 넣은 내용이 없어요');
+      const bl = splitBlocks(raw);
+      const { text: said, acts, prop } = splitActions(bl.text);
+      if (said) chat.msgs.push({ role: 'assistant', text: `[외부 Gemini]\n${said}`, at: Date.now(), ...(prop.length ? { prop } : {}) });
+      if (bl.blocks.length) chat.msgs.push({ role: 'assistant', text: applyBlocks(bl.blocks).join('\n'), at: Date.now() });
+      renderChat(); saveChat();
+      if (acts.length) await runActions(acts);   // 주문·설정은 똑같이 확인 창을 거침
+      toast(`✔ 외부 답을 적용했어요 (명령 ${acts.length} · 제안 ${prop.length} · 도구 ${bl.blocks.length})`);
+    }
+    document.getElementById('btnCopyBrief').addEventListener('click', copyGeminiBrief);
+    document.getElementById('btnPasteCmd').addEventListener('click', () => { const box = document.getElementById('pasteCmdBox'); box.classList.toggle('hidden'); if (!box.classList.contains('hidden')) document.getElementById('inpPasteCmd').focus(); });
+    document.getElementById('btnClosePaste').addEventListener('click', () => document.getElementById('pasteCmdBox').classList.add('hidden'));
+    document.getElementById('btnRunPaste').addEventListener('click', async () => { const ta = document.getElementById('inpPasteCmd'); await applyExternalReply(ta.value); ta.value = ''; document.getElementById('pasteCmdBox').classList.add('hidden'); });
+    document.getElementById('quickPrompts').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-qp]');
+      if (!b) return;
+      const k = b.dataset.qp;
+      if (k === 'lab') { toast(await runCompare({ variants: ENTRY_VARIANTS })); return; }
+      if (!aiReady()) { toast('비서를 쓰려면 설정 탭 → AI 분석에서 키를 넣거나, "📋 상황 복사"로 외부 Gemini 대화창에 붙여 넣으세요'); return; }
+      if (k === 'draw' && !state.selected) { toast('먼저 차트에서 종목을 고르세요'); return; }
+      if (state.selected && state.bridge.ok && state.bridge.research && !newsCache[nameOf(state.selected)]) { try { await getNews(nameOf(state.selected), 10); } catch (_) {} }
+      const prompts = {
+        radar: '시장후보요약의 오늘돌파신호와 스퀴즈임박 종목을 비교해서, 내 전략 기준으로 가장 눈여겨볼 후보 3개를 거래대금·상단 대비·5일선 이격·스퀴즈 여부 수치와 함께 꼽아 줘. 각 후보의 위험(5일선까지 거리)도 말해 주고, 첫 번째 후보를 차트에 띄워 줘.',
+        hold: '내 보유 종목과 열린 결재 안건을 전부 점검해 줘. 각 종목의 현재가와 매도 기준선까지 거리, 시장 국면을 수치로 짚고 오늘 특히 조심할 종목을 알려 줘.',
+        draw: state.selected ? `지금 ${nameOf(state.selected)}의 최근20봉 고점·저점과 BB 상단·중심·5일선·20일선 수치를 보고, 핵심 지지선·저항선 2~3개와 최근 특이점 날짜 메모를 차트에 그려 주고 왜 그 가격인지 설명해 줘.` : '',
+      };
+      if (prompts[k]) chatSend(prompts[k]);
+    });
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
