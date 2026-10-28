@@ -328,7 +328,7 @@
     const UNIVERSE_ETF = { K200: '069500', Q150: '229200' };   // KODEX 200 · KODEX 코스닥150 구성종목으로 지수 종목 목록 대용
     const DEFAULTS = {
       capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true,
-      entryMode: 'ALL', sqPct: 15, sqDrop: 30, sqRange: 60, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15,
+      entryMode: 'ALL', sqPct: 15, sqDrop: 30, sqRange: 60, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false,
       bbPeriod: 200, bbStd: 2.0,
       exitMa: 5, pullbackPct: 1.5,
       w1: 100, w2: 0, w3: 0,
@@ -366,7 +366,8 @@
         { k: 'lcWait', label: '장대양봉으로 돌파하면 바로 사지 않고 눌림·안정 뒤 매수', type: 'bool' },
         { k: 'lcAtr', label: '장대양봉: 몸통 ≥ 20일 평균 변동폭 ×', min: 1, max: 5, step: 0.1 },
         { k: 'lcChg', label: '장대양봉: 또는 그날 상승률 % 이상', min: 3, max: 30, step: 1 },
-        { k: 'lcDays', label: '장대양봉 뒤 기다리는 최대 일수', min: 5, max: 40, step: 1 }] },
+        { k: 'lcDays', label: '장대양봉 뒤 기다리는 최대 일수', min: 5, max: 40, step: 1 },
+        { k: 'ma5Confirm', label: '매수 타이밍: 신호 뒤 2일 연속 종가가 5일선 위면 둘째 날 매수', type: 'bool' }] },
       { group: '청산 — 손절 없음', items: [
         { k: 'exitMa', label: '종가가 N일 이동평균선 아래면 매도 (N)', min: 2, max: 60, step: 1 }] },
       { group: '검색식 — 전체 시장 종목군', items: [
@@ -798,7 +799,13 @@
       return null;
     }
     // 매수 신호 (백테스트 · 모의투자 · 차트 · 알림 공통): 진입 방식(모든 돌파 / 스퀴즈만) + 장대양봉이면 눌림 뒤
+    //  5일선 확인을 켜면 그 신호 다음 날·그다음 날 종가가 모두 5일선 위일 때 둘째 날 매수
+    const above5 = (b) => b && b.ma5 != null && b.c > b.ma5;
     function isBreakout(bars, i) {
+      if (!state.cfg.ma5Confirm) return rawSignal(bars, i);
+      return i >= 3 && rawSignal(bars, i - 2) && above5(bars[i - 1]) && above5(bars[i]);
+    }
+    function rawSignal(bars, i) {
       const c = state.cfg;
       if (baseBreakout(bars, i)) {
         if (c.entryMode === 'SQ' && !isSqueeze(bars, i)) return false;
@@ -807,6 +814,10 @@
       return c.lcWait ? waitFrom(bars, i) != null : false;
     }
     function entryLabel(bars, i) {
+      if (state.cfg.ma5Confirm) return `${rawLabel(bars, i - 2)} → 5일선 위 2일 확인`;
+      return rawLabel(bars, i);
+    }
+    function rawLabel(bars, i) {
       if (baseBreakout(bars, i) && !(state.cfg.lcWait && isLongCandle(bars, i))) return isSqueeze(bars, i) ? '200일 스퀴즈 돌파' : `BB${state.cfg.bbPeriod} 상단 돌파`;
       return '장대양봉 뒤 눌림 반등';
     }
@@ -5003,13 +5014,14 @@ onmessage = (e) => { const { body, sets } = e.data;
           <button type="button" data-cmp="exitMa" class="btn px-1.5 py-0 text-[10px]">매도선 5·10·20</button>
           <button type="button" data-cmp="volMult" class="btn px-1.5 py-0 text-[10px]">거래량 1.5·2·3배</button>
           <button type="button" data-cmp="bbPeriod" class="btn px-1.5 py-0 text-[10px]">BB 120·200·250</button>
-          <button type="button" data-cmp="entry" class="btn px-1.5 py-0 text-[10px]">스퀴즈·장대양봉 대기</button></div>`;
+          <button type="button" data-cmp="entry" class="btn px-1.5 py-0 text-[10px]">스퀴즈·장대양봉 대기</button>
+          <button type="button" data-cmp="ma5" class="btn px-1.5 py-0 text-[10px]">5일선 2일 확인</button></div>`;
     }
     document.getElementById('rulesBox').addEventListener('click', async (e) => {
       const cb = e.target.closest('[data-cmp]');
       if (cb) {
         const vals = { exitMa: [5, 10, 20], volMult: [1.5, 2, 3], bbPeriod: [120, 200, 250] }[cb.dataset.cmp];
-        const msg = await runCompare(cb.dataset.cmp === 'entry' ? { variants: ENTRY_VARIANTS } : { key: cb.dataset.cmp, values: vals });
+        const msg = await runCompare(cb.dataset.cmp === 'entry' ? { variants: ENTRY_VARIANTS } : cb.dataset.cmp === 'ma5' ? { variants: MA5_VARIANTS } : { key: cb.dataset.cmp, values: vals });
         state.ui.right = true; saveStore(); applyPanes(); setTab('assist'); toast(msg);
         return;
       }
@@ -5195,7 +5207,13 @@ onmessage = (e) => { const { body, sets } = e.data;
       { name: '모든 돌파 + 장대양봉 대기', set: { entryMode: 'ALL', lcWait: true } },
       { name: '스퀴즈만 + 장대양봉 대기', set: { entryMode: 'SQ', lcWait: true } },
     ];
-    const SET_NAMES = { entryMode: '진입', lcWait: '장대양봉 대기', sqPct: '스퀴즈 폭 하위%', exitMa: '매도선', volMult: '거래량 배수', volFilter: '거래량 확인', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxMin: 'ADX', adxFilter: 'ADX 확인', nearPct: '후보 범위', maxPos: '최대 보유', slotPct: '종목당 비중' };
+    const MA5_VARIANTS = [
+      { name: '신호 당일 매수', set: { ma5Confirm: false } },
+      { name: '5일선 위 2일 확인 뒤 매수', set: { ma5Confirm: true } },
+      { name: '스퀴즈만 · 당일 매수', set: { entryMode: 'SQ', ma5Confirm: false } },
+      { name: '스퀴즈만 · 5일선 2일 확인', set: { entryMode: 'SQ', ma5Confirm: true } },
+    ];
+    const SET_NAMES = { ma5Confirm: '5일선 2일 확인', entryMode: '진입', lcWait: '장대양봉 대기', sqPct: '스퀴즈 폭 하위%', exitMa: '매도선', volMult: '거래량 배수', volFilter: '거래량 확인', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxMin: 'ADX', adxFilter: 'ADX 확인', nearPct: '후보 범위', maxPos: '최대 보유', slotPct: '종목당 비중' };
     const setLabel = (set) => Object.entries(set).map(([k, v]) => `${SET_NAMES[k] || k} ${v === true ? '켬' : v === false ? '끔' : k === 'exitMa' ? `${v}선` : v}`).join(' · ');
     // variants: [{ name, set }] — 최대 6개. 지금 설정은 맨 앞에 자동으로 넣어 비교 기준으로 씀
     async function compareVariants(variants) {
