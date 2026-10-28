@@ -4,7 +4,7 @@
 
 총 6,574줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
 
-화면 버전: v1.18 · 2026-10-28 (pre-commit 훅이 자동으로 올림)
+화면 버전: v1.19 · 2026-10-28 (pre-commit 훅이 자동으로 올림)
 
 ### 구역과 함수 (줄 번호)
 
@@ -537,7 +537,7 @@
 
 ## nh_bridge_core.py
 
-총 1,745줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
+총 1,746줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
 
 ### 주소 (POST JSON, 헤더에 토큰)
 
@@ -577,35 +577,35 @@
 - `_ask` 615
 - `ai_brief` 623
 - `ai_test` 636
-- `ai_ask` 765
-- `demo_daily` 791
-- `_hash01` 823
-- `demo_chart` 831
-- `Hub` 886
-- `_tick_size` 925
-- `_tick_msg` 932
-- `_book_msg` 942
-- `Realtime` 951
-- `DemoRealtime` 1131
-- `_state_path` 1184
-- `state_read` 1198
-- `state_write` 1207
-- `state_backup` 1228
-- `trade_available` 1260
-- `acct_mask` 1264
-- `_day_used` 1268
-- `_day_add` 1277
-- `nh_trade_post` 1294
-- `_msg` 1314
-- `_block` 1321
-- `trade_check_acct` 1326
-- `trade_status` 1348
-- `trade_log` 1357
-- `trade_order` 1363
-- `trade_cancel` 1419
-- `trade_balance` 1435
-- `trade_orders` 1456
-- `Handler` 1475
-- `ExclusiveServer` 1678
-- `hidden_input` 1689
-- `main` 1710
+- `ai_ask` 766
+- `demo_daily` 792
+- `_hash01` 824
+- `demo_chart` 832
+- `Hub` 887
+- `_tick_size` 926
+- `_tick_msg` 933
+- `_book_msg` 943
+- `Realtime` 952
+- `DemoRealtime` 1132
+- `_state_path` 1185
+- `state_read` 1199
+- `state_write` 1208
+- `state_backup` 1229
+- `trade_available` 1261
+- `acct_mask` 1265
+- `_day_used` 1269
+- `_day_add` 1278
+- `nh_trade_post` 1295
+- `_msg` 1315
+- `_block` 1322
+- `trade_check_acct` 1327
+- `trade_status` 1349
+- `trade_log` 1358
+- `trade_order` 1364
+- `trade_cancel` 1420
+- `trade_balance` 1436
+- `trade_orders` 1457
+- `Handler` 1476
+- `ExclusiveServer` 1679
+- `hidden_input` 1690
+- `main` 1711

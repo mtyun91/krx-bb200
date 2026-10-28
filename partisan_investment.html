@@ -3768,7 +3768,7 @@
     setTimeout(renderAiBox, 0);   // 목소리 목록 등 뒤쪽 정의가 끝난 뒤에 그림
     // =========================================================================
     // 20. AI 비서 — 선택·주문·체결마다 코멘트, 주문 전 실수 방지 점검, 매매 기록·전략 과거 데이터 패턴 분석
-    //     숫자는 모두 화면 데이터로 계산하고, AI(설정된 경우)는 그 숫자를 해석만 함. 종목 추천은 하지 않음
+    //     숫자는 모두 화면 데이터로 계산하고, AI(설정된 경우)는 그 숫자를 해석함. 추천은 근거 수치·위험과 함께, 결정은 사용자 결재
     // =========================================================================
     const assist = { feed: [], brief: null, briefCode: null, aiBusy: {}, journal: null, journalAt: 0, askText: '' };
     try { const f = JSON.parse(localStorage.getItem('krx.bb200.assistFeed') || '[]'); if (Array.isArray(f)) assist.feed = f.slice(0, 40); } catch (_) {}
@@ -4152,7 +4152,7 @@
       if (!el) return;
       el.innerHTML = chat.msgs.length ? chat.msgs.map((m, mi) => `<div class="flex ${m.role === 'user' ? 'justify-end' : ''}"><div class="${m.table ? 'w-full' : 'max-w-[88%]'} px-2 py-1 text-[11px] leading-relaxed whitespace-pre-line ${m.role === 'user' ? 'bg-[#111111] text-white' : 'bg-[#f3f3f3] text-[#222222]'}">${esc(m.role === 'assistant' ? plainSay(m.text) : m.text)}${m.table ? tableHtml(m.table) : ''}${(m.prop || []).map((a, k) => `<button type="button" data-prop="${mi}:${k}" class="block mt-1 ${a.done ? 'text-[#999999]' : 'btn'} px-2 py-0.5 text-[10px] text-left" ${a.done ? 'disabled' : ''}>${a.done ? '✔ ' : '▶ 적용 — '}${esc(describeAct(a))}</button>`).join('')}</div></div>`).join('')
         + (chat.busy ? '<div class="text-[10px] text-[#999999]">비서가 답하는 중…</div>' : '')
-        : `<div class="text-[10px] text-[#999999] leading-relaxed">말이나 글로 물어보세요. 예: "지금 이 종목 위험한 점 말해줘", "삼성전자 주봉으로 띄워줘", "리서치센터 섹터 열어줘", "매도 기준을 10일선으로 바꿔줘" — 화면 조작도 해 드려요. 주문·설정 변경은 확인 창을 거치고, 종목 추천은 하지 않습니다.${aiReady() ? '' : '<br><b>설정 → AI 분석</b>에서 키를 넣어야 대화할 수 있습니다.'}</div>`;
+        : `<div class="text-[10px] text-[#999999] leading-relaxed">말이나 글로 물어보세요. 예: "지금 이 종목 위험한 점 말해줘", "삼성전자 주봉으로 띄워줘", "리서치센터 섹터 열어줘", "매도 기준을 10일선으로 바꿔줘" — 화면 조작도 해 드려요. 추천을 물어보면 근거와 위험을 함께 알려 드려요. 주문·설정 변경은 확인 창, 모의 자동매매는 결재를 거쳐요.${aiReady() ? '' : '<br><b>설정 → AI 분석</b>에서 키를 넣어야 대화할 수 있습니다.'}</div>`;
       el.scrollTop = el.scrollHeight;
       document.getElementById('btnSpeak').textContent = chat.speak || chat.convo ? '🔊 음성 켬' : '🔈 음성 끔';
       const cb = document.getElementById('btnConvo');
@@ -4958,7 +4958,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.19', APP_DATE = '2026-10-28';
+    const APP_VERSION = '1.20', APP_DATE = '2026-10-28';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)

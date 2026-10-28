@@ -49,7 +49,7 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 2. **실계좌 주문**: 화면의 `realSubmit` 하나로만 나가고, 매번 확인 창에서 사용자가 직접 눌러야 한다(버튼 1.5초 지연). 1회·하루 한도와 비상 정지는 실행기·중계기가 정하고 지킨다 — 화면에서 바꿀 수 없게 유지.
 3. **AI가 실제 주문을 넣지 않는다.** 시험은 데모 중계기·모의 계좌에서만.
 4. AI 키(Claude·Gemini)는 브라우저(localStorage, '기억'을 켤 때만)에만. 중계기는 요청마다 받아서 쓰고 저장하지 않는다.
-5. **종목 추천은 해도 된다** (사용자가 원함, 2026-10-28). 다만 ① 사용자의 전략·신호·화면 데이터에 근거하고 그 수치를 함께 보여 줄 것 ② 위험(틀릴 수 있는 이유, 매도선까지 예상 손실)을 같이 말할 것 ③ "반드시 오른다" 같은 보장·확정 표현은 쓰지 않을 것 ④ 데이터에 없는 정보(소문·지어낸 실적)로 추천하지 않을 것 ⑤ 최종 결정은 사용자 — 추천은 결재제를 건너뛰지 못한다. (현재 앱의 비서 프롬프트에는 아직 '추천하지 않는다' 문구가 남아 있음 — 바꿀 때는 `nh_bridge_core.py`의 `CHAT_STYLE`·`ASK_PURPOSE`와 화면 안내 문구를 함께.)
+5. **종목 추천은 해도 된다** (사용자가 원함, 2026-10-28). 다만 ① 사용자의 전략·신호·화면 데이터에 근거하고 그 수치를 함께 보여 줄 것 ② 위험(틀릴 수 있는 이유, 매도선까지 예상 손실)을 같이 말할 것 ③ "반드시 오른다" 같은 보장·확정 표현은 쓰지 않을 것 ④ 데이터에 없는 정보(소문·지어낸 실적)로 추천하지 않을 것 ⑤ 최종 결정은 사용자 — 추천은 결재제를 건너뛰지 못한다. 앱 비서도 같은 기준(`nh_bridge_core.py`의 `ASK_COMMON`). 단, 리스크 브리핑(`ASK_PURPOSE["risk"]`)은 반대 의견 담당이라 추천하지 않는다. 비서는 추천을 말로만 하고, 주문 명령은 사용자가 종목·방향·수량을 직접 말했을 때만 만든다.
 6. 비서가 만드는 **위젯**(sandbox iframe)은 실계좌 주문·매매 규칙 변경·차트 그리기를 할 수 없다. 비서·위젯은 **결재를 대신할 수 없다**.
 7. 결재제: 결재제가 켜져 있으면 모의 자동매매는 매수·매도 모두 사용자 결재 없이 실행하지 않는다. 리스크 브리핑 '읽음' 체크와 결정 이유 없이는 결재 버튼이 켜지지 않는다.
 8. 백업·내보내기·동기화 파일에 키·토큰·계좌번호를 넣지 않는다.
@@ -143,7 +143,7 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 총 6,574줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
 
-화면 버전: v1.18 · 2026-10-28 (pre-commit 훅이 자동으로 올림)
+화면 버전: v1.19 · 2026-10-28 (pre-commit 훅이 자동으로 올림)
 
 ### 구역과 함수 (줄 번호)
 
@@ -676,7 +676,7 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 ## nh_bridge_core.py
 
-총 1,745줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
+총 1,746줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
 
 ### 주소 (POST JSON, 헤더에 토큰)
 
@@ -716,35 +716,35 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 - `_ask` 615
 - `ai_brief` 623
 - `ai_test` 636
-- `ai_ask` 765
-- `demo_daily` 791
-- `_hash01` 823
-- `demo_chart` 831
-- `Hub` 886
-- `_tick_size` 925
-- `_tick_msg` 932
-- `_book_msg` 942
-- `Realtime` 951
-- `DemoRealtime` 1131
-- `_state_path` 1184
-- `state_read` 1198
-- `state_write` 1207
-- `state_backup` 1228
-- `trade_available` 1260
-- `acct_mask` 1264
-- `_day_used` 1268
-- `_day_add` 1277
-- `nh_trade_post` 1294
-- `_msg` 1314
-- `_block` 1321
-- `trade_check_acct` 1326
-- `trade_status` 1348
-- `trade_log` 1357
-- `trade_order` 1363
-- `trade_cancel` 1419
-- `trade_balance` 1435
-- `trade_orders` 1456
-- `Handler` 1475
-- `ExclusiveServer` 1678
-- `hidden_input` 1689
-- `main` 1710
+- `ai_ask` 766
+- `demo_daily` 792
+- `_hash01` 824
+- `demo_chart` 832
+- `Hub` 887
+- `_tick_size` 926
+- `_tick_msg` 933
+- `_book_msg` 943
+- `Realtime` 952
+- `DemoRealtime` 1132
+- `_state_path` 1185
+- `state_read` 1199
+- `state_write` 1208
+- `state_backup` 1229
+- `trade_available` 1261
+- `acct_mask` 1265
+- `_day_used` 1269
+- `_day_add` 1278
+- `nh_trade_post` 1295
+- `_msg` 1315
+- `_block` 1322
+- `trade_check_acct` 1327
+- `trade_status` 1349
+- `trade_log` 1358
+- `trade_order` 1364
+- `trade_cancel` 1420
+- `trade_balance` 1436
+- `trade_orders` 1457
+- `Handler` 1476
+- `ExclusiveServer` 1679
+- `hidden_input` 1690
+- `main` 1711
