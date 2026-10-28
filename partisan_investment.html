@@ -4911,7 +4911,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.13', APP_DATE = '2026-10-28';
+    const APP_VERSION = '1.14', APP_DATE = '2026-10-28';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5606,6 +5606,8 @@ onmessage = (e) => { const { body, sets } = e.data;
     const cl = (b) => b.map((x) => x.c);
     const IND_LIB = [
       // 차트 위에 겹쳐 그리기
+      { k: 'mesh', name: '그물망', pane: 'price', params: [['시작', 5, 2, 60], ['끝', 120, 20, 400], ['간격', 5, 1, 50]], c: '#86efac',
+        calc: (b, [s, e, st], c) => { const src = cl(b), lines = []; for (let p = s; p <= e && lines.length < 40; p += Math.max(1, st)) lines.push({ v: LK.sma(src, Math.round(p)), c, w: 0.7 }); return { lines }; } },
       { k: 'ema', name: '지수이평', pane: 'price', params: [['기간', 20, 2, 400]], c: '#0ea5e9',
         calc: (b, [p], c) => ({ lines: [{ v: LK.ema(cl(b), p), c }] }) },
       { k: 'bb', name: '볼린저', pane: 'price', params: [['기간', 20, 5, 400], ['배수', 2, 0.5, 5]], c: '#7c3aed',
@@ -5658,11 +5660,11 @@ onmessage = (e) => { const { body, sets } = e.data;
       { k: 'vr', name: '거래량 비율', pane: 'sub', params: [['기간', 20, 2, 100]], c: '#8b5cf6', levels: [100],
         calc: (b, [p], c) => ({ lines: [{ v: b.map((x, i) => { if (i < p) return null; let u = 0, d = 0, e = 0; for (let k = i - p + 1; k <= i; k++) { const ch = b[k].c - b[k - 1].c; if (ch > 0) u += b[k].v; else if (ch < 0) d += b[k].v; else e += b[k].v; } return d + e / 2 ? (u + e / 2) / (d + e / 2) * 100 : null; }), c }] }) },
     ];
-    const IND_ALIAS = { 볼린저: 'bb', 엔벨로프: 'env', 일목: 'ichi', 일목균형표: 'ichi', 파라볼릭: 'sar', 지수이평: 'ema', 스토캐스틱: 'stoch', 윌리엄스: 'willr', dmi: 'adx', 이격도: 'disp', 거래량비율: 'vr', 'vr': 'vr' };
+    const IND_ALIAS = { 그물망: 'mesh', 그물: 'mesh', 볼린저: 'bb', 엔벨로프: 'env', 일목: 'ichi', 일목균형표: 'ichi', 파라볼릭: 'sar', 지수이평: 'ema', 스토캐스틱: 'stoch', 윌리엄스: 'willr', dmi: 'adx', 이격도: 'disp', 거래량비율: 'vr', 'vr': 'vr' };
     const indDef = (k) => { const s = String(k || '').toLowerCase().replace(/\s/g, ''); return IND_LIB.find((d) => d.k === s || d.k === IND_ALIAS[s] || d.name.replace(/\s/g, '').toLowerCase() === s); };
     const indLabel = (d) => { const L = indDef(d.k); return `${L.name}${d.p.length ? `(${d.p.join(',')})` : ''}`; };
     const LOOK_DEF = { up: '#e5383b', down: '#1e6bd6', hollow: false, bb: true, bbUp: '#e5383b', bbMid: '#111111', bbLow: '#1e6bd6', vol: true, grid: true,
-      mas: MA_LIST.map((m) => ({ p: m.p, c: m.c, on: true })), ind: [] };
+      mas: MA_LIST.map((m) => ({ p: m.p, c: m.c, on: true })), ind: [{ k: 'mesh', p: [5, 120, 5], c: '#86efac', on: true }], v: 2 };
     const clone = (o) => JSON.parse(JSON.stringify(o));
     function normalizeLook(d) {
       const o = clone(LOOK_DEF);
@@ -5670,7 +5672,11 @@ onmessage = (e) => { const { body, sets } = e.data;
       ['up', 'down', 'bbUp', 'bbMid', 'bbLow'].forEach((k) => { o[k] = lookColor(d[k], o[k]); });
       ['hollow', 'bb', 'vol', 'grid'].forEach((k) => { if (typeof d[k] === 'boolean') o[k] = d[k]; });
       if (Array.isArray(d.mas)) o.mas = d.mas.slice(0, 8).map((m, i) => ({ p: Math.round(Math.min(400, Math.max(1, Number(m.p) || 5))), c: lookColor(m.c, MA_PALETTE[i % 8]), on: m.on !== false }));
+      // v2: 그물망(5~120일선, 연한 초록)을 한 번 켜 줌 — 그 뒤 지우면 다시 생기지 않음
+      const addMesh = (d.v || 1) < 2;
       if (Array.isArray(d.ind)) o.ind = d.ind.map((x) => { const L = indDef(x && x.k); if (!L) return null; return { k: L.k, p: L.params.map((q, j) => { const v = Number(x.p && x.p[j]); return isFinite(v) && x.p[j] !== '' ? Math.min(q[3], Math.max(q[2], v)) : q[1]; }), c: lookColor(x.c, L.c), on: x.on !== false }; }).filter(Boolean).slice(0, 8);
+      if (addMesh && !o.ind.some((x) => x.k === 'mesh')) o.ind.unshift({ k: 'mesh', p: [5, 120, 5], c: '#86efac', on: true });
+      o.v = 2;
       return o;
     }
     state.look = clone(LOOK_DEF);
