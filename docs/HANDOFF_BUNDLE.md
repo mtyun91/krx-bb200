@@ -78,7 +78,7 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 ## 6. 지금 상태 (2026-10-28 기준, v1.17)
 
-- 전략 기본값: 모든 BB200 상단 돌파 즉시(1차 50%·2차 50%), 종가 5일선 이탈 매도, 복리 배분(평가자산 ÷ 최대 5종목), 결재제 켜짐, 일봉 3000개 저장.
+- 전략 기본값(2026-10-29 개편): 저가권 200일 스퀴즈 돌파(1차 50%·2차 50%), 돌파봉 저가 손절, 종가 10일선 이탈 매도, 복리 배분(평가자산 ÷ 최대 5종목), 결재제 켜짐, 일봉 3000개 저장.
 - 옵션(기본 꺼짐): 200일 스퀴즈 돌파만, 장대양봉 대기(눌림 반등·전고점 돌파 때 매수), 5일선 2일 확인 매수. 백테스트 탭 '내 매매 규칙' 칸의 비교 버튼으로 나란히 비교.
 - 아직 실제로 확인 못 한 것: 장중 15:00~15:20 결재→체결 흐름, 실제 AI 리스크 브리핑, 나무 모의서버 주문 시험(`--ask --trade`로 모의서버 선택 후 사용자와 함께).
 - 사용자 요청 이력과 전략 검증 수치는 `docs/STRATEGY.md`.
@@ -88,11 +88,15 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 # 매매 전략과 검증 결과
 
+## 핵심 개념 (2026-10-29 개편)
+
+**저가권에서 큰 하락 → 오랜 횡보 → 200일 볼린저밴드가 최대로 좁아진 뒤 상단 돌파를 사고, 산 뒤의 운용(손절·추가 매수·매도선)으로 대응한다.** 고가권 돌파는 이 매매가 아니다.
+
 ## 기본 전략 (BB200 일봉)
 
-- **진입**: 종가가 볼린저밴드(200일, 2σ) 상단을 처음 넘은 양봉 (`baseBreakout`). 선택: 거래량 ≥ 20일 평균 × N, ADX ≥ N, 사용자 매수 규칙(`rE`).
+- **진입 (기본 `entryMode: 'SQ'`)**: 종가가 볼린저밴드(200일, 2σ) 상단을 처음 넘은 양봉(`baseBreakout`) 중 200일 스퀴즈(`isSqueeze`) + **저가권**(돌파 가격이 3년 가격 범위의 아래 `sqZone`=33% 안). 선택: 거래량·ADX·사용자 매수 규칙(`rE`), 장대양봉 대기, 5일선 2일 확인.
 - **분할**: 1차 w1% · 2차 w2%(눌림 뒤 반등) · 3차 w3%(전고점 돌파). 사용자 현재값 50/50/0.
-- **청산**: 손절·목표가 없음. 매수 다음 날부터 종가가 N일선(사용자 현재 5일선) 아래면 매도. 선택: 사용자 매도 규칙(`rX`).
+- **운용·청산**: 손절선 `stopMode`(기본 'BREAK' = 종가가 돌파봉 저가 아래, 'BOX' = 60일 박스 저가, 'NONE') + 매수 다음 날부터 종가가 N일선(기본 10일선) 아래면 매도 (`exitOrStop`). 선택: 사용자 매도 규칙(`rX`). 모의투자 탭 '운용 현황'에 종목별 단계·손절선·매도선·다음 할 일.
 - **자금**: 복리 배분 — 새로 살 때마다 그 시점 평가자산 ÷ 최대 보유 종목(기본 5).
 - **실행 시각**: 15:00~15:20(종가 동시호가 전). 14:50부터 상단 근접 종목 시세를 받아 두고, 시간대 안에서 2분 이상 지켜본 평균가 이하로 눌릴 때 매수 / 매도는 평균가 이상 반등 때, 끝나기 1분 전이면 그때. 매수한 날은 팔지 않음.
 - **비용**(백테스트): 매수 0.01% + 매도 0.01% + 거래세 0.20% + 체결 손실 0.05%×2, 종가 체결.
@@ -134,6 +138,18 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 | 장중 5일선 닿고 반등 | 0.70 | 0.71 | 25.3% |
 | 다음 2일 연속 5일선 위 (= `ma5Confirm`) | 0.90 | 1.13 | 33.2% |
 
+**저가권 · 운용 검증** (research/lowzone.py, 매도 10일선 기준)
+
+| 조건 | 거래 | 승률 | 거래당 평균 | PF (2020까지 / 2021부터) |
+|---|---|---|---|---|
+| 모든 돌파 | 16,939 | 28.8% | −0.26% | 0.94 (1.00 / 0.91) |
+| 스퀴즈 | 1,453 | 31.8% | +0.59% | 1.18 (1.16 / 1.18) |
+| **스퀴즈 + 3년 범위 아래 1/3** | 323 | 34.4% | **+1.01%** | **1.30** (1.37 / 1.28) |
+| 스퀴즈 + 2년 고점보다 30%↓ | 475 | 29.9% | +0.52% | 1.15 (1.07 / 1.18) |
+| 모든 돌파 중 고가권(2년 고점 10% 안) | 5,834 | 32.7% | +0.98% | 1.24 — 고가권 돌파도 평균은 나쁘지 않음 |
+
+운용(스퀴즈): 5일선 PF 1.04 · **10일선 1.18** · 20일선 1.12 · 돌파봉 저가 손절+10일선 1.17 · 절반 익절 20%+20일선 1.15 → 매도선은 10일선, 손절은 성과를 크게 바꾸지 않지만 최대 손실을 정해 줌.
+
 ## 사용자의 매매 생각 (요청 이력 요약)
 
 - 장기 추세 신호 = 200일 밴드가 하락 뒤 횡보하며 최대로 좁아진 상태에서 상단 돌파(몇 년 매집의 흔적). 다만 절대적이지 않다.
@@ -149,555 +165,562 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 ## partisan_investment.html
 
-총 6,977줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
+총 7,035줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
 
-화면 버전: v1.24 · 2026-10-28 (pre-commit 훅이 자동으로 올림)
+화면 버전: v1.25 · 2026-10-29 (pre-commit 훅이 자동으로 올림)
 
 ### 구역과 함수 (줄 번호)
 
 
-**341** · 1. 설정 · 상태
-- `tfInfo` 430
-- `applySynced` 464
-- `loadStore` 479
-- `loadToken` 496
-- `saveToken` 497
-- `saveStore` 498
-- `bgRun` 511
-- `bgWorker` 512
-- `bgEvery` 513
+**342** · 1. 설정 · 상태
+- `tfInfo` 433
+- `applySynced` 467
+- `loadStore` 482
+- `loadToken` 499
+- `saveToken` 500
+- `saveStore` 501
+- `bgRun` 514
+- `bgWorker` 515
+- `bgEvery` 516
 
-**516** · 2. 공통 유틸 — 한국 시간 · 호가 단위 · 숫자 표시
-- `kstNow` 518
-- `hmToMin` 529
-- `marketOpenNow` 530
-- `tickSize` 535
-- `tickFloor` 544
-- `tickCeil` 545
-- `won` 546
-- `pct` 547
-- `fmtDate` 548
-- `nameOf` 549
-- `esc` 550
-- `toast` 551
+**519** · 2. 공통 유틸 — 한국 시간 · 호가 단위 · 숫자 표시
+- `kstNow` 521
+- `hmToMin` 532
+- `marketOpenNow` 533
+- `tickSize` 538
+- `tickFloor` 547
+- `tickCeil` 548
+- `won` 549
+- `pct` 550
+- `fmtDate` 551
+- `nameOf` 552
+- `esc` 553
+- `toast` 554
 
-**560** · 3. 중계기 통신 · 시세 저장소(IndexedDB)
-- `bridge` 563
-- `db` 575
-- `cacheGet` 586
-- `cachePut` 592
-- `cacheAllDaily` 599
-- `modeKey` 616
-- `lastFinalClose` 619
-- `isStale` 631
-- `weekdaysSince` 637
-- `fetchDaily` 647
-- `isCore` 677
-- `applyDaily` 681
-- `bucketOf` 688
-- `aggregateDaily` 694
-- `chartWant` 708
-- `fetchChart` 709
+**563** · 3. 중계기 통신 · 시세 저장소(IndexedDB)
+- `bridge` 566
+- `db` 578
+- `cacheGet` 589
+- `cachePut` 595
+- `cacheAllDaily` 602
+- `modeKey` 619
+- `lastFinalClose` 622
+- `isStale` 634
+- `weekdaysSince` 640
+- `fetchDaily` 650
+- `isCore` 680
+- `applyDaily` 684
+- `bucketOf` 691
+- `aggregateDaily` 697
+- `chartWant` 711
+- `fetchChart` 712
 
-**738** · 4. 지표 — BB · 이동평균 · 거래량 평균 · ADX(14)
-- `computeInd` 740
-- `priceBroken` 772
-- `baseBreakout` 777
-- `isSqueeze` 788
-- `isLongCandle` 808
-- `waitOk` 819
-- `waitBase` 826
-- `waitFrom` 827
-- `above5` 839
-- `isBreakout` 840
-- `reBreakFrom` 846
-- `rawSignal` 861
-- `entryLabel` 869
-- `rawLabel` 873
+**741** · 4. 지표 — BB · 이동평균 · 거래량 평균 · ADX(14)
+- `computeInd` 743
+- `priceBroken` 775
+- `baseBreakout` 780
+- `isSqueeze` 791
+- `isLongCandle` 816
+- `waitOk` 827
+- `waitBase` 834
+- `waitFrom` 835
+- `above5` 847
+- `isBreakout` 848
+- `reBreakFrom` 854
+- `rawSignal` 869
+- `entryLabel` 877
+- `rawLabel` 881
 
-**879** · 5. 전략 엔진 — 백테스트와 모의투자가 같은 함수를 씀
-- `slotPctNow` 884
-- `costBuy` 885
-- `costSell` 886
-- `newSeq` 888
-- `seqBuy` 894
-- `seqSellAll` 907
-- `maN` 916
-- `stepSeq` 922
-- `seqResult` 953
-- `rankScore` 961
+**887** · 5. 전략 엔진 — 백테스트와 모의투자가 같은 함수를 씀
+- `slotPctNow` 892
+- `costBuy` 893
+- `costSell` 894
+- `newSeq` 896
+- `seqBuy` 905
+- `seqSellAll` 918
+- `maN` 927
+- `stepSeq` 933
+- `seqResult` 964
+- `rankScore` 972
 
-**967** · 6. 포트폴리오 백테스트 — 날짜별로 보유 종목 처리 → 신호 종목 신규 진입 (자리·현금 한도)
-- `runBacktest` 969
+**978** · 6. 포트폴리오 백테스트 — 날짜별로 보유 종목 처리 → 신호 종목 신규 진입 (자리·현금 한도)
+- `runBacktest` 980
 
-**1054** · 7. 종목 목록
-- `marketCodes` 1057
-- `screenPass` 1064
-- `universeCodes` 1073
-- `rowInfo` 1085
-- `renderSymbols` 1100
-- `renderScrBar` 1140
+**1065** · 7. 종목 목록
+- `marketCodes` 1068
+- `screenPass` 1075
+- `universeCodes` 1084
+- `rowInfo` 1096
+- `renderSymbols` 1111
+- `renderScrBar` 1151
 
-**1149** · 8. 차트 — 분(1·3·5·10·15·30·60) · 일 · 주 · 월봉
-- `fmtT` 1154
-- `chartBars` 1157
-- `setChart` 1163
-- `loadChart` 1171
-- `chartGeom` 1223
-- `axisTag` 1232
-- `drawChart` 1241
-- `drawChartNow` 1246
-- `renderTfBar` 1436
-- `updateBarCount` 1441
-- `renderChartHeader` 1445
-- `selectCode` 1466
-- `setTf` 1479
-- `rightPad` 1487
-- `setViewEnd` 1488
-- `curEnd` 1498
-- `stopGlide` 1499
-- `zoom` 1565
-- `pan` 1576
+**1160** · 8. 차트 — 분(1·3·5·10·15·30·60) · 일 · 주 · 월봉
+- `fmtT` 1165
+- `chartBars` 1168
+- `setChart` 1174
+- `loadChart` 1182
+- `chartGeom` 1234
+- `axisTag` 1243
+- `drawChart` 1252
+- `drawChartNow` 1257
+- `renderTfBar` 1449
+- `updateBarCount` 1454
+- `renderChartHeader` 1458
+- `selectCode` 1479
+- `setTf` 1492
+- `rightPad` 1500
+- `setViewEnd` 1501
+- `curEnd` 1511
+- `stopGlide` 1512
+- `zoom` 1578
+- `pan` 1589
 
-**1585** · 9. 백테스트 패널
-- `recomputeAll` 1587
-- `runBt` 1593
-- `renderBt` 1600
-- `drawEquity` 1633
+**1598** · 9. 백테스트 패널
+- `recomputeAll` 1600
+- `runBt` 1606
+- `renderBt` 1613
+- `drawEquity` 1646
 
-**1656** · 10. 모의 자동매매 — 같은 전략 엔진, 가상 계좌
-- `paper` 1658
-- `plog` 1662
-- `lastPrice` 1667
+**1669** · 10. 모의 자동매매 — 같은 전략 엔진, 가상 계좌
+- `paper` 1671
+- `plog` 1675
+- `lastPrice` 1680
 
-**1674** · 10-1. 자체 모의 거래소 — 직접 넣는 주문(시장가·지정가)을 실시간 시세로 가상 체결
-- `acct` 1678
-- `sessionDate` 1687
-- `buyRate` 1694
-- `sellRate` 1695
-- `manualValue` 1696
-- `reservedCash` 1697
-- `reservedQty` 1698
-- `strategyReserve` 1700
-- `buyingPower` 1701
-- `sellable` 1702
-- `liveQuote` 1704
-- `fillBuy` 1711
-- `fillSell` 1728
-- `submitOrder` 1751
-- `cancelOrder` 1787
-- `matchOrders` 1795
-- `expireOrders` 1811
-- `orderWatchTick` 1820
+**1687** · 10-1. 자체 모의 거래소 — 직접 넣는 주문(시장가·지정가)을 실시간 시세로 가상 체결
+- `acct` 1691
+- `sessionDate` 1700
+- `buyRate` 1707
+- `sellRate` 1708
+- `manualValue` 1709
+- `reservedCash` 1710
+- `reservedQty` 1711
+- `strategyReserve` 1713
+- `buyingPower` 1714
+- `sellable` 1715
+- `liveQuote` 1717
+- `fillBuy` 1724
+- `fillSell` 1741
+- `submitOrder` 1764
+- `cancelOrder` 1800
+- `matchOrders` 1808
+- `expireOrders` 1824
+- `orderWatchTick` 1833
 
-**1834** · ---- 주문창
-- `ticketSync` 1837
-- `renderTicket` 1847
-- `ticketPct` 1873
-- `stepPrice` 1881
-- `withTodayBar` 1890
-- `refreshQuotes` 1901
-- `paperExit` 1916
-- `paperDecide` 1930
-- `renderPaper` 2016
-- `scheduler` 2078
+**1847** · ---- 주문창
+- `ticketSync` 1850
+- `renderTicket` 1860
+- `ticketPct` 1886
+- `stepPrice` 1894
+- `withTodayBar` 1903
+- `refreshQuotes` 1914
+- `paperExit` 1929
+- `paperDecide` 1943
+- `renderPaper` 2029
+- `scheduler` 2091
 
-**2102** · 11. 설정 패널
-- `renderSettings` 2104
-- `readSettings` 2118
+**2115** · 11. 설정 패널
+- `renderSettings` 2117
+- `readSettings` 2131
 
-**2143** · 12. 이벤트 · 초기화
-- `setTab` 2145
-- `applyPanes` 2155
-- `bindResizer` 2167
-- `openHolding` 2214
-- `sellNow` 2222
-- `renderHoldInfo` 2242
-- `toggleWatch` 2297
-- `setMaster` 2309
-- `loadMaster` 2317
-- `searchMatches` 2327
-- `renderSearch` 2355
-- `openFromSearch` 2363
-- `connectBridge` 2395
-- `loadSaved` 2439
-- `syncData` 2457
-- `liveTick` 2511
+**2156** · 12. 이벤트 · 초기화
+- `setTab` 2158
+- `applyPanes` 2168
+- `bindResizer` 2180
+- `openHolding` 2227
+- `sellNow` 2235
+- `renderHoldInfo` 2255
+- `toggleWatch` 2311
+- `setMaster` 2323
+- `loadMaster` 2331
+- `searchMatches` 2341
+- `renderSearch` 2369
+- `openFromSearch` 2377
+- `connectBridge` 2409
+- `loadSaved` 2453
+- `syncData` 2471
+- `liveTick` 2525
 
-**2552** · 13. 실시간 (HTS 방식) — 중계기 스트림으로 체결가·호가를 받아 틱마다 현재가·오늘 봉·분봉·호가창·모의 체결 갱신
-- `rtStart` 2557
-- `rtStop` 2563
-- `rtLoop` 2568
-- `rtWanted` 2596
-- `rtSubscribe` 2603
-- `rtMsg` 2616
-- `applyTick` 2623
-- `updateMinuteBar` 2656
-- `renderRtBadge` 2670
-- `prevClose` 2682
-- `chgTag` 2688
-- `renderBook` 2689
+**2566** · 13. 실시간 (HTS 방식) — 중계기 스트림으로 체결가·호가를 받아 틱마다 현재가·오늘 봉·분봉·호가창·모의 체결 갱신
+- `rtStart` 2571
+- `rtStop` 2577
+- `rtLoop` 2582
+- `rtWanted` 2610
+- `rtSubscribe` 2617
+- `rtMsg` 2630
+- `applyTick` 2637
+- `updateMinuteBar` 2670
+- `renderRtBadge` 2684
+- `prevClose` 2696
+- `chgTag` 2702
+- `renderBook` 2703
 
-**2742** · 14. 계좌 동기화 — 중계기 폴더의 krx_state.json 하나로 맥·윈도우가 같은 계좌를 이어서 씀
-- `device` 2747
-- `sync` 2754
-- `saveSync` 2761
-- `syncPayload` 2764
-- `hasActivity` 2767
-- `syncHash` 2772
-- `syncMark` 2779
-- `applyRemote` 2786
-- `syncPush` 2798
-- `syncPull` 2820
-- `renderSync` 2844
+**2756** · 14. 계좌 동기화 — 중계기 폴더의 krx_state.json 하나로 맥·윈도우가 같은 계좌를 이어서 씀
+- `device` 2761
+- `sync` 2768
+- `saveSync` 2775
+- `syncPayload` 2778
+- `hasActivity` 2781
+- `syncHash` 2786
+- `syncMark` 2793
+- `applyRemote` 2800
+- `syncPush` 2812
+- `syncPull` 2834
+- `renderSync` 2858
 
-**2876** · 15. 시장 리서치 — 시장 국면(상승·중립·하락)을 여러 근거로 판정 (인버스 엔진의 기준)
-- `rollStats` 2885
-- `sgn` 2909
-- `pctTxt` 2910
-- `evidenceAt` 2913
-- `computeResearch` 2968
-- `refreshResearch` 2999
-- `regimeChip` 3008
-- `researchChart` 3013
-- `renderResearch0` 3024
-- `renderResearch` 3072
+**2890** · 15. 시장 리서치 — 시장 국면(상승·중립·하락)을 여러 근거로 판정 (인버스 엔진의 기준)
+- `rollStats` 2899
+- `sgn` 2923
+- `pctTxt` 2924
+- `evidenceAt` 2927
+- `computeResearch` 2982
+- `refreshResearch` 3013
+- `regimeChip` 3022
+- `researchChart` 3027
+- `renderResearch0` 3038
+- `renderResearch` 3086
 
-**3080** · 16. 리서치 센터 — 섹터 분석 · 시나리오 가이드 · 뉴스 (큰 창)
-- `classify` 3123
-- `setSectors` 3130
-- `loadSectors` 3135
-- `sectorOf` 3143
-- `scenarioCodes` 3205
+**3094** · 16. 리서치 센터 — 섹터 분석 · 시나리오 가이드 · 뉴스 (큰 창)
+- `classify` 3137
+- `setSectors` 3144
+- `loadSectors` 3149
+- `sectorOf` 3157
+- `scenarioCodes` 3219
 
-**3207** · ---- 계산 도우미 (저장된 일봉 기준)
-- `retN` 3208
-- `aboveMa` 3214
-- `median` 3222
-- `avg` 3223
-- `sectorStats` 3225
+**3221** · ---- 계산 도우미 (저장된 일봉 기준)
+- `retN` 3222
+- `aboveMa` 3228
+- `median` 3236
+- `avg` 3237
+- `sectorStats` 3239
 
-**3243** · ---- 뉴스
-- `getNews` 3245
-- `agoTxt` 3252
-- `newsList` 3253
+**3257** · ---- 뉴스
+- `getNews` 3259
+- `agoTxt` 3266
+- `newsList` 3267
 
-**3257** · ---- 시나리오: 지금 뉴스량 + 가격 반영 여부
-- `scenarioEval` 3259
-- `loadScenarioNews` 3269
+**3271** · ---- 시나리오: 지금 뉴스량 + 가격 반영 여부
+- `scenarioEval` 3273
+- `loadScenarioNews` 3283
 
-**3279** · ---- 화면
-- `chg` 3281
-- `heat` 3282
-- `stockLink` 3283
-- `renderSectorTab` 3285
-- `renderSectorDetail` 3307
-- `renderScenarioTab` 3323
-- `renderNewsTab` 3350
-- `renderCenter` 3358
-- `openCenter` 3372
-- `runNews` 3381
-- `fetchSector` 3389
+**3293** · ---- 화면
+- `chg` 3295
+- `heat` 3296
+- `stockLink` 3297
+- `renderSectorTab` 3299
+- `renderSectorDetail` 3321
+- `renderScenarioTab` 3337
+- `renderNewsTab` 3364
+- `renderCenter` 3372
+- `openCenter` 3386
+- `runNews` 3395
+- `fetchSector` 3403
 
-**3446** · 17. 매매 시간대 (기본 15:00~15:20) — 종가 동시호가 전에 '좋은 자리'에서 체결
-- `nearCodes` 3457
-- `liveBar` 3469
-- `winRange` 3475
-- `winLog` 3478
-- `winScan` 3483
-- `winEvaluate` 3500
-- `winStep` 3523
-- `winFinish` 3587
-- `windowTick` 3608
-- `renderWindow` 3629
-- `loadMoreBars` 3637
+**3460** · 17. 매매 시간대 (기본 15:00~15:20) — 종가 동시호가 전에 '좋은 자리'에서 체결
+- `nearCodes` 3471
+- `liveBar` 3483
+- `winRange` 3489
+- `winLog` 3492
+- `winScan` 3497
+- `winEvaluate` 3514
+- `winStep` 3537
+- `winFinish` 3601
+- `windowTick` 3622
+- `renderWindow` 3643
+- `loadMoreBars` 3651
 
-**3643** · 18. 리서치 센터 첫 화면 — 시장 브리핑 (한눈에 보는 지금 시장)
-- `loadBriefNews` 3649
-- `briefFacts` 3667
-- `loadAi` 3688
-- `renderBriefTab` 3702
+**3657** · 18. 리서치 센터 첫 화면 — 시장 브리핑 (한눈에 보는 지금 시장)
+- `loadBriefNews` 3663
+- `briefFacts` 3681
+- `loadAi` 3702
+- `renderBriefTab` 3716
 
-**3746** · 19. AI 분석 설정 — 제공사(Claude·Gemini) · 모델 · 키. 키는 '기억'을 켤 때만 이 브라우저에 저장
-- `aiCfg` 3750
-- `saveAiCfg` 3756
-- `aiReady` 3760
-- `aiPayload` 3763
-- `renderAiBox` 3766
-- `modelKind` 3781
-- `readAiBox` 3787
+**3760** · 19. AI 분석 설정 — 제공사(Claude·Gemini) · 모델 · 키. 키는 '기억'을 켤 때만 이 브라우저에 저장
+- `aiCfg` 3764
+- `saveAiCfg` 3770
+- `aiReady` 3774
+- `aiPayload` 3777
+- `renderAiBox` 3780
+- `modelKind` 3795
+- `readAiBox` 3801
 
-**3846** · 20. AI 비서 — 선택·주문·체결마다 코멘트, 주문 전 실수 방지 점검, 매매 기록·전략 과거 데이터 패턴 분석
-- `saveFeed` 3851
-- `pushFeed` 3852
-- `aiAuto` 3857
-- `askAi` 3858
+**3860** · 20. AI 비서 — 선택·주문·체결마다 코멘트, 주문 전 실수 방지 점검, 매매 기록·전략 과거 데이터 패턴 분석
+- `saveFeed` 3865
+- `pushFeed` 3866
+- `aiAuto` 3871
+- `askAi` 3872
 
-**3864** · ---- 진입 시점 상황 기록 (나중에 '어떤 조건에서 산 매매가 나빴나'를 계산하는 재료)
-- `featuresAt` 3865
-- `entryCtx` 3880
+**3878** · ---- 진입 시점 상황 기록 (나중에 '어떤 조건에서 산 매매가 나빴나'를 계산하는 재료)
+- `featuresAt` 3879
+- `entryCtx` 3894
 
-**3885** · ---- 매매 분석: 조건별로 묶어 승률·평균 수익률 비교 → 나쁜 조건 찾기
-- `analyzeTrades` 3895
-- `btTrades` 3925
-- `myTrades` 3938
-- `journal` 3941
-- `statLine` 3948
+**3899** · ---- 매매 분석: 조건별로 묶어 승률·평균 수익률 비교 → 나쁜 조건 찾기
+- `analyzeTrades` 3909
+- `btTrades` 3939
+- `myTrades` 3952
+- `journal` 3955
+- `statLine` 3962
 
-**3958** · ---- 주문 전 실수 방지 점검
-- `guardCheck` 3959
-- `showGuard` 4003
-- `guardedSubmit` 4019
+**3972** · ---- 주문 전 실수 방지 점검
+- `guardCheck` 3973
+- `showGuard` 4017
+- `guardedSubmit` 4033
 
-**4025** · ---- 종목 선택: 숫자 브리프 + (자동) AI 코멘트
-- `stockFacts` 4026
-- `briefLines` 4053
-- `assistOnSelect` 4066
+**4039** · ---- 종목 선택: 숫자 브리프 + (자동) AI 코멘트
+- `stockFacts` 4040
+- `briefLines` 4067
+- `assistOnSelect` 4080
 
-**4083** · ---- 체결 직후 코멘트
-- `assistOnTrade` 4084
+**4097** · ---- 체결 직후 코멘트
+- `assistOnTrade` 4098
 
-**4099** · ---- 화면
-- `renderAssistStrip` 4100
-- `tableOf` 4107
-- `renderAssist` 4119
-- `foldOpen` 4150
-- `fold` 4151
-- `runAsk` 4184
-- `calDays` 4202
+**4113** · ---- 화면
+- `renderAssistStrip` 4114
+- `tableOf` 4121
+- `renderAssist` 4133
+- `foldOpen` 4164
+- `fold` 4165
+- `runAsk` 4198
+- `calDays` 4216
 
-**4208** · 21. 비서와 대화 — 이어지는 대화 · 음성 입력(Gemini 받아쓰기 / 브라우저 음성 인식) · 음성 답변(브라우저 TTS)
-- `saveChat` 4213
-- `marketRadarFacts` 4215
-- `assistFacts` 4232
-- `renderChat` 4250
+**4222** · 21. 비서와 대화 — 이어지는 대화 · 음성 입력(Gemini 받아쓰기 / 브라우저 음성 인식) · 음성 답변(브라우저 TTS)
+- `saveChat` 4227
+- `marketRadarFacts` 4229
+- `assistFacts` 4246
+- `renderChat` 4264
 
-**4264** · ---- AI 비서 화면 조작: 답 끝의 '<<명령>> [...]'을 실행 — 보기 변경은 바로, 주문·즉시매도·설정은 확인 창을 거쳐서
-- `screenFacts` 4265
-- `grabActs` 4276
-- `splitActions` 4291
-- `plainSay` 4309
-- `describeAct` 4313
-- `findCode` 4335
-- `confirmAct` 4344
-- `runAction` 4359
-- `settingAct` 4451
-- `orderAct` 4475
-- `runActions` 4489
+**4278** · ---- AI 비서 화면 조작: 답 끝의 '<<명령>> [...]'을 실행 — 보기 변경은 바로, 주문·즉시매도·설정은 확인 창을 거쳐서
+- `screenFacts` 4279
+- `grabActs` 4290
+- `splitActions` 4305
+- `plainSay` 4323
+- `describeAct` 4327
+- `findCode` 4349
+- `confirmAct` 4358
+- `runAction` 4373
+- `settingAct` 4465
+- `orderAct` 4489
+- `runActions` 4503
 
-**4499** · ---- AI가 만드는 내 도구: 위젯(떠 있는 창) · 차트 지표 · 화면 스타일
-- `custom` 4503
-- `saveCustom` 4507
-- `safeId` 4510
-- `attr` 4511
-- `splitBlocks` 4513
-- `applyBlocks` 4521
-- `applyCss` 4549
-- `calcInd` 4562
-- `drawCustomInd` 4571
-- `jsonSafe` 4616
-- `widgetData` 4617
-- `renderWidgets` 4648
-- `renderCustomBox` 4687
-- `customFacts` 4709
+**4513** · ---- AI가 만드는 내 도구: 위젯(떠 있는 창) · 차트 지표 · 화면 스타일
+- `custom` 4517
+- `saveCustom` 4521
+- `safeId` 4524
+- `attr` 4525
+- `splitBlocks` 4527
+- `applyBlocks` 4535
+- `applyCss` 4563
+- `calcInd` 4576
+- `drawCustomInd` 4585
+- `jsonSafe` 4630
+- `widgetData` 4631
+- `renderWidgets` 4662
+- `renderCustomBox` 4701
+- `customFacts` 4723
 
-**4717** · ---- 실계좌 주문 (중계기를 'python nh_bridge.py --ask --trade' 로 켰을 때만)
-- `realRefresh` 4720
-- `realConfirm` 4729
-- `realSubmit` 4747
-- `realCancel` 4778
-- `realArm` 4784
-- `realKill` 4794
-- `renderReal` 4799
-- `realFacts` 4835
+**4731** · ---- 실계좌 주문 (중계기를 'python nh_bridge.py --ask --trade' 로 켰을 때만)
+- `realRefresh` 4734
+- `realConfirm` 4743
+- `realSubmit` 4761
+- `realCancel` 4792
+- `realArm` 4798
+- `realKill` 4808
+- `renderReal` 4813
+- `realFacts` 4849
 
-**4841** · ---- 차트 구간 표시: 매수~매도 구간을 드래그로 찍어 수치 분석 · AI 의견 · 내 예시로 학습
-- `rangeIdx` 4844
-- `setRangeMode` 4849
-- `analyzeRange` 4857
-- `similarSpots` 4886
-- `startRange` 4911
-- `endRange` 4918
-- `openRangeCard` 4928
-- `renderRangeCard` 4934
-- `rangeFacts` 4957
-- `saveMark` 4963
-- `drawRanges` 4997
-- `openMark` 5036
-- `marksFacts` 5043
-- `marksFold` 5048
-- `verTxt` 5063
-- `checkPageVersion` 5067
+**4855** · ---- 차트 구간 표시: 매수~매도 구간을 드래그로 찍어 수치 분석 · AI 의견 · 내 예시로 학습
+- `rangeIdx` 4858
+- `setRangeMode` 4863
+- `analyzeRange` 4871
+- `similarSpots` 4900
+- `startRange` 4925
+- `endRange` 4932
+- `openRangeCard` 4942
+- `renderRangeCard` 4948
+- `rangeFacts` 4971
+- `saveMark` 4977
+- `drawRanges` 5011
+- `openMark` 5050
+- `marksFacts` 5057
+- `marksFold` 5062
+- `verTxt` 5077
+- `checkPageVersion` 5081
 
-**5087** · ---- 내 매매 규칙: 비서가 말로 들은 매수·매도 조건을 코드로 만들어 신호·백테스트·자동매매·차트에 바로 적용
-- `ruleOn` 5106
-- `runRule` 5109
-- `computeRules` 5119
-- `dataSig` 5134
-- `ruleTick` 5136
-- `exitSignal` 5141
-- `btBrief` 5148
-- `btDiff` 5149
-- `selSignals` 5155
-- `setRule` 5162
-- `renderRules` 5172
-- `rulesFacts` 5203
-- `drawStrategyMarks` 5208
+**5101** · ---- 내 매매 규칙: 비서가 말로 들은 매수·매도 조건을 코드로 만들어 신호·백테스트·자동매매·차트에 바로 적용
+- `ruleOn` 5120
+- `runRule` 5123
+- `computeRules` 5133
+- `dataSig` 5148
+- `ruleTick` 5150
+- `stopPrice` 5157
+- `exitOrStop` 5161
+- `exitSignal` 5166
+- `btBrief` 5173
+- `btDiff` 5174
+- `selSignals` 5180
+- `setRule` 5187
+- `renderRules` 5197
+- `rulesFacts` 5228
+- `drawStrategyMarks` 5233
 
-**5236** · ---- 먼저 말 거는 비서: 장중에 상황이 바뀌면 비서가 먼저 알림 (화면 카드 + 대화창 + 음성 + 창이 가려져 있으면 OS 알림)
-- `alertCfg` 5239
-- `saveAlertCfg` 5240
-- `alertSeen` 5241
-- `alertOnce` 5242
-- `raiseAlert` 5249
-- `flushSay` 5258
-- `showAlertCard` 5265
-- `hm2min` 5277
-- `alertTick` 5279
-- `realFillCheck` 5318
-- `renderAlertBtn` 5327
+**5261** · ---- 먼저 말 거는 비서: 장중에 상황이 바뀌면 비서가 먼저 알림 (화면 카드 + 대화창 + 음성 + 창이 가려져 있으면 OS 알림)
+- `alertCfg` 5264
+- `saveAlertCfg` 5265
+- `alertSeen` 5266
+- `alertOnce` 5267
+- `raiseAlert` 5274
+- `flushSay` 5283
+- `showAlertCard` 5290
+- `hm2min` 5302
+- `alertTick` 5304
+- `realFillCheck` 5343
+- `renderAlertBtn` 5352
 
-**5340** · ---- 조건 비교 실험실: 여러 설정을 나란히 백테스트 + 기간을 앞·뒤로 나눠 '앞에서 좋았던 게 뒤에서도 통하나' 확인
-- `backtestWith` 5341
-- `backtestWithRule` 5354
-- `halfStats` 5371
-- `setLabel` 5390
-- `compareVariants` 5392
-- `variantsFrom` 5422
-- `runCompare` 5427
-- `tableHtml` 5437
+**5365** · ---- 조건 비교 실험실: 여러 설정을 나란히 백테스트 + 기간을 앞·뒤로 나눠 '앞에서 좋았던 게 뒤에서도 통하나' 확인
+- `backtestWith` 5366
+- `backtestWithRule` 5379
+- `halfStats` 5396
+- `setLabel` 5415
+- `compareVariants` 5417
+- `variantsFrom` 5447
+- `runCompare` 5452
+- `tableHtml` 5462
 
-**5438** · ---- 표시한 구간에서 규칙 뽑기: 👍 예시들의 매수일 공통점을 찾아 매수 규칙 초안을 만들고 숫자로 검증
-- `featRow` 5452
-- `markIndex` 5453
-- `roundT` 5462
-- `extractRule` 5463
-- `runExtract` 5512
-- `extractFacts` 5542
+**5463** · ---- 표시한 구간에서 규칙 뽑기: 👍 예시들의 매수일 공통점을 찾아 매수 규칙 초안을 만들고 숫자로 검증
+- `featRow` 5477
+- `markIndex` 5478
+- `roundT` 5487
+- `extractRule` 5488
+- `runExtract` 5537
+- `extractFacts` 5567
 
-**5543** · ---- 기록 내보내기·불러오기 — 설정·관심종목·모의 계좌·👍 표시·매매 규칙·일지·차트 그림을 파일 하나로
-- `exportRecords` 5545
-- `importRecords` 5555
+**5568** · ---- 기록 내보내기·불러오기 — 설정·관심종목·모의 계좌·👍 표시·매매 규칙·일지·차트 그림을 파일 하나로
+- `exportRecords` 5570
+- `importRecords` 5580
 
-**5576** · ---- 말로 종목 찾기: 비서가 조건을 코드로 짜면 불러온 모든 종목의 최근 일봉에서 맞는 종목을 표로
-- `runScreen` 5577
+**5601** · ---- 말로 종목 찾기: 비서가 조건을 코드로 짜면 불러온 모든 종목의 최근 일봉에서 맞는 종목을 표로
+- `runScreen` 5602
 
-**5614** · ---- 비서가 차트에 그리기: 가격선(지지·저항 등)과 날짜 메모. 종목별로 저장·동기화
-- `drawColor` 5616
-- `drawAct` 5617
-- `drawClearAct` 5636
-- `drawUserDraw` 5643
-- `drawLegend` 5671
-- `drawFacts` 5676
+**5639** · ---- 비서가 차트에 그리기: 가격선(지지·저항 등)과 날짜 메모. 종목별로 저장·동기화
+- `drawColor` 5641
+- `drawAct` 5642
+- `drawClearAct` 5661
+- `drawUserDraw` 5668
+- `drawLegend` 5696
+- `drawFacts` 5701
 
-**5678** · ---- 매매 일지: 모든 주문(모의·자동·실계좌)을 이유와 함께 남기고, 매도하면 그 매수 대비 수익을 붙임
-- `lastUserText` 5680
-- `journalAdd` 5681
-- `journalWhyAct` 5695
-- `journalFold` 5703
-- `journalFacts` 5730
+**5703** · ---- 매매 일지: 모든 주문(모의·자동·실계좌)을 이유와 함께 남기고, 매도하면 그 매수 대비 수익을 붙임
+- `lastUserText` 5705
+- `journalAdd` 5706
+- `journalWhyAct` 5720
+- `journalFold` 5728
+- `journalFacts` 5755
 
-**5742** · ---- 차트 꾸미기: 봉·볼린저·이평선 색, 이평선 기간, 보조지표 (차트 위 겹쳐 그리기 / 아래 칸)
-- `lookColor` 5745
-- `cl` 5756
-- `indDef` 5815
-- `indLabel` 5816
-- `clone` 5819
-- `normalizeLook` 5820
-- `lookSubs` 5834
-- `lookSeries` 5837
-- `strokeSeries` 5845
-- `fillBetween` 5852
-- `drawLookOverlays` 5862
-- `drawLookSubs` 5874
-- `numShort` 5913
-- `lookLegend` 5914
-- `renderLookCard` 5922
-- `lookChanged` 5941
-- `openLook` 5946
-- `lkSet` 5952
-- `lookAct` 5983
-- `lookFacts` 6026
+**5767** · ---- 차트 꾸미기: 봉·볼린저·이평선 색, 이평선 기간, 보조지표 (차트 위 겹쳐 그리기 / 아래 칸)
+- `lookColor` 5770
+- `cl` 5781
+- `indDef` 5840
+- `indLabel` 5841
+- `clone` 5844
+- `normalizeLook` 5845
+- `lookSubs` 5859
+- `lookSeries` 5862
+- `strokeSeries` 5870
+- `fillBetween` 5877
+- `drawLookOverlays` 5887
+- `drawLookSubs` 5899
+- `numShort` 5938
+- `lookLegend` 5939
+- `renderLookCard` 5947
+- `lookChanged` 5966
+- `openLook` 5971
+- `lkSet` 5977
+- `lookAct` 6008
+- `lookFacts` 6051
 
-**6028** · ---- 투자위원회 결재: 신호 → 안건 상정 → 리스크 점검표 + AI 리스크 브리핑(꼭 읽기) → 비서와 토론 → 내 결재 → 실행 → 사후 평가
-- `agendaOn` 6031
-- `agendaKey` 6032
-- `agendaFind` 6033
-- `equityNow` 6034
-- `freeCash` 6035
-- `planBuyQty` 6036
-- `agendaChecks` 6041
-- `agendaCreate` 6069
-- `agendaBrief` 6083
-- `agendaGate` 6098
-- `agendaDone` 6106
-- `winActiveFor` 6107
-- `paperBuyNow` 6109
-- `agendaExecNow` 6127
-- `agendaDecide` 6151
-- `agendaExpire` 6165
-- `agendaOutcome` 6172
-- `agendaHistLine` 6177
-- `renderAgenda` 6182
-- `agendaFacts` 6253
+**6053** · ---- 투자위원회 결재: 신호 → 안건 상정 → 리스크 점검표 + AI 리스크 브리핑(꼭 읽기) → 비서와 토론 → 내 결재 → 실행 → 사후 평가
+- `agendaOn` 6056
+- `agendaKey` 6057
+- `agendaFind` 6058
+- `equityNow` 6059
+- `freeCash` 6060
+- `planBuyQty` 6061
+- `agendaChecks` 6066
+- `agendaCreate` 6094
+- `agendaBrief` 6108
+- `agendaGate` 6123
+- `agendaDone` 6131
+- `winActiveFor` 6132
+- `paperBuyNow` 6134
+- `agendaExecNow` 6152
+- `agendaDecide` 6176
+- `agendaExpire` 6190
+- `agendaOutcome` 6197
+- `agendaHistLine` 6202
+- `renderAgenda` 6207
+- `agendaFacts` 6278
 
-**6263** · ---- 비서 단축 버튼 · 외부 Gemini 대화창 연동(지금 상황 복사 📋 / 받은 답 붙여 넣어 실행 📥)
-- `copyGeminiBrief` 6264
-- `applyExternalReply` 6274
+**6288** · ---- 비서 단축 버튼 · 외부 Gemini 대화창 연동(지금 상황 복사 📋 / 받은 답 붙여 넣어 실행 📥)
+- `copyGeminiBrief` 6289
+- `applyExternalReply` 6299
 
-**6305** · ---- 주요 지수: 위쪽 지수 띠(코스피·코스닥·미국 지수·환율) + 리서치센터 '지수 차트' (메인 차트를 그대로 옮겨 와 같은 차트로 봄)
-- `idxNum` 6311
-- `idxPct` 6312
-- `loadMarketQuotes` 6313
-- `renderIdxBar` 6320
-- `renderIndexTab` 6331
-- `renderIndexToolbar` 6340
-- `idxEnter` 6349
-- `idxExit` 6370
-- `marketFacts` 6381
+**6330** · ---- 주요 지수: 위쪽 지수 띠(코스피·코스닥·미국 지수·환율) + 리서치센터 '지수 차트' (메인 차트를 그대로 옮겨 와 같은 차트로 봄)
+- `idxNum` 6336
+- `idxPct` 6337
+- `loadMarketQuotes` 6338
+- `renderIdxBar` 6345
+- `renderIndexTab` 6356
+- `renderIndexToolbar` 6365
+- `idxEnter` 6374
+- `idxExit` 6395
+- `marketFacts` 6406
 
-**6385** · ---- 인버스 — 하락장 대응: 인버스 ETF 목록 관리 + 시장 국면이 하락이면 인버스(1배·2배) 안건 → 결재 → 실행, 국면 회복·반등·보유 기한이면 정리 안건
-- `invList` 6388
-- `invLevOf` 6389
-- `invHeld` 6390
-- `invDecision` 6392
-- `invEvaluate` 6410
-- `invExec` 6424
-- `invBacktest` 6438
-- `invBtLine` 6473
-- `renderInv` 6475
-- `invFacts` 6519
-- `invChecks` 6532
-- `chatSend` 6551
-- `convoNext` 6574
-- `convoToggle` 6580
-- `voiceSel` 6596
-- `stopSpeaking` 6598
-- `speechChunks` 6605
-- `pcmToWavBlob` 6612
-- `audioBlob` 6620
-- `speakText` 6625
-- `browserSpeak` 6659
-- `micToggle` 6673
-- `silenceMs` 6682
-- `endWait` 6687
-- `startSR` 6695
-- `startRecorder` 6746
+**6410** · ---- 인버스 — 하락장 대응: 인버스 ETF 목록 관리 + 시장 국면이 하락이면 인버스(1배·2배) 안건 → 결재 → 실행, 국면 회복·반등·보유 기한이면 정리 안건
+- `invList` 6413
+- `invLevOf` 6414
+- `invHeld` 6415
+- `invDecision` 6417
+- `invEvaluate` 6435
+- `invExec` 6449
+- `invBacktest` 6463
+- `invBtLine` 6498
+- `renderInv` 6500
+- `invFacts` 6544
+- `invChecks` 6557
 
-**6818** · 22. 매매 스타일 학습 — 작은 신경망(입력 9 → 은닉 12 → 출력 1)으로 '진입 조건 → 수익 여부'를 학습
-- `featVec` 6826
-- `mlpForward` 6831
-- `aucOf` 6836
-- `trainStyle` 6844
-- `retrainStyle` 6895
-- `predictWin` 6908
-- `predictBin` 6915
-- `styleProfile` 6922
-- `renderStyle` 6931
+**6576** · ---- 운용 현황: 전략으로 산 종목마다 지금 단계 · 손절선 · 매도선 · 다음 할 일 (산 뒤의 대응이 이 매매의 핵심)
+- `manageRows` 6577
+- `renderManage` 6588
+- `manageFacts` 6605
+- `chatSend` 6609
+- `convoNext` 6632
+- `convoToggle` 6638
+- `voiceSel` 6654
+- `stopSpeaking` 6656
+- `speechChunks` 6663
+- `pcmToWavBlob` 6670
+- `audioBlob` 6678
+- `speakText` 6683
+- `browserSpeak` 6717
+- `micToggle` 6731
+- `silenceMs` 6740
+- `endWait` 6745
+- `startSR` 6753
+- `startRecorder` 6804
+
+**6876** · 22. 매매 스타일 학습 — 작은 신경망(입력 9 → 은닉 12 → 출력 1)으로 '진입 조건 → 수익 여부'를 학습
+- `featVec` 6884
+- `mlpForward` 6889
+- `aucOf` 6894
+- `trainStyle` 6902
+- `retrainStyle` 6953
+- `predictWin` 6966
+- `predictBin` 6973
+- `styleProfile` 6980
+- `renderStyle` 6989
 
 ### 설정 키 (`DEFAULTS` — `SETTING_DEFS`에 화면 항목)
 
-`capital`, `slotPct`, `maxPos`, `slotAuto`, `approval`, `invOn`, `invEntry`, `invExit`, `invLev`, `invLevScore`, `invPct`, `invMaxDays`, `invExitMa`, `inv1`, `inv2`, `entryMode`, `sqPct`, `sqDrop`, `sqRange`, `lcWait`, `lcAtr`, `lcChg`, `lcDays`, `ma5Confirm`, `bbPeriod`, `bbStd`, `exitMa`, `pullbackPct`, `w1`, `w2`, `w3`, `scrMarket`, `scrMinValue`, `scrMinPrice`, `mktBars`, `nearPct`, `winStart`, `winEnd`, `volFilter`, `volMult`, `adxFilter`, `adxMin`, `rank`, `buyFee`, `sellFee`, `taxPct`, `slipPct`, `barCount`, `minCount`, `liveSec`, `listMin`, `rtMax`, `decisionTime`, `pollMin`
+`capital`, `slotPct`, `maxPos`, `slotAuto`, `approval`, `invOn`, `invEntry`, `invExit`, `invLev`, `invLevScore`, `invPct`, `invMaxDays`, `invExitMa`, `inv1`, `inv2`, `entryMode`, `sqPct`, `sqDrop`, `sqRange`, `sqZone`, `lcWait`, `lcAtr`, `lcChg`, `lcDays`, `ma5Confirm`, `bbPeriod`, `bbStd`, `exitMa`, `pullbackPct`, `stopMode`, `w1`, `w2`, `w3`, `scrMarket`, `scrMinValue`, `scrMinPrice`, `mktBars`, `nearPct`, `winStart`, `winEnd`, `volFilter`, `volMult`, `adxFilter`, `adxMin`, `rank`, `buyFee`, `sellFee`, `taxPct`, `slipPct`, `barCount`, `minCount`, `liveSec`, `listMin`, `rtMax`, `decisionTime`, `pollMin`
 
 ### `state` 키
 
@@ -715,7 +738,7 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 ## nh_bridge_core.py
 
-총 1,828줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
+총 1,829줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
 
 ### 주소 (POST JSON, 헤더에 토큰)
 
@@ -758,35 +781,35 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 - `_ask` 689
 - `ai_brief` 697
 - `ai_test` 710
-- `ai_ask` 843
-- `demo_daily` 869
-- `_hash01` 901
-- `demo_chart` 909
-- `Hub` 964
-- `_tick_size` 1003
-- `_tick_msg` 1010
-- `_book_msg` 1020
-- `Realtime` 1029
-- `DemoRealtime` 1210
-- `_state_path` 1263
-- `state_read` 1277
-- `state_write` 1286
-- `state_backup` 1307
-- `trade_available` 1339
-- `acct_mask` 1343
-- `_day_used` 1347
-- `_day_add` 1356
-- `nh_trade_post` 1373
-- `_msg` 1393
-- `_block` 1400
-- `trade_check_acct` 1405
-- `trade_status` 1427
-- `trade_log` 1436
-- `trade_order` 1442
-- `trade_cancel` 1498
-- `trade_balance` 1514
-- `trade_orders` 1535
-- `Handler` 1554
-- `ExclusiveServer` 1761
-- `hidden_input` 1772
-- `main` 1793
+- `ai_ask` 844
+- `demo_daily` 870
+- `_hash01` 902
+- `demo_chart` 910
+- `Hub` 965
+- `_tick_size` 1004
+- `_tick_msg` 1011
+- `_book_msg` 1021
+- `Realtime` 1030
+- `DemoRealtime` 1211
+- `_state_path` 1264
+- `state_read` 1278
+- `state_write` 1287
+- `state_backup` 1308
+- `trade_available` 1340
+- `acct_mask` 1344
+- `_day_used` 1348
+- `_day_add` 1357
+- `nh_trade_post` 1374
+- `_msg` 1394
+- `_block` 1401
+- `trade_check_acct` 1406
+- `trade_status` 1428
+- `trade_log` 1437
+- `trade_order` 1443
+- `trade_cancel` 1499
+- `trade_balance` 1515
+- `trade_orders` 1536
+- `Handler` 1555
+- `ExclusiveServer` 1762
+- `hidden_input` 1773
+- `main` 1794
