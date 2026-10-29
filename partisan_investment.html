@@ -106,6 +106,7 @@
         <button type="button" data-universe="K200" class="uni-tab flex-1 py-1.5">코스피200</button>
         <button type="button" data-universe="Q150" class="uni-tab flex-1 py-1.5">코스닥150</button>
         <button type="button" data-universe="ALL" class="uni-tab flex-1 py-1.5" title="전체 시장에서 검색식 조건을 통과한 종목">검색식</button>
+        <button type="button" data-universe="INV" class="uni-tab flex-1 py-1.5" title="인버스 ETF — 하락장 대응 (모의투자 탭 아래에서 관리)">인버스</button>
       </div>
       <button id="scrBar" type="button" class="hidden text-left px-2 py-1 border-b border-[#e6e6e6] text-[10px] text-[#666666] leading-snug hover:bg-[#fafafa]" title="검색식 조건 바꾸기 (설정)"></button>
       <div class="flex items-center gap-1 px-1.5 py-1 border-b border-[#e6e6e6] text-[10px]">
@@ -177,7 +178,7 @@
           <div id="chatBox" class="border border-[#111111]">
             <div class="flex items-center justify-between px-2 py-0.5 text-[10px] text-[#888888] bg-[#fafafa]"><span>비서와 대화</span><span class="flex items-center gap-1.5"><button id="btnCopyBrief" type="button" class="underline text-[#111111]" title="지금 화면 상황(계좌·신호·스퀴즈·차트)을 복사 — 외부 Gemini 대화창에 붙여 넣기">📋 상황 복사</button><button id="btnPasteCmd" type="button" class="underline text-[#111111]" title="외부 Gemini에서 받은 답(명령·규칙·위젯)을 붙여 넣어 실행">📥 답 적용</button><button id="btnChatClear" type="button" class="underline">지우기</button></span></div>
             <div id="pasteCmdBox" class="hidden p-1.5 bg-[#fafafa] border-b border-[#e6e6e6] space-y-1"><textarea id="inpPasteCmd" rows="3" class="w-full text-[10px] border border-[#d4d4d4] p-1" placeholder="외부 Gemini에서 받은 답(<<명령>>, <<규칙>>, <<위젯>> 포함)을 붙여 넣고 '실행'을 누르세요. 주문·설정은 똑같이 확인 창을 거쳐요."></textarea><div class="flex justify-end gap-1"><button type="button" id="btnRunPaste" class="btn-on px-2 py-0.5 text-[10px]">실행</button><button type="button" id="btnClosePaste" class="btn px-2 py-0.5 text-[10px]">닫기</button></div></div>
-            <div id="quickPrompts" class="flex flex-wrap gap-1 px-1.5 py-1 border-b border-[#f0f0f0]"><button type="button" data-qp="radar" class="btn px-1.5 py-0.5 text-[10px]" title="오늘 돌파 신호·스퀴즈 종목 중 눈여겨볼 후보 비교">🎯 오늘 후보 비교</button><button type="button" data-qp="hold" class="btn px-1.5 py-0.5 text-[10px]" title="보유 종목의 매도선 거리·위험 점검">🛡 보유 점검</button><button type="button" data-qp="draw" class="btn px-1.5 py-0.5 text-[10px]" title="지금 종목 차트에 지지·저항선과 메모 그리기">📏 지지·저항</button><button type="button" data-qp="lab" class="btn px-1.5 py-0.5 text-[10px]" title="스퀴즈·장대양봉 대기 방식을 백테스트로 비교">🧪 전략 비교</button></div>
+            <div id="quickPrompts" class="flex flex-wrap gap-1 px-1.5 py-1 border-b border-[#f0f0f0]"><button type="button" data-qp="radar" class="btn px-1.5 py-0.5 text-[10px]" title="오늘 돌파 신호·스퀴즈 종목 중 눈여겨볼 후보 비교">🎯 오늘 후보 비교</button><button type="button" data-qp="hold" class="btn px-1.5 py-0.5 text-[10px]" title="보유 종목의 매도선 거리·위험 점검">🛡 보유 점검</button><button type="button" data-qp="draw" class="btn px-1.5 py-0.5 text-[10px]" title="지금 종목 차트에 지지·저항선과 메모 그리기">📏 지지·저항</button><button type="button" data-qp="inv" class="btn px-1.5 py-0.5 text-[10px]" title="시장 국면으로 인버스가 필요한지 점검">📉 인버스 점검</button><button type="button" data-qp="lab" class="btn px-1.5 py-0.5 text-[10px]" title="스퀴즈·장대양봉 대기 방식을 백테스트로 비교">🧪 전략 비교</button></div>
             <div id="chatList" class="max-h-72 min-h-[90px] overflow-y-auto scroll p-2 space-y-1.5"></div>
             <div class="flex gap-1 p-1.5 border-t border-[#f0f0f0]"><input id="chatInput" type="text" class="flex-1 min-w-0 text-[11px]" placeholder="비서에게 묻기…" autocomplete="off" /><button id="btnChatSend" type="button" class="btn-on px-2 text-[11px]">보내기</button></div>
             <div class="flex flex-wrap gap-1 px-1.5 pb-1.5"><button id="btnAlert" type="button" class="btn px-2 py-0.5 text-[11px]" title="장중에 비서가 먼저 알림 — 누를 때마다 소리 켬 → 화면만 → 끔"></button><button id="btnConvo" type="button" class="btn px-2 py-0.5 text-[11px]" title="말하면 듣고, 소리로 답한 뒤 다시 듣기 — 버튼을 누르지 않고 대화">🗣 대화 모드</button><button id="btnMic" type="button" class="btn px-2 py-0.5 text-[11px]">🎤 말하기</button><button id="btnSpeak" type="button" class="btn px-2 py-0.5 text-[11px]"></button></div>
@@ -218,6 +219,7 @@
           <div id="syncState" class="text-[10px] text-[#888888]"></div>
           <div id="paperAcct" class="num text-[11px] bg-[#fafafa] border border-[#e6e6e6] px-2 py-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5"></div>
           <div id="agendaBox" class="space-y-1.5"></div>
+          <div id="invBox" class="border border-[#e6e6e6] p-1.5 space-y-1"></div>
 
           <!-- 선택 종목이 보유 중이면: 보유 정보 · 즉시 매도 -->
           <div id="holdInfo" class="hidden border border-[#111111] px-2 py-1.5 text-[11px] space-y-0.5"></div>
@@ -342,6 +344,7 @@
     const UNIVERSE_ETF = { K200: '069500', Q150: '229200' };   // KODEX 200 · KODEX 코스닥150 구성종목으로 지수 종목 목록 대용
     const DEFAULTS = {
       capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true, approval: true,
+      invOn: false, invEntry: -30, invExit: -10, invLev: 'AUTO', invLevScore: -60, invPct: 30, invMaxDays: 15, invExitMa: 10, inv1: '114800', inv2: '252670',
       entryMode: 'ALL', sqPct: 15, sqDrop: 30, sqRange: 60, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false,
       bbPeriod: 200, bbStd: 2.0,
       exitMa: 5, pullbackPct: 1.5,
@@ -382,6 +385,17 @@
         { k: 'lcChg', label: '장대양봉: 또는 그날 상승률 % 이상', min: 3, max: 30, step: 1 },
         { k: 'lcDays', label: '장대양봉 뒤 기다리는 최대 일수', min: 5, max: 40, step: 1 },
         { k: 'ma5Confirm', label: '매수 타이밍: 신호 뒤 2일 연속 종가가 5일선 위면 둘째 날 매수', type: 'bool' }] },
+      { group: '인버스 — 하락장 대응 (시장 국면 점수 기준)', items: [
+        { k: 'invOn', label: '시장 국면이 하락이면 인버스 안건 자동으로 올리기 (결재 후 실행)', type: 'bool' },
+        { k: 'invEntry', label: '진입: 국면 점수가 이 값 이하', min: -100, max: 0, step: 5 },
+        { k: 'invLev', label: '배수', type: 'select', opts: [['AUTO', '자동 (아래 점수 이하면 2배)'], ['1X', '항상 1배'], ['2X', '항상 2배']] },
+        { k: 'invLevScore', label: '자동일 때 2배로: 점수가 이 값 이하', min: -100, max: 0, step: 5 },
+        { k: 'invExit', label: '정리: 국면 점수가 이 값 이상으로 회복', min: -100, max: 50, step: 5 },
+        { k: 'invExitMa', label: '정리: 인버스 종가가 N일선 아래 (0이면 안 씀)', min: 0, max: 60, step: 1 },
+        { k: 'invMaxDays', label: '2배 인버스 최대 보유일', min: 3, max: 60, step: 1 },
+        { k: 'invPct', label: '인버스 비중 (평가자산 %)', min: 5, max: 100, step: 5 },
+        { k: 'inv1', label: '1배 상품', type: 'select', opts: [['114800', 'KODEX 인버스'], ['123310', 'TIGER 인버스'], ['145670', 'ACE 인버스'], ['251340', 'KODEX 코스닥150선물인버스']] },
+        { k: 'inv2', label: '2배 상품', type: 'select', opts: [['252670', 'KODEX 200선물인버스2X'], ['252710', 'TIGER 200선물인버스2X'], ['253230', 'KIWOOM 200선물인버스2X']] }] },
       { group: '청산 — 손절 없음', items: [
         { k: 'exitMa', label: '종가가 N일 이동평균선 아래면 매도 (N)', min: 2, max: 60, step: 1 }] },
       { group: '검색식 — 전체 시장 종목군', items: [
@@ -437,6 +451,8 @@
       rules: { entry: null, exit: null },   // 비서가 만든 내 매수·매도 규칙
       journal: [],       // 매매 일지 (모든 주문 + 이유 + 매도 수익)
       draw: {},          // 비서가 차트에 그린 선·메모 (종목별)
+      invList: [{ code: '114800', lev: 1 }, { code: '252670', lev: 2 }, { code: '123310', lev: 1 }, { code: '252710', lev: 2 }, { code: '251340', lev: 1 }],   // 인버스 ETF 목록 (배수)
+      invBt: null,       // 인버스 규칙 백테스트 결과 (저장 안 함)
       idxView: null,     // 리서치센터에서 지수 차트를 보는 중이면 { sym, name, bars } — 차트가 이 봉을 그림
       agenda: [],        // 결재 안건 (신호 → 내 결재 → 실행) + 결정 기록
       view: { end: null, span: 160 },
@@ -458,6 +474,7 @@
       if (d.draw && typeof d.draw === 'object') state.draw = d.draw;
       if (d.look && typeof d.look === 'object') state.look = normalizeLook(d.look);
       if (Array.isArray(d.agenda)) state.agenda = d.agenda;
+      if (Array.isArray(d.invList)) state.invList = d.invList.filter((x) => x && /^[0-9A-Z]{6}$/.test(x.code)).map((x) => ({ code: x.code, lev: x.lev === 2 ? 2 : 1 }));
     }
     function loadStore() {
       try {
@@ -482,7 +499,7 @@
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify({
           cfg: state.cfg, watch: state.watch, universe: state.universe, bridgeUrl: state.bridge.url,
-          paper: state.paper, names: state.names, tab: state.tab, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look, agenda: state.agenda,
+          paper: state.paper, names: state.names, tab: state.tab, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look, agenda: state.agenda, invList: state.invList,
           lists: state.lists, listsAt: state.listsAt, sel: state.selected, tf: state.tf, ui: state.ui, lastMode: state.lastMode
         }));
       } catch (_) {}
@@ -659,7 +676,7 @@
     // 긴 일봉(barCount)을 저장할 종목 — 지수 구성종목·관심·보유·지수 ETF. 나머지 전체 시장 종목은 mktBars 만큼만
     function isCore(code) {
       return state.lists.K200.includes(code) || state.lists.Q150.includes(code) || state.watch.includes(code) || code === state.selected
-        || ['069500', '229200'].includes(code) || !!(state.paper && (state.paper.positions[code] || (state.paper.manual && state.paper.manual[code])));
+        || ['069500', '229200'].includes(code) || state.invList.some((x) => x.code === code) || !!(state.paper && (state.paper.positions[code] || (state.paper.manual && state.paper.manual[code])));
     }
     function applyDaily(code, r) {
       state.data[code] = { name: r.name, bars: r.bars, quote: r.quote };
@@ -1055,6 +1072,7 @@
     let uniCache = { key: '', codes: [] };
     function universeCodes(u = state.universe) {
       if (u === 'WATCH') return state.watch.slice();
+      if (u === 'INV') return state.invList.map((x) => x.code);
       if (u === 'ALL') {
         const c = state.cfg;
         const key = [Object.keys(state.data).length, master.items.length, c.scrMarket, c.scrMinValue, c.scrMinPrice, c.bbPeriod, state.watch.join(','), Math.floor(Date.now() / 30000)].join('|');
@@ -1585,7 +1603,7 @@
       const kp = document.getElementById('btKpis');
       if (!bt || !bt.curve.length) { kp.innerHTML = ''; document.getElementById('tradeBody').innerHTML = ''; drawEquity(); return; }
       const s = bt.stats, c = state.cfg;
-      note.innerHTML = `${{ WATCH: '관심종목', K200: '코스피200', Q150: '코스닥150', ALL: '전체' }[state.universe]} ${bt.codes.length}종목 · ${fmtDate(bt.firstT)} ~ ${fmtDate(bt.lastT)} (${bt.years.toFixed(1)}년) · 자금 ${won(c.capital)}원 · 종목당 ${c.slotAuto ? `평가자산÷${c.maxPos} (복리)` : `${c.slotPct}%`} · 최대 ${c.maxPos}종목 · 왕복 비용 약 ${((costBuy() + costSell()) * 100).toFixed(2)}%` +
+      note.innerHTML = `${{ WATCH: '관심종목', K200: '코스피200', Q150: '코스닥150', ALL: '전체', INV: '인버스' }[state.universe]} ${bt.codes.length}종목 · ${fmtDate(bt.firstT)} ~ ${fmtDate(bt.lastT)} (${bt.years.toFixed(1)}년) · 자금 ${won(c.capital)}원 · 종목당 ${c.slotAuto ? `평가자산÷${c.maxPos} (복리)` : `${c.slotPct}%`} · 최대 ${c.maxPos}종목 · 왕복 비용 약 ${((costBuy() + costSell()) * 100).toFixed(2)}%` +
         (s.n < 30 ? ' · <span class="text-[#e5383b]">⚠ 거래 30건 미만 — 우연일 수 있음</span>' : '') +
         (state.bridge.demo ? ' · <span class="text-[#e5383b]">데모 데이터</span>' : '') +
         (c.entryMode === 'SQ' ? ` · 진입: 200일 스퀴즈 돌파만${c.barCount < 2000 ? ` <span class="text-[#e5383b]">(일봉 ${c.barCount}개로는 최근 약 ${Math.max(0, (c.barCount - 700) / 250).toFixed(1)}년만 판정 가능 — 설정 '저장할 일봉 수'를 3000으로)</span>` : ''}` : '') +
@@ -1942,11 +1960,14 @@
           const i = idxOf(code), bars = state.data[code].bars;
           if (i >= 1 && isBreakout(bars, i) && !agendaFind(code, 'BUY')) { agendaCreate(code, 'BUY', { note: entryLabel(bars, i), price: lastPrice(code) || bars[i].c, src: 'manual' }); n++; }
         });
+        const iv = invEvaluate('manual');
+        if (iv && (iv.act === 'buy' || iv.act === 'sell')) n++;
         plog('판단 완료', '', `결재제 — 새 안건 ${n}건을 결재함에 올림`);
         saveStore(); renderPaper(); renderAgenda(true);
         toast(n ? `[모의] 결재할 안건 ${n}건을 올렸어요 — 모의투자 탭 결재함` : '[모의] 새 안건이 없어요');
         return;
       }
+      invEvaluate('manual');   // 완전 자동이면 인버스도 바로 주문
       for (const code of Object.keys(p.positions)) {
         const d = state.data[code];
         if (!d) continue;
@@ -2741,7 +2762,7 @@
       try { localStorage.setItem(SYNC_KEY, JSON.stringify({ rev: sync.rev, saved: sync.saved, device: sync.device, dirty: sync.dirty, hash: sync.hash })); } catch (_) {}
     }
     function syncPayload() {
-      return { cfg: state.cfg, watch: state.watch, universe: state.universe, paper: state.paper, names: state.names, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look, agenda: state.agenda };
+      return { cfg: state.cfg, watch: state.watch, universe: state.universe, paper: state.paper, names: state.names, marks: state.marks, rules: state.rules, journal: state.journal, draw: state.draw, look: state.look, agenda: state.agenda, invList: state.invList };
     }
     function hasActivity() {
       const p = state.paper;
@@ -3494,6 +3515,7 @@
           if (agendaOn()) agendaCreate(code, 'BUY', { note: win.watch[code].note, price: lastPrice(code), src: 'window' });
         }
       });
+      if (state.cfg.invOn) invEvaluate('window');   // 인버스: 하락장이면 안건
       rtSubscribe(); renderPaper();
     }
 
@@ -4333,7 +4355,7 @@
       });
     }
     const TAB_NAMES = { assist: '비서', bt: '백테스트', paper: '모의투자', set: '설정' };
-    const UNI_NAMES = { WATCH: '관심', K200: '코스피200', Q150: '코스닥150', ALL: '검색식' };
+    const UNI_NAMES = { WATCH: '관심', K200: '코스피200', Q150: '코스닥150', ALL: '검색식', INV: '인버스' };
     async function runAction(a, src = 'ai') {
       const miss = () => `✖ '${a.name || a.code}' 종목을 찾지 못했어요`;
       switch (a.do) {
@@ -5037,7 +5059,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.24', APP_DATE = '2026-10-28';
+    const APP_VERSION = '1.25', APP_DATE = '2026-10-29';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -6017,6 +6039,7 @@ onmessage = (e) => { const { body, sets } = e.data;
     }
     // 리스크 점검표: 주문 실수 점검(guardCheck) + 결재용 항목
     function agendaChecks(a) {
+      if (a.kind === 'inv') return invChecks(a);
       const c = state.cfg, p = paper(), px = lastPrice(a.code) || a.price, d = state.data[a.code], b = d && d.bars, i = b ? b.length - 1 : -1;
       const out = [];
       const add = (lv, msg) => out.push({ lv, msg });
@@ -6048,7 +6071,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (old) return old;
       const price = info.price || lastPrice(code) || 0;
       const a = { id: Math.random().toString(36).slice(2, 9), key: agendaKey(code, side), day: kstNow().ymd, at: Date.now(), code, name: nameOf(code), side,
-        status: 'pending', src: info.src || 'window', signal: String(info.note || '').slice(0, 80), price, qty: side === 'BUY' ? planBuyQty(price) : 0, read: false };
+        status: 'pending', src: info.src || 'window', kind: info.kind || 'long', signal: String(info.note || '').slice(0, 80), price, qty: info.qty || (side === 'BUY' ? planBuyQty(price) : 0), read: false };
       a.checks = agendaChecks(a);
       state.agenda.unshift(a);
       if (state.agenda.length > 300) state.agenda.length = 300;
@@ -6102,6 +6125,14 @@ onmessage = (e) => { const { body, sets } = e.data;
       return seq;
     }
     function agendaExecNow(a) {
+      if (a.kind === 'inv') {   // 인버스: 수동 주문 장부로
+        jWhy = `결재: ${a.reason}`;
+        let m;
+        try { m = invExec(a); } finally { jWhy = ''; }
+        if (m.startsWith('✔')) agendaDone(a, lastPrice(a.code)); else { a.status = 'expired'; a.note = m; saveStore(); renderAgenda(true); }
+        renderPaper(); renderSymbols();
+        return m;
+      }
       const px = lastPrice(a.code);
       if (!(px > 0)) return '✖ 지금 가격을 알 수 없어요';
       jWhy = `결재: ${a.reason}`;
@@ -6167,7 +6198,7 @@ onmessage = (e) => { const { body, sets } = e.data;
         const sd = a.side === 'BUY' ? '매수' : '매도', ready = a.read && !a.briefing;
         const chk = (a.checks || []).map((x) => `<li class="py-0.5"><span class="px-1 text-[9px] ${x.lv === 'high' ? 'bg-[#e5383b] text-white' : x.lv === 'mid' ? 'bg-[#fde68a]' : 'bg-[#f0f0f0] text-[#666666]'}">${x.lv === 'high' ? '중요' : x.lv === 'mid' ? '주의' : '참고'}</span> ${esc(x.msg)}</li>`).join('');
         return `<div class="border ${a.status === 'approved' ? 'border-[#16a34a]' : 'border-[#111111]'} p-1.5 space-y-1" data-ag="${a.id}">
-          <div class="flex items-center gap-1"><b class="${a.side === 'BUY' ? 'up' : 'down'}">${sd}</b><button type="button" data-agchart class="font-semibold underline truncate text-left" title="차트 보기">${esc(a.name)}</button><span class="text-[10px] text-[#888888] num">${a.code}</span><span class="ml-auto text-[10px] ${a.status === 'approved' ? 'text-[#16a34a] font-semibold' : 'text-[#e5383b]'}">${AG_ST[a.status]}</span></div>
+          <div class="flex items-center gap-1"><b class="${a.side === 'BUY' ? 'up' : 'down'}">${sd}</b>${a.kind === 'inv' ? '<span class="text-[9px] px-1 bg-[#e8effc] text-[#1e6bd6]">인버스</span>' : ''}<button type="button" data-agchart class="font-semibold underline truncate text-left" title="차트 보기">${esc(a.name)}</button><span class="text-[10px] text-[#888888] num">${a.code}</span><span class="ml-auto text-[10px] ${a.status === 'approved' ? 'text-[#16a34a] font-semibold' : 'text-[#e5383b]'}">${AG_ST[a.status]}</span></div>
           <div class="text-[10px] text-[#666666]">${esc(a.signal)} · ${new Date(a.at + 9 * 3600000).toISOString().slice(11, 16)} 상정 · ${a.src === 'window' ? `기한 ${state.cfg.winEnd}` : '오늘 안'} <span data-agnote data-agcode="${a.code}" class="text-[#7c3aed]"></span></div>
           <div class="text-[10px] font-semibold mt-1">리스크 점검표</div><ul class="text-[10px] leading-snug">${chk || '<li class="text-[#999999]">특이 사항 없음</li>'}</ul>
           <div class="text-[10px] font-semibold">AI 리스크 브리핑 <span class="font-normal text-[#999999]">(반대 의견)</span> <button type="button" data-agbrief class="underline text-[#888888] font-normal">다시 받기</button></div>
@@ -6221,7 +6252,7 @@ onmessage = (e) => { const { body, sets } = e.data;
     document.getElementById('agendaBadge').addEventListener('click', () => { state.ui.right = true; saveStore(); applyPanes(); setTab('paper'); document.getElementById('agendaBox').scrollIntoView({ block: 'start' }); });
     const agendaFacts = () => {
       const open = state.agenda.filter((a) => a.status === 'pending' || a.status === 'approved');
-      const one = (a) => ({ 종목: `${a.name} (${a.code})`, 구분: a.side === 'BUY' ? '매수' : '매도', 상태: AG_ST[a.status], 신호: a.signal, 상정가: a.price, 제안수량: a.qty || null,
+      const one = (a) => ({ 종목: `${a.name} (${a.code})`, 구분: a.side === 'BUY' ? '매수' : '매도', 종류: a.kind === 'inv' ? '인버스' : '롱', 상태: AG_ST[a.status], 신호: a.signal, 상정가: a.price, 제안수량: a.qty || null,
         점검표: (a.checks || []).map((x) => x.msg), 리스크브리핑: a.brief ? plainSay(a.brief).slice(0, 600) : null, 결정이유: a.reason || null, 결정뒤등락: agendaOutcome(a) == null ? null : +agendaOutcome(a).toFixed(1) });
       return { 결재제: agendaOn(), 지금토론안건: chat.ctxAgenda ? (state.agenda.find((a) => a.id === chat.ctxAgenda) ? one(state.agenda.find((a) => a.id === chat.ctxAgenda)) : null) : null,
         열린안건: open.map(one), 최근결정: state.agenda.filter((a) => a.status !== 'pending' && a.status !== 'approved').slice(0, 20).map(one) };
@@ -6234,7 +6265,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (state.selected && state.bridge.ok && state.bridge.research && !newsCache[nameOf(state.selected)]) { try { await getNews(nameOf(state.selected), 10); } catch (_) {} }
       const pack = {
         안내: '파르티잔 인베스트먼트 화면의 지금 상태입니다. 이 수치를 근거로 분석·비교·추천해 주세요(근거 수치와 위험을 함께, 보장 표현 없이 — 결정은 사용자가 결재). 화면 조작·차트 작도·설정이 필요하면 <<명령>> [ ... ] 형식으로, 매매 규칙은 <<규칙 ...>>...<</규칙>>, 위젯은 <<위젯 ...>>...<</위젯>> 형식으로 답하면 사용자가 앱의 "📥 답 적용"에 붙여 넣어 실행합니다.',
-        ...assistFacts(), 화면: screenFacts(), 매매규칙: rulesFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 표시구간: marksFacts(), 차트모양: lookFacts(),
+        ...assistFacts(), 화면: screenFacts(), 매매규칙: rulesFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 표시구간: marksFacts(), 차트모양: lookFacts(),
       };
       const text = `[파르티잔 인베스트먼트 지금 상황 — ${pack.시각}]\n${JSON.stringify(pack, null, 2)}`;
       try { await navigator.clipboard.writeText(text); toast('📋 지금 화면 상황을 복사했어요 — Gemini 대화창에 붙여 넣고 물어보세요'); }
@@ -6265,6 +6296,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (state.selected && state.bridge.ok && state.bridge.research && !newsCache[nameOf(state.selected)]) { try { await getNews(nameOf(state.selected), 10); } catch (_) {} }
       const prompts = {
         radar: '시장후보요약의 오늘돌파신호와 스퀴즈임박 종목을 비교해서, 내 전략 기준으로 가장 눈여겨볼 후보 3개를 거래대금·상단 대비·5일선 이격·스퀴즈 여부 수치와 함께 꼽아 줘. 각 후보의 위험(5일선까지 거리)도 말해 주고, 첫 번째 후보를 차트에 띄워 줘.',
+        inv: '시장 국면 점수와 근거, 주요 지수, 인버스 데이터를 보고 지금 인버스가 필요한지, 필요하면 1배와 2배 중 무엇이 맞는지 근거와 위험(반등 위험, 2배 감쇠)을 수치로 알려 줘. 결정은 내가 결재할게.',
         hold: '내 보유 종목과 열린 결재 안건을 전부 점검해 줘. 각 종목의 현재가와 매도 기준선까지 거리, 시장 국면을 수치로 짚고 오늘 특히 조심할 종목을 알려 줘.',
         draw: state.selected ? `지금 ${nameOf(state.selected)}의 최근20봉 고점·저점과 BB 상단·중심·5일선·20일선 수치를 보고, 핵심 지지선·저항선 2~3개와 최근 특이점 날짜 메모를 차트에 그려 주고 왜 그 가격인지 설명해 줘.` : '',
       };
@@ -6350,6 +6382,172 @@ onmessage = (e) => { const { body, sets } = e.data;
     bgEvery(() => { if (!document.hidden) loadMarketQuotes(); }, 60000);
     renderIdxBar();
 
+    // ---- 인버스 — 하락장 대응: 인버스 ETF 목록 관리 + 시장 국면이 하락이면 인버스(1배·2배) 안건 → 결재 → 실행, 국면 회복·반등·보유 기한이면 정리 안건 ----
+    //  BB200 롱 전략과 따로 굴러감. 보유는 수동 주문 장부(p.manual)에 넣고 p.invMeta[code] 에 시작일·배수를 남김
+    //  기준은 15장 시장 국면 점수(−100~+100): 진입 ≤ invEntry, 2배(자동) ≤ invLevScore, 정리 ≥ invExit
+    function invList() { return state.invList; }
+    function invLevOf(code) { const x = state.invList.find((y) => y.code === code); return x ? x.lev : 1; }
+    function invHeld() { const p = acct(); return Object.entries(p.manual || {}).filter(([c, m]) => m.qty > 0 && state.invList.some((x) => x.code === c)).map(([code, m]) => ({ code, ...m, meta: (p.invMeta || {})[code] || null })); }
+    // 지금 판단: 무엇을 해야 하나 (안건은 만들지 않음 — 화면·비서용)
+    function invDecision() {
+      const c = state.cfg, r = research.res;
+      if (!r) return { act: 'none', why: '시장 국면 데이터가 아직 없어요 (KODEX 200 일봉 필요)' };
+      const held = invHeld();
+      if (held.length) {
+        const h = held[0], d = state.data[h.code], b = d && d.bars, lev = invLevOf(h.code);
+        const days = h.meta ? calDays(h.meta.startT) : null, ma = b && c.invExitMa > 0 ? maN(b, b.length - 1, c.invExitMa) : null, px = lastPrice(h.code);
+        if (r.score >= c.invExit) return { act: 'sell', code: h.code, why: `시장 국면 점수 ${r.score} — 정리 기준(${c.invExit} 이상)으로 회복` };
+        if (lev >= 2 && days != null && days >= c.invMaxDays) return { act: 'sell', code: h.code, why: `2배 인버스 ${days}일 보유 — 보유 기한(${c.invMaxDays}일) 지남 (오래 들수록 손실이 쌓이기 쉬움)` };
+        if (ma && px < ma) return { act: 'sell', code: h.code, why: `인버스 종가가 ${c.invExitMa}일선(${won(Math.round(ma))}) 아래 — 시장이 반등하는 중` };
+        return { act: 'hold', code: h.code, why: `보유 유지 — 국면 점수 ${r.score}, ${c.invExitMa}일선 위${days != null ? `, ${days}일째` : ''}` };
+      }
+      if (r.score > c.invEntry) return { act: 'none', why: `시장 국면 ${REGIME[r.regime].t} ${r.score} — 인버스 진입 기준(${c.invEntry} 이하) 아님` };
+      const lev = c.invLev === '2X' || (c.invLev === 'AUTO' && r.score <= c.invLevScore) ? 2 : 1;
+      const code = lev === 2 ? c.inv2 : c.inv1;
+      return { act: 'buy', code, lev, why: `시장 국면 ${REGIME[r.regime].t} ${r.score} (진입 기준 ${c.invEntry} 이하)${lev === 2 ? ` · 점수 ${c.invLevScore} 이하라 2배` : ''}` };
+    }
+    // 안건 올리기 (결재제) — 결재제를 끄면 바로 주문
+    function invEvaluate(src = 'window') {
+      if (!state.cfg.invOn) return null;
+      const d = invDecision();
+      if (d.act !== 'buy' && d.act !== 'sell') return d;
+      const side = d.act === 'buy' ? 'BUY' : 'SELL';
+      if (!state.data[d.code]) { plog('인버스', d.code, `${nameOf(d.code)} 시세가 없어 안건을 못 올림 — 인버스 탭에서 시세를 받으세요`); return d; }
+      const px = lastPrice(d.code);
+      const qty = side === 'BUY' ? Math.max(0, Math.floor(Math.min(equityNow() * state.cfg.invPct / 100, buyingPower()) / (px * buyRate()))) : sellable(d.code);
+      if (!(qty >= 1)) return d;
+      const note = `인버스 ${side === 'BUY' ? `${d.lev}배 진입` : '정리'} — ${d.why}`;
+      if (!agendaOn()) { const a = { code: d.code, side, kind: 'inv', qty, signal: note, reason: '완전 자동' }; toast(invExec(a)); return d; }
+      if (!agendaFind(d.code, side)) agendaCreate(d.code, side, { note, price: px, src, kind: 'inv', qty });
+      return d;
+    }
+    function invExec(a) {
+      const p = acct(), px = lastPrice(a.code);
+      const qty = a.side === 'BUY' ? (a.qtyApproved || a.qty) : sellable(a.code);
+      if (!(qty >= 1) || !(px > 0)) return '✖ 수량이나 가격을 알 수 없어요';
+      const open = marketOpenNow() && liveQuote(a.code);
+      const r = submitOrder({ code: a.code, side: a.side, type: open ? 'MKT' : 'LMT', price: px, qty });   // 장 밖이면 지금 가격 지정가로 다음 장 대기
+      if (!r.ok) return `✖ ${r.msg}`;
+      p.invMeta = p.invMeta || {};
+      if (a.side === 'BUY') p.invMeta[a.code] = { startT: kstNow().ymd, lev: invLevOf(a.code), at: Date.now() };
+      else delete p.invMeta[a.code];
+      saveStore(); renderInv();
+      return `✔ 인버스 ${nameOf(a.code)} ${a.side === 'BUY' ? '매수' : '매도'} ${qty.toLocaleString()}주 ${open ? '체결' : `주문 (장 밖이라 ${won(px)}원 지정가로 다음 장 대기)`}`;
+    }
+    // 백테스트: 최근 국면 판정(약 2년) + 인버스 ETF 일봉으로 같은 규칙을 돌려 봄 (ETF는 거래세 없음)
+    function invBacktest() {
+      const c = state.cfg, r = research.res;
+      if (!r || !r.hist || r.hist.length < 60) return { error: '시장 국면 기록이 부족해요' };
+      const S = {};
+      [c.inv1, c.inv2].forEach((k) => { const d = state.data[k]; if (d) S[k] = { bars: d.bars, at: new Map(d.bars.map((b, i) => [b.t, i])) }; });
+      if (!S[c.inv1] && !S[c.inv2]) return { error: '인버스 ETF 시세가 없어요 — 왼쪽 인버스 탭에서 시세를 받으세요' };
+      const fee = (c.buyFee + c.sellFee + c.slipPct * 2) / 100;
+      const trades = [];
+      let pos = null, eq = 1, peak = 1, mdd = 0;
+      r.hist.forEach((h) => {
+        if (pos) {
+          const s = S[pos.code], i = s.at.get(h.t);
+          if (i == null) return;
+          const px = s.bars[i].c, ma = c.invExitMa > 0 ? maN(s.bars, i, c.invExitMa) : null, days = pos.n++;
+          const why = h.score >= c.invExit ? '국면 회복' : pos.lev >= 2 && days >= c.invMaxDays ? '보유 기한' : ma && px < ma ? `${c.invExitMa}일선 이탈` : '';
+          const cur = eq * (px / pos.px);
+          peak = Math.max(peak, cur); mdd = Math.max(mdd, 1 - cur / peak);
+          if (why) { const ret = px / pos.px * (1 - fee) - 1; eq *= 1 + ret; trades.push({ code: pos.code, lev: pos.lev, in: pos.t, out: h.t, ret: ret * 100, days, why }); pos = null; }
+          return;
+        }
+        if (h.score > c.invEntry) return;
+        const lev = c.invLev === '2X' || (c.invLev === 'AUTO' && h.score <= c.invLevScore) ? 2 : 1;
+        const code = S[lev === 2 ? c.inv2 : c.inv1] ? (lev === 2 ? c.inv2 : c.inv1) : (S[c.inv1] ? c.inv1 : c.inv2);
+        const s = S[code], i = s.at.get(h.t);
+        if (i == null) return;
+        pos = { code, lev: invLevOf(code), px: s.bars[i].c, t: h.t, n: 0 };
+      });
+      const k = state.data['069500'], first = r.hist[0], last = r.hist[r.hist.length - 1];
+      const ki = (t) => k && k.bars.findIndex((b) => b.t === t);
+      const mkt = k && ki(first.t) >= 0 && ki(last.t) >= 0 ? (k.bars[ki(last.t)].c / k.bars[ki(first.t)].c - 1) * 100 : null;
+      const res = { from: first.t, to: last.t, n: trades.length, win: trades.length ? trades.filter((x) => x.ret > 0).length / trades.length * 100 : null, total: (eq - 1) * 100, mdd: mdd * 100,
+        avgDays: trades.length ? trades.reduce((s2, x) => s2 + x.days, 0) / trades.length : null, mkt, open: pos ? { code: pos.code, since: pos.t } : null, trades: trades.slice(-12) };
+      state.invBt = res;
+      return res;
+    }
+    const invBtLine = (b) => (b.error ? `<span class="text-[#999999]">${esc(b.error)}</span>`
+      : `${fmtDate(b.from)}~${fmtDate(b.to)} · 거래 ${b.n}건 · 승률 ${b.win == null ? '-' : `${b.win.toFixed(0)}%`} · 누적 <b class="${b.total >= 0 ? 'up' : 'down'}">${pctTxt(b.total)}</b> · 최대낙폭 -${b.mdd.toFixed(1)}% · 평균 ${b.avgDays == null ? '-' : b.avgDays.toFixed(0)}일 보유${b.mkt != null ? ` · 같은 기간 KODEX 200 ${pctTxt(b.mkt)}` : ''}${b.open ? ` · 지금 보유 중(${fmtDate(b.open.since)}~)` : ''}`);
+    function renderInv() {
+      const el = document.getElementById('invBox');
+      if (!el) return;
+      const c = state.cfg, r = research.res, d = invDecision(), held = invHeld();
+      const sig = JSON.stringify([c.invOn, c.invEntry, c.invExit, c.invLev, c.invLevScore, c.invPct, c.invMaxDays, c.invExitMa, c.inv1, c.inv2, r && r.score, d, held.map((h) => [h.code, h.qty, Math.round(lastPrice(h.code) || 0)]), state.invList.length, state.invBt && state.invBt.to, state.invBt && state.invBt.total]);
+      if (el.dataset.sig === sig) return;
+      el.dataset.sig = sig;
+      const act = { buy: `<b class="text-[#1e6bd6]">진입 조건 충족</b> — ${esc(nameOf(d.code))} (${d.lev}배)`, sell: '<b class="text-[#e5383b]">정리 조건</b>', hold: '<b>보유 유지</b>', none: '<span class="text-[#666666]">대기</span>' }[d.act];
+      el.innerHTML = `<div class="flex items-center gap-1"><span class="text-[11px] font-semibold">인버스 — 하락장 대응</span><label class="ml-auto flex items-center gap-1 text-[10px]"><input type="checkbox" data-invon ${c.invOn ? 'checked' : ''}> 자동 안건</label></div>
+        <div class="text-[10px] text-[#666666] leading-snug">시장 국면 ${r ? `${regimeChip(r.regime)} <span class="num">${r.score >= 0 ? '+' : ''}${r.score}</span>` : '-'} · 진입 ≤ ${c.invEntry} · 2배 ≤ ${c.invLevScore}${c.invLev !== 'AUTO' ? ` (${c.invLev} 고정)` : ''} · 정리 ≥ ${c.invExit} · 비중 ${c.invPct}% · 2배 최대 ${c.invMaxDays}일 · 인버스 ${c.invExitMa}일선 이탈 시 정리</div>
+        <div class="text-[11px]">지금: ${act} <span class="text-[10px] text-[#888888]">${esc(d.why)}</span></div>
+        ${held.length ? held.map((h) => { const px = lastPrice(h.code) || h.avg, g = (px / h.avg - 1) * 100; return `<div class="flex justify-between text-[10px] border-t border-[#f0f0f0] pt-0.5"><span><button type="button" data-invchart="${h.code}" class="underline">${esc(nameOf(h.code))}</button> ${invLevOf(h.code)}배 · ${h.qty.toLocaleString()}주${h.meta ? ` · ${calDays(h.meta.startT)}일째` : ''}</span><span class="num ${g >= 0 ? 'up' : 'down'}">${pctTxt(g)}</span></div>`; }).join('') : ''}
+        <div class="flex gap-1"><button type="button" data-invnow class="btn px-2 py-0.5 text-[10px]" title="지금 국면으로 판단해서 필요하면 결재함에 안건을 올림">지금 판단</button><button type="button" data-invbt class="btn px-2 py-0.5 text-[10px]" title="최근 약 2년 국면 판정으로 같은 규칙을 백테스트">백테스트</button><button type="button" data-invset class="btn px-2 py-0.5 text-[10px]">기준 바꾸기</button></div>
+        ${state.invBt ? `<div class="text-[10px] leading-snug bg-[#fafafa] border border-[#eeeeee] px-1.5 py-1">${invBtLine(state.invBt)}</div>` : ''}
+        <details class="text-[10px]"><summary class="cursor-pointer text-[#666666] select-none">인버스 종목 ${state.invList.length}개 (왼쪽 '인버스' 탭에서도 봄)</summary>
+          ${state.invList.map((x) => { const i = rowInfo(x.code); return `<div class="flex items-center justify-between gap-1 py-0.5 border-t border-[#f3f3f3]"><button type="button" data-invchart="${x.code}" class="truncate text-left underline">${esc(nameOf(x.code))}</button><span class="flex items-center gap-1.5 num"><span class="text-[#888888]">${x.lev}배</span>${i ? `${won(i.price)} ${idxPct(i.chg)}` : '<span class="text-[#bbbbbb]">시세 없음</span>'}<button type="button" data-invdel="${x.code}" class="text-[#bbbbbb] hover:text-[#e5383b]" aria-label="목록에서 빼기">✕</button></span></div>`; }).join('')}
+          <div class="flex gap-1 mt-1"><input type="text" data-invadd placeholder="종목 코드 (예: 253230)" class="flex-1 min-w-0 text-[10px]"><select data-invaddlev class="text-[10px]"><option value="1">1배</option><option value="2">2배</option></select><button type="button" data-invaddbtn class="btn px-1.5 text-[10px]">추가</button></div></details>
+        <p class="text-[9px] text-[#999999] leading-snug">인버스는 지수가 내리면 오르는 상품이에요. 2배는 하루 등락의 2배라 횡보만 해도 손실이 쌓이기 쉬워 오래 들고 있지 않는 게 좋아요. 모든 매매는 결재함에서 결재해야 실행돼요.</p>`;
+    }
+    const invEl = document.getElementById('invBox');
+    invEl.addEventListener('click', async (e) => {
+      const t = e.target.closest('button');
+      if (!t) return;
+      if (t.dataset.invchart) { selectCode(t.dataset.invchart); return; }
+      if (t.matches('[data-invnow]')) {
+        const on = state.cfg.invOn;
+        state.cfg.invOn = true;   // 버튼은 자동 안건이 꺼져 있어도 한 번 판단
+        const d = invEvaluate('manual');
+        state.cfg.invOn = on;
+        toast(d.act === 'buy' || d.act === 'sell' ? `인버스 ${d.act === 'buy' ? '진입' : '정리'} 안건을 결재함에 올렸어요` : `인버스: ${d.why}`);
+      } else if (t.matches('[data-invbt]')) { const b = invBacktest(); toast(b.error ? `✖ ${b.error}` : `인버스 백테스트 — 거래 ${b.n}건 · 누적 ${pctTxt(b.total)}`); }
+      else if (t.matches('[data-invset]')) { state.ui.right = true; applyPanes(); setTab('set'); const x = document.querySelector('[data-set="invEntry"]'); if (x) x.scrollIntoView({ block: 'center' }); }
+      else if (t.dataset.invdel) { state.invList = state.invList.filter((x) => x.code !== t.dataset.invdel); saveStore(); renderSymbols(); }
+      else if (t.matches('[data-invaddbtn]')) {
+        const code = String(invEl.querySelector('[data-invadd]').value || '').trim().toUpperCase(), lev = Number(invEl.querySelector('[data-invaddlev]').value) || 1;
+        if (!/^[0-9A-Z]{6}$/.test(code)) return toast('6자리 종목 코드를 넣어 주세요');
+        if (!state.invList.some((x) => x.code === code)) state.invList.push({ code, lev });
+        if (master.map[code] && !state.names[code]) state.names[code] = master.map[code].name;
+        saveStore(); renderSymbols();
+        if (state.bridge.ok) { try { applyDaily(code, await fetchDaily(code)); } catch (_) {} }
+      }
+      renderInv();
+    });
+    invEl.addEventListener('change', (e) => { if (e.target.matches('[data-invon]')) { state.cfg.invOn = e.target.checked; saveStore(); renderSettings(); renderInv(); } });
+    const invFacts = () => {
+      const c = state.cfg, d = invDecision(), r = research.res;
+      return { 자동안건: c.invOn, 기준: { 진입: `국면 점수 ${c.invEntry} 이하`, 두배: c.invLev === 'AUTO' ? `점수 ${c.invLevScore} 이하면 2배` : `${c.invLev} 고정`, 정리: `점수 ${c.invExit} 이상 · 인버스 ${c.invExitMa}일선 이탈 · 2배 ${c.invMaxDays}일`, 비중: `${c.invPct}%` },
+        지금판단: { 결론: { buy: '진입 조건 충족', sell: '정리 조건', hold: '보유 유지', none: '대기' }[d.act], 이유: d.why, 상품: d.code ? `${nameOf(d.code)} (${d.code}) ${invLevOf(d.code)}배` : null },
+        판정검증_하락판정뒤20일KODEX200: r && r.verify && r.verify.down.n ? { 표본: r.verify.down.n, 평균: +(r.verify.down.sum / r.verify.down.n).toFixed(2), 상승확률: Math.round(r.verify.down.win / r.verify.down.n * 100) } : null,
+        보유: invHeld().map((h) => ({ 종목: nameOf(h.code), 배수: invLevOf(h.code), 수량: h.qty, 평단: Math.round(h.avg), 현재가: lastPrice(h.code), 보유일: h.meta ? calDays(h.meta.startT) : null })),
+        상품: state.invList.map((x) => { const i = rowInfo(x.code); return { 종목: `${nameOf(x.code)} (${x.code})`, 배수: x.lev, 현재가: i ? i.price : null, 등락: i ? +i.chg.toFixed(2) : null }; }),
+        백테스트: state.invBt && !state.invBt.error ? { 기간: `${state.invBt.from}~${state.invBt.to}`, 거래: state.invBt.n, 승률: state.invBt.win, 누적: +state.invBt.total.toFixed(1), 최대낙폭: +state.invBt.mdd.toFixed(1), 같은기간KODEX200: state.invBt.mkt } : null };
+    };
+    bgEvery(() => renderInv(), 2000);
+    renderInv();
+
+    // 인버스 안건의 리스크 점검표
+    function invChecks(a) {
+      const c = state.cfg, r = research.res, out = [], add = (lv, msg) => out.push({ lv, msg });
+      const px = lastPrice(a.code) || a.price, lev = invLevOf(a.code);
+      if (a.side === 'BUY') {
+        const qty = a.qtyDraft || a.qty, amt = qty * px, eq = equityNow();
+        add('info', `제안 ${qty.toLocaleString()}주 × ${won(px)}원 = ${won(Math.round(amt))}원 (평가자산의 ${eq ? (amt / eq * 100).toFixed(1) : '-'}%)`);
+        if (r) add('info', `시장 국면 ${REGIME[r.regime].t} ${r.score} — 하락 근거 ${r.items.filter((x) => x.score < 0).length}/${r.items.length}개`);
+        if (r && r.verify && r.verify.down.n) { const v = r.verify.down; add(v.sum / v.n < 0 ? 'info' : 'mid', `과거 하락 판정 뒤 20일 KODEX 200 평균 ${pctTxt(v.sum / v.n, 2)} · 오른 확률 ${Math.round(v.win / v.n * 100)}% (${v.n}일)${v.sum / v.n >= 0 ? ' — 하락 판정 뒤에도 평균적으로 올랐음' : ''}`); }
+        add('mid', `시장이 3% 반등하면 약 ${won(Math.round(amt * 0.03 * lev))}원 손실 (${lev}배)`);
+        if (lev >= 2) add('high', `2배 인버스 — 하루 등락의 2배라 횡보장에서도 손실이 쌓여요. ${c.invMaxDays}일 안에 정리하는 규칙`);
+        if (state.invBt && !state.invBt.error) add('info', `인버스 규칙 백테스트(최근 약 2년): 거래 ${state.invBt.n}건 · 누적 ${pctTxt(state.invBt.total)} · 최대낙폭 -${state.invBt.mdd.toFixed(1)}%`);
+        add('info', `정리 기준: 국면 점수 ${c.invExit} 이상 · 인버스 ${c.invExitMa}일선 이탈${lev >= 2 ? ` · ${c.invMaxDays}일` : ''}`);
+      } else {
+        const h = invHeld().find((x) => x.code === a.code);
+        if (h) add('info', `보유 ${h.qty.toLocaleString()}주 · 평단 ${won(Math.round(h.avg))}원 · 지금 ${pctTxt((px / h.avg - 1) * 100)}`);
+        add('mid', '결재하지 않으면 인버스를 계속 들고 있어요 — 시장이 오르면 손실이 커질 수 있음');
+      }
+      return out;
+    }
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
@@ -6359,7 +6557,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       chat.msgs.push({ role: 'user', text, at: Date.now() });
       chat.busy = true; renderChat(); saveChat();
       let reply;
-      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
+      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
       catch (err) { reply = `(오류) ${err.message}`; }
       const bl = splitBlocks(reply);
       const { text: said, acts, prop } = splitActions(bl.text);
