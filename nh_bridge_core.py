@@ -492,13 +492,13 @@ def _tg_token_ok(token):
     return bool(sep) and a.isdigit() and len(b) >= 30 and all(ch.isalnum() or ch in "_-" for ch in b)
 
 
-def _tg_call(token, method, data=None):
+def _tg_call(token, method, data=None, timeout=15):
     if not _tg_token_ok(token):
         raise RuntimeError("봇 토큰 형식이 아니에요 (숫자:영문 형태)")
     body = urllib.parse.urlencode(data).encode() if data else None
     req = urllib.request.Request(f"https://api.telegram.org/bot{token}/{method}", data=body)
     try:
-        with urllib.request.urlopen(req, timeout=15) as res:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
             r = json.load(res)
     except urllib.error.HTTPError as e:
         try:
@@ -519,12 +519,68 @@ def telegram_send(token, chat, text):
 
 
 def telegram_chat(token):
+    if TG['gen_active']:
+        raise RuntimeError("명령 받기가 켜져 있는 동안은 '찾기'를 쓸 수 없어요 — 명령 받기를 잠시 끄고 찾기")
     for u in reversed(_tg_call(token, "getUpdates") or []):
         m = u.get("message") or u.get("channel_post") or {}
         ch = m.get("chat")
         if ch:
             return {"chat": ch["id"], "name": ch.get("first_name") or ch.get("title") or ""}
     raise RuntimeError("봇에게 먼저 아무 말이나 보내 주세요 (그 뒤 '찾기')")
+
+
+# 폰 명령 — 등록한 내 대화방에서 온 말만 화면 스트림으로 넘김 (토큰·채팅 번호는 이 메모리에만, 화면이 켤 때마다 다시 등록)
+TG = {"token": "", "chat": "", "offset": 0, "gen": 0, "gen_active": False, "err": ""}
+TG_LOCK = threading.Lock()
+
+
+def _tg_poll(gen):
+    while True:
+        with TG_LOCK:
+            if TG["gen"] != gen:
+                return
+            token, chat, offset = TG["token"], TG["chat"], TG["offset"]
+        try:
+            ups = _tg_call(token, "getUpdates", {"timeout": 25, "offset": offset, "allowed_updates": '["message"]'}, timeout=40) or []
+            for u in ups:
+                with TG_LOCK:
+                    TG["offset"] = max(TG["offset"], u["update_id"] + 1)
+                m = u.get("message") or {}
+                if str((m.get("chat") or {}).get("id")) != str(chat):
+                    continue   # 내 대화방이 아니면 무시
+                text = (m.get("text") or "").strip()
+                if not text:
+                    continue
+                with HUB.lock:
+                    n = len(HUB.clients)
+                if not n:
+                    telegram_send(token, chat, "[파르티잔] PC에서 앱 화면이 꺼져 있어요 — 화면을 켜 두면 명령을 받을 수 있어요.")
+                    continue
+                HUB.publish({"type": "tg", "text": text[:600], "id": u["update_id"]})
+            TG["err"] = ""
+        except Exception as e:
+            TG["err"] = str(e)[:120]
+            time.sleep(5)
+
+
+def tg_start(token, chat):
+    chat = str(chat).strip()
+    if not chat.lstrip("-").isdigit():
+        raise RuntimeError("채팅 번호가 없어요")
+    ups = _tg_call(token, "getUpdates", {"timeout": 0}) or []   # 켜기 전에 쌓인 말은 건너뜀
+    with TG_LOCK:
+        if TG["gen_active"] and TG["token"] == token and TG["chat"] == chat:
+            return {"ok": True, "running": True}
+        TG.update(token=token, chat=chat, offset=(ups[-1]["update_id"] + 1) if ups else 0, gen=TG["gen"] + 1, gen_active=True)
+        gen = TG["gen"]
+    threading.Thread(target=_tg_poll, args=(gen,), daemon=True).start()
+    return {"ok": True}
+
+
+def tg_stop():
+    with TG_LOCK:
+        TG.update(token="", chat="", gen=TG["gen"] + 1, gen_active=False)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -1674,7 +1730,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/rt/stream":
             return self._stream()
         now = datetime.now(KST)
-        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "market": True, "topnews": True, "notify": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
+        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "market": True, "topnews": True, "notify": True, "tgcmd": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
                          "kst": now.strftime("%Y-%m-%d %H:%M:%S")})
 
     def _stream(self):
@@ -1699,7 +1755,7 @@ class Handler(BaseHTTPRequestHandler):
             HUB.remove(q)
 
     def do_POST(self):
-        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/sectors", "/news", "/news/top", "/notify/telegram", "/notify/telegram_chat", "/market/quotes", "/market/index", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
+        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/sectors", "/news", "/news/top", "/notify/telegram", "/notify/telegram_chat", "/notify/tg_start", "/notify/tg_stop", "/market/quotes", "/market/index", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
                              "/trade/status", "/trade/arm", "/trade/order", "/trade/cancel", "/trade/balance", "/trade/orders"):
             return self._json(404, {"error": "not found"})
         if not self._guard():
@@ -1782,6 +1838,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not q:
                     return self._json(400, {"error": "검색어가 필요합니다"})
                 return self._json(200, {"q": q, "items": news_search(q, max(1, min(100, int(req.get("n", 20)))))})
+            if self.path == "/notify/tg_start":
+                return self._json(200, tg_start(req.get("token", ""), req.get("chat", "")))
+            if self.path == "/notify/tg_stop":
+                return self._json(200, tg_stop())
             if self.path == "/notify/telegram":
                 return self._json(200, telegram_send(req.get("token", ""), req.get("chat", ""), req.get("text", "")))
             if self.path == "/notify/telegram_chat":

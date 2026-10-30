@@ -2455,7 +2455,7 @@
       const badge = document.getElementById('modeBadge');
       try {
         const h = await bridge('/health');
-        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.market = !!h.market; state.bridge.topnews = !!h.topnews; state.bridge.notify = !!h.notify; setTimeout(() => { loadMarketQuotes(); loadTopNews(); }, 300); state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
+        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.market = !!h.market; state.bridge.topnews = !!h.topnews; state.bridge.notify = !!h.notify; state.bridge.tgcmd = !!h.tgcmd; setTimeout(() => { loadMarketQuotes(); loadTopNews(); tgStart(); }, 300); state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
         badge.textContent = h.demo ? '● 데모 시세' : '● 나무증권 실시간';
         badge.className = `text-[11px] px-2 py-0.5 ${h.demo ? 'bg-[#e5383b] text-white' : 'bg-[#111111] text-white'}`;
         document.getElementById('demoBanner').classList.toggle('hidden', !h.demo);
@@ -2672,6 +2672,7 @@
     }
 
     function rtMsg(m) {
+      if (m.type === 'tg') { tgHandle(m.text); return; }   // 폰(텔레그램)에서 온 명령
       if (m.type === 'status') { rt.connected = !!m.connected; rt.msg = m.msg || ''; renderRtBadge(); return; }
       if (m.type === 'book') { if (m.code === state.selected) { rt.bookData = m; rt.dirty.book = true; } return; }
       if (m.type !== 'tick' || !(m.price > 0) || (m.mkt && m.mkt !== '1')) return;   // 정규장 체결만
@@ -4415,6 +4416,7 @@
     const TAB_NAMES = { assist: '비서', bt: '백테스트', paper: '모의투자', set: '설정' };
     const UNI_NAMES = { WATCH: '관심', K200: '코스피200', Q150: '코스닥150', ALL: '검색식', INV: '인버스' };
     async function runAction(a, src = 'ai') {
+      if (tgSrc && ['실주문', '주문', '즉시매도'].includes(a.do)) return '✖ 폰 명령으로는 직접 주문할 수 없어요 — 결재함 안건을 /승인 으로 결재해 주세요';
       const miss = () => `✖ '${a.name || a.code}' 종목을 찾지 못했어요`;
       switch (a.do) {
         case '종목': {
@@ -5169,7 +5171,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.30', APP_DATE = '2026-10-30';
+    const APP_VERSION = '1.31', APP_DATE = '2026-10-30';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -6201,7 +6203,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (state.agenda.length > 300) state.agenda.length = 300;
       saveStore(); renderAgenda(true);
       agendaBrief(a);
-      raiseAlert({ lv: 'high', code, text: `결재 안건 — ${a.name} ${side === 'BUY' ? '매수' : '매도'} (${a.signal}). 리스크 브리핑을 읽고 결재해 주세요.`, say: `${a.name} ${side === 'BUY' ? '매수' : '매도'} 안건이 올라왔어요. 결재해 주세요.` });
+      raiseAlert({ lv: 'high', code, text: `결재 안건 [${a.id.slice(0, 4)}] — ${a.name} ${side === 'BUY' ? '매수' : '매도'} (${a.signal}). 리스크 브리핑을 읽고 결재해 주세요.`, say: `${a.name} ${side === 'BUY' ? '매수' : '매도'} 안건이 올라왔어요. 결재해 주세요.` });
       return a;
     }
     async function agendaBrief(a) {
@@ -6835,17 +6837,24 @@ onmessage = (e) => { const { body, sets } = e.data;
     function renderPhone() {
       const el = document.getElementById('phoneBox');
       if (!el) return;
-      el.innerHTML = `<div class="text-[10px] uppercase tracking-wider text-[#888888]">폰 알림 (텔레그램)</div>
+      el.innerHTML = `<div class="text-[10px] uppercase tracking-wider text-[#888888]">폰 알림 · 명령 (텔레그램)</div>
         <label class="flex items-center gap-1 text-[11px]"><input type="checkbox" data-ph="on" ${phone.on ? 'checked' : ''}> 중요한 알림을 폰으로 받기</label>
         <label class="flex items-center justify-between gap-2 text-[11px] text-[#444444]">봇 토큰<input data-ph="token" type="password" value="${esc(phone.token)}" placeholder="123456:ABC…" class="w-40" autocomplete="off"></label>
         <label class="flex items-center justify-between gap-2 text-[11px] text-[#444444]">채팅 번호<span class="flex gap-1"><input data-ph="chat" type="text" value="${esc(phone.chat)}" class="w-28 num"><button type="button" data-phfind class="btn px-1.5 text-[10px]">찾기</button></span></label>
         <label class="flex items-center justify-between gap-2 text-[11px] text-[#444444]">보낼 알림<select data-ph="level"><option value="high" ${phone.level === 'high' ? 'selected' : ''}>중요한 것만 (결재·장중 돌파·매도 조건)</option><option value="all" ${phone.level === 'all' ? 'selected' : ''}>모든 알림</option></select></label>
         <div class="flex gap-1"><button type="button" data-phtest class="btn px-2 py-0.5 text-[10px]">시험 보내기</button>${phone.err ? `<span class="text-[10px] text-[#e5383b]">${esc(phone.err)}</span>` : ''}</div>
-        <p class="text-[10px] text-[#888888] leading-snug">① 텔레그램에서 <b>@BotFather</b> → <b>/newbot</b>으로 내 봇을 만들고 받은 토큰을 붙여 넣기 ② 내 봇에게 아무 말이나 보낸 뒤 '찾기' ③ 시험 보내기. 토큰은 이 브라우저에만 저장되고, 폰에서는 알림만 받아요 — 결재는 PC 화면에서 해요.</p>`;
+        <div class="border-t border-[#f0f0f0] pt-1.5 space-y-1">
+          <label class="flex items-center gap-1 text-[11px]"><input type="checkbox" data-ph="cmd" ${phone.cmd ? 'checked' : ''}> 폰에서 명령 받기 (조회 · 비서 대화 · 모의 결재)</label>
+          <div class="flex items-center justify-between gap-2 text-[11px] text-[#444444]">결재 PIN <span class="flex gap-1"><input data-phpinv type="password" inputmode="numeric" placeholder="${phone.pinHash ? '정해짐 — 바꾸려면 입력' : '숫자 4~8자리'}" class="w-28 num" autocomplete="off"><button type="button" data-phpin class="btn px-1.5 text-[10px]">저장</button></span></div>
+          ${phone.cmdErr ? `<div class="text-[10px] text-[#e5383b]">${esc(phone.cmdErr)}</div>` : phone.cmd ? `<div class="text-[10px] text-[#16a34a]">${state.bridge.tgcmd ? '명령 받는 중 — 폰에서 /도움' : '새 버전 중계기에 연결하면 명령을 받아요'}</div>` : ''}
+          <p class="text-[10px] text-[#888888] leading-snug">폰에서 <b>/현황 /결재 /안건 번호 /승인 번호 PIN 이유 /거절 번호 PIN 이유 /대기 /운용 /시장 /인버스</b>, 그 밖의 말은 비서에게 가요. 결재는 <b>/안건</b>으로 리스크 브리핑을 받은 안건만, PIN과 이유가 맞아야 돼요 (PIN 5번 틀리면 30분 잠금). 실계좌 주문과 직접 주문은 폰으로 안 돼요. 이 화면과 중계기가 PC에서 켜져 있어야 해요.</p>
+        </div>
+        <p class="text-[10px] text-[#888888] leading-snug">① 텔레그램에서 <b>@BotFather</b> → <b>/newbot</b>으로 내 봇을 만들고 받은 토큰을 붙여 넣기 ② 내 봇에게 아무 말이나 보낸 뒤 '찾기' ③ 시험 보내기. 토큰은 이 브라우저에만 저장돼요.</p>`;
     }
     const phEl = document.getElementById('phoneBox');
-    phEl.addEventListener('change', (e) => { const k = e.target.dataset.ph; if (!k) return; phone[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value.trim(); phone.err = ''; savePhone(); renderPhone(); });
+    phEl.addEventListener('change', (e) => { const k = e.target.dataset.ph; if (!k) return; phone[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value.trim(); phone.err = ''; savePhone(); renderPhone(); if (['cmd', 'on', 'token', 'chat'].includes(k)) tgStart(); });
     phEl.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-phpin]')) { const box = phEl.querySelector('[data-phpinv]'); await savePin(box.value.trim()); box.value = ''; return; }
       if (!state.bridge.ok || !state.bridge.notify) { if (e.target.closest('button')) toast('새 버전 중계기에 연결해야 보낼 수 있어요'); return; }
       if (e.target.closest('[data-phfind]')) {
         try { const r = await bridge('/notify/telegram_chat', { token: phone.token }); phone.chat = String(r.chat); phone.err = ''; savePhone(); renderPhone(); toast(`채팅 번호를 찾았어요 (${r.name || r.chat})`); }
@@ -6856,6 +6865,107 @@ onmessage = (e) => { const { body, sets } = e.data;
       }
     });
     renderPhone();
+
+    // ---- 텔레그램 명령: 폰에서 보낸 말을 중계기가 받아 여기로 전달 → 조회 · 비서 대화 · 모의 결재(리스크 브리핑 읽기 + PIN + 이유) → 답을 폰으로 ----
+    //  중계기는 등록한 내 대화방에서 온 말만 넘김. 폰 명령으로는 실계좌 주문·직접 주문을 할 수 없음 — 매매는 결재함 안건을 /승인 으로만(모의)
+    let tgSrc = false;
+    const tgLock = { fails: 0, until: 0 };
+    async function pinHash(pin) {
+      const data = new TextEncoder().encode(`partisan|${pin}`);
+      if (window.crypto && crypto.subtle) { const h = await crypto.subtle.digest('SHA-256', data); return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join(''); }
+      let x = 0; for (const b of data) x = (x * 31 + b) >>> 0; return `w${x}`;
+    }
+    function tgReply(text) {
+      if (!phone.token || !phone.chat) return;
+      bridge('/notify/telegram', { token: phone.token, chat: phone.chat, text: `[파르티잔] ${String(text).slice(0, 3400)}` }).catch((err) => { phone.err = err.message; renderPhone(); });
+    }
+    const agShort = (a) => a.id.slice(0, 4);
+    const agByShort = (s) => { s = String(s || '').trim(); return state.agenda.find((a) => (a.status === 'pending' || a.status === 'approved') && (agShort(a) === s || a.id === s)); };
+    const TG_HELP = ['명령 (앞의 / 는 빼도 돼요)', '/현황 — 계좌·보유', '/결재 — 결재 대기 안건 목록', '/안건 번호 — 리스크 점검표·브리핑 (결재 전에 꼭)', '/승인 번호 PIN 이유 — 예: /승인 a1b2 1234 스퀴즈 돌파 확인 (매수는 수량=5 처럼 수량도 가능)',
+      '/거절 번호 PIN 이유', '/대기 — 돌파 대기 목록', '/운용 — 보유 종목 손절선·매도선', '/시장 — 지수·시장 국면·주요 뉴스', '/인버스 — 인버스 판단', '그 밖의 말 — 비서에게 전달 (차트·설정 조작도 가능, 직접 주문은 안 됨)'].join('\n');
+    async function tgHandle(raw) {
+      const text = String(raw || '').trim();
+      if (!text) return;
+      const [head, ...rest] = text.replace(/^\//, '').split(/\s+/);
+      const cmd = head.replace(/@\S+$/, '');
+      const c = state.cfg, p = paper();
+      if (['도움', 'help', 'start', '시작', '명령'].includes(cmd)) return tgReply(TG_HELP);
+      if (cmd === '현황') {
+        const eq = equityNow(), ret = (eq / p.startCapital - 1) * 100;
+        const pos = Object.entries(p.positions).map(([cd, q]) => `· ${nameOf(cd)} ${q.qty}주 ${pctTxt(((lastPrice(cd) || q.avg) / q.avg - 1) * 100)}`);
+        const man = Object.entries(p.manual || {}).filter(([, m]) => m.qty > 0).map(([cd, m]) => `· ${nameOf(cd)}${state.invList.some((x) => x.code === cd) ? '(인버스)' : '(수동)'} ${m.qty}주 ${pctTxt(((lastPrice(cd) || m.avg) / m.avg - 1) * 100)}`);
+        return tgReply([`모의 평가자산 ${won(Math.round(eq))}원 (${pctTxt(ret)}) · 현금 ${won(Math.round(p.cash))}원`, ...(pos.length || man.length ? [...pos, ...man] : ['보유 없음']), `결재 대기 ${state.agenda.filter((a) => a.status === 'pending').length}건 — /결재`].join('\n'));
+      }
+      if (cmd === '결재') {
+        const L = state.agenda.filter((a) => a.status === 'pending' || a.status === 'approved');
+        return tgReply(L.length ? ['결재 안건', ...L.map((a) => `[${agShort(a)}] ${a.side === 'BUY' ? '매수' : '매도'} ${a.name}${a.kind === 'inv' ? '(인버스)' : ''} · ${a.signal} · ${a.status === 'approved' ? '승인됨' : '대기'}`), '자세히: /안건 번호'].join('\n') : '결재 대기 안건이 없어요.');
+      }
+      if (cmd === '안건') {
+        const a = agByShort(rest[0]);
+        if (!a) return tgReply('그 번호의 안건이 없어요 — /결재 로 번호를 확인하세요.');
+        if (!a.brief && !a.briefing && aiReady()) await agendaBrief(a);
+        if (a.briefing) return tgReply('리스크 브리핑을 쓰는 중이에요 — 잠시 뒤 다시 /안건 해 주세요.');
+        a.phoneRead = Date.now(); saveStore();
+        const px = lastPrice(a.code) || a.price;
+        return tgReply([`[${agShort(a)}] ${a.side === 'BUY' ? '매수' : '매도'} ${a.name}(${a.code}) · 지금 ${won(px)}원`, a.signal, a.side === 'BUY' ? `제안 수량 ${a.qtyDraft || a.qty}주` : '',
+          '— 리스크 점검표', ...(a.checks || []).map((x) => `${x.lv === 'high' ? '[중요] ' : x.lv === 'mid' ? '[주의] ' : '· '}${x.msg}`),
+          '— AI 리스크 브리핑 (반대 의견)', a.brief ? plainSay(a.brief) : (a.briefErr || '없음'),
+          '', a.status === 'pending' ? `결재: /승인 ${agShort(a)} PIN 이유  또는  /거절 ${agShort(a)} PIN 이유` : '이미 승인됨 — 매매 규칙대로 실행돼요'].filter((x) => x !== '').join('\n'));
+      }
+      if (cmd === '승인' || cmd === '거절') {
+        if (Date.now() < tgLock.until) return tgReply(`PIN을 여러 번 틀려서 ${Math.ceil((tgLock.until - Date.now()) / 60000)}분 동안 폰 결재를 막았어요.`);
+        const a = agByShort(rest[0]);
+        if (!a || a.status !== 'pending') return tgReply('결재 대기 중인 그 번호의 안건이 없어요 — /결재');
+        if (!phone.pinHash) return tgReply('PC 화면 설정 탭 → 폰 알림에서 결재 PIN을 먼저 정해 주세요.');
+        if (!a.phoneRead) return tgReply(`먼저 /안건 ${agShort(a)} 으로 리스크 점검표와 브리핑을 읽어 주세요.`);
+        if ((await pinHash(rest[1] || '')) !== phone.pinHash) {
+          tgLock.fails++;
+          if (tgLock.fails >= 5) { tgLock.until = Date.now() + 1800000; tgLock.fails = 0; raiseAlert({ lv: 'high', text: '폰 결재 PIN이 5번 틀려 30분 동안 폰 결재를 막았어요. 본인이 아니라면 텔레그램 봇 토큰을 바꾸세요.' }); }
+          return tgReply('PIN이 맞지 않아요.');
+        }
+        tgLock.fails = 0;
+        let words = rest.slice(2);
+        const qm = words.find((w) => /^수량=\d+$/.test(w));
+        words = words.filter((w) => w !== qm);
+        const reason = words.join(' ').trim();
+        if (reason.length < 2) return tgReply('결정 이유를 같이 적어 주세요. 예: /승인 ' + agShort(a) + ' PIN 스퀴즈 돌파 확인');
+        a.read = true; a.reasonDraft = `[폰] ${reason}`;
+        if (qm && a.side === 'BUY') a.qtyDraft = Number(qm.split('=')[1]);
+        agendaDecide(a.id, cmd === '승인');
+        await new Promise((r) => setTimeout(r, 300));
+        return tgReply(`[${agShort(a)}] ${a.name} ${a.side === 'BUY' ? '매수' : '매도'} — ${{ approved: `승인했어요. ${c.winStart}~${c.winEnd} 매매 규칙대로 실행돼요`, done: `실행했어요 (${won(Math.round(a.execPrice || 0))}원)`, rejected: '거절했어요 — 이후 성과는 계속 추적해요', expired: `실행하지 못했어요 — ${a.note || ''}` }[a.status] || a.status}`);
+      }
+      if (cmd === '대기') { const L = waitList().slice(0, 10); return tgReply(L.length ? ['돌파 대기 목록', ...L.map((x) => `· ${nameOf(x.code)} ${x.broke ? '오늘 돌파!' : `상단까지 ${x.dist.toFixed(1)}%`} (${won(x.px)})`)].join('\n') : '지금 돌파 대기 종목이 없어요.'); }
+      if (cmd === '운용') { const R = manageRows(); return tgReply(R.length ? ['운용 현황', ...R.map((r) => `· ${nameOf(r.code)} ${r.q.stage}차 ${pctTxt(r.g)}${r.sp ? ` · 손절 ${won(Math.round(r.sp))}(${r.spGap.toFixed(1)}% 위)` : ''}${r.ma ? ` · ${c.exitMa}일선 ${r.maGap >= 0 ? '위' : '아래'} ${Math.abs(r.maGap).toFixed(1)}%` : ''}`)].join('\n') : '전략으로 보유 중인 종목이 없어요.'); }
+      if (cmd === '시장') {
+        const r = research.res;
+        return tgReply([r ? `시장 국면 ${REGIME[r.regime].t} ${r.score} (하락 근거 ${r.items.filter((x) => x.score < 0).length}/${r.items.length})` : '시장 국면 데이터 없음',
+          ...mkt.items.filter((x) => !x.error).map((x) => `· ${x.name} ${idxNum(x.price)} ${x.chg == null ? '' : `${x.chg > 0 ? '+' : ''}${x.chg.toFixed(2)}%`}`),
+          ...(topNews.items.length ? ['— 주요 뉴스', ...topNews.items.slice(0, 5).map((n) => `· ${n.title}`)] : [])].join('\n'));
+      }
+      if (cmd === '인버스') { const d = invDecision(); return tgReply(`인버스: ${{ buy: '진입 조건 충족', sell: '정리 조건', hold: '보유 유지', none: '대기' }[d.act]} — ${d.why}${d.code ? ` (${nameOf(d.code)})` : ''}`); }
+      // 그 밖의 말: 비서에게
+      if (!aiReady()) return tgReply('AI 키가 없어서 대화는 못 해요. /도움 으로 명령을 보세요.');
+      if (chat.busy) return tgReply('비서가 다른 답을 하는 중이에요 — 잠시 뒤 다시 보내 주세요.');
+      const n0 = chat.msgs.length;
+      tgSrc = true;
+      try { await chatSend(`[폰] ${text}`); } finally { tgSrc = false; }
+      const out = chat.msgs.slice(n0).filter((m) => m.role === 'assistant').map((m) => plainSay(m.text)).join('\n');
+      tgReply(out || '(답이 없어요)');
+    }
+    // 중계기에 '명령 받기' 등록 (토큰·채팅 번호는 중계기 메모리에만)
+    async function tgStart() {
+      if (!state.bridge.ok || !state.bridge.tgcmd) return;
+      try {
+        if (phone.cmd && phone.on && phone.token && phone.chat) { await bridge('/notify/tg_start', { token: phone.token, chat: phone.chat }); phone.cmdErr = ''; }
+        else await bridge('/notify/tg_stop', {});
+      } catch (err) { phone.cmdErr = err.message; }
+      renderPhone();
+    }
+    async function savePin(pin) {
+      if (!/^\d{4,8}$/.test(pin)) return toast('PIN은 숫자 4~8자리로 정해 주세요');
+      phone.pinHash = await pinHash(pin); savePhone(); renderPhone(); toast('✔ 결재 PIN을 정했어요 (PIN 자체는 저장하지 않고 확인용 값만 저장)');
+    }
 
     async function chatSend(text) {
       text = String(text || '').trim();
@@ -6878,7 +6988,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (bl.blocks.length) chat.msgs.push({ role: 'assistant', text: applyBlocks(bl.blocks).join('\n'), at: Date.now() });
       chat.busy = false; renderChat(); saveChat();
       const acting = acts.length ? runActions(acts) : null;   // 화면 조작은 말하는 동안 실행 (확인 창은 사용자 클릭을 기다림)
-      if ((chat.speak || chat.convo) && !reply.startsWith('(오류)')) { chat.speaking = true; try { await speakText(reply); } finally { chat.speaking = false; } }
+      if ((chat.speak || chat.convo) && !tgSrc && !reply.startsWith('(오류)')) { chat.speaking = true; try { await speakText(reply); } finally { chat.speaking = false; } }
       if (acting) await acting;
       convoNext();
     }
