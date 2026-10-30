@@ -5149,7 +5149,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.28', APP_DATE = '2026-10-30';
+    const APP_VERSION = '1.29', APP_DATE = '2026-10-30';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -6727,7 +6727,10 @@ onmessage = (e) => { const { body, sets } = e.data;
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
-      if (!aiReady()) { toast('설정 → AI 분석에서 키를 먼저 넣으세요.'); return; }
+      if (!aiReady()) {   // 키가 없으면 쓴 말이 사라지지 않게 대화창에 남기고 방법을 알려 줌
+        chat.msgs.push({ role: 'user', text, at: Date.now() }, { role: 'assistant', text: 'AI 키가 아직 없어서 답할 수 없어요. 설정 탭 → AI 분석에서 Gemini나 Claude 키를 넣거나, 위의 "📋 상황 복사"로 외부 Gemini 대화창에 붙여 넣어 물어보세요.', at: Date.now() });
+        renderChat(); saveChat(); return;
+      }
       stopSpeaking();
       const history = chat.msgs.slice(-20).map((m) => ({ role: m.role, text: m.text }));
       chat.msgs.push({ role: 'user', text, at: Date.now() });

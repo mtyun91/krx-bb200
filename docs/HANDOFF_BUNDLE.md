@@ -174,9 +174,9 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 ## partisan_investment.html
 
-총 7,153줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
+총 7,156줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
 
-화면 버전: v1.27 · 2026-10-29 (pre-commit 훅이 자동으로 올림)
+화면 버전: v1.28 · 2026-10-30 (pre-commit 훅이 자동으로 올림)
 
 ### 구역과 함수 (줄 번호)
 
@@ -711,31 +711,31 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 **6719** · ---- 시장 국면 기준 한 줄: 왼쪽 위 '시장 국면' 칸 아래에 판정 기준과 가장 큰 근거를 보여 줌
 - `regimeNote` 6720
 - `chatSend` 6727
-- `convoNext` 6750
-- `convoToggle` 6756
-- `voiceSel` 6772
-- `stopSpeaking` 6774
-- `speechChunks` 6781
-- `pcmToWavBlob` 6788
-- `audioBlob` 6796
-- `speakText` 6801
-- `browserSpeak` 6835
-- `micToggle` 6849
-- `silenceMs` 6858
-- `endWait` 6863
-- `startSR` 6871
-- `startRecorder` 6922
+- `convoNext` 6753
+- `convoToggle` 6759
+- `voiceSel` 6775
+- `stopSpeaking` 6777
+- `speechChunks` 6784
+- `pcmToWavBlob` 6791
+- `audioBlob` 6799
+- `speakText` 6804
+- `browserSpeak` 6838
+- `micToggle` 6852
+- `silenceMs` 6861
+- `endWait` 6866
+- `startSR` 6874
+- `startRecorder` 6925
 
-**6994** · 22. 매매 스타일 학습 — 작은 신경망(입력 9 → 은닉 12 → 출력 1)으로 '진입 조건 → 수익 여부'를 학습
-- `featVec` 7002
-- `mlpForward` 7007
-- `aucOf` 7012
-- `trainStyle` 7020
-- `retrainStyle` 7071
-- `predictWin` 7084
-- `predictBin` 7091
-- `styleProfile` 7098
-- `renderStyle` 7107
+**6997** · 22. 매매 스타일 학습 — 작은 신경망(입력 9 → 은닉 12 → 출력 1)으로 '진입 조건 → 수익 여부'를 학습
+- `featVec` 7005
+- `mlpForward` 7010
+- `aucOf` 7015
+- `trainStyle` 7023
+- `retrainStyle` 7074
+- `predictWin` 7087
+- `predictBin` 7094
+- `styleProfile` 7101
+- `renderStyle` 7110
 
 ### 설정 키 (`DEFAULTS` — `SETTING_DEFS`에 화면 항목)
 
