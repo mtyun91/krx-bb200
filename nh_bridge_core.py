@@ -453,6 +453,39 @@ def news_search(q, n=20):
     return items[:n]
 
 
+# 주요 뉴스 — 구글 뉴스 경제(BUSINESS) · 종합(TOP) 헤드라인 (3분 저장)
+TOP_NEWS_URL = {"BUSINESS": "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ko&gl=KR&ceid=KR:ko", "TOP": "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"}
+
+
+def news_top(kind="BUSINESS"):
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
+    kind = kind if kind in TOP_NEWS_URL else "BUSINESS"
+    key = "top:" + kind
+    with NEWS_LOCK:
+        hit = NEWS_CACHE.get(key)
+        if hit and time.time() - hit[0] < 180:
+            return hit[1]
+    req = urllib.request.Request(TOP_NEWS_URL[kind], headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=15) as res:
+        root = ET.fromstring(res.read())
+    items = []
+    for it in root.iter("item"):
+        title = (it.findtext("title") or "").strip()
+        src = (it.findtext("source") or "").strip()
+        if src and title.endswith(" - " + src):
+            title = title[: -len(src) - 3]
+        try:
+            ts = int(parsedate_to_datetime(it.findtext("pubDate") or "").timestamp() * 1000)
+        except (TypeError, ValueError):
+            ts = 0
+        items.append({"title": title, "source": src, "link": it.findtext("link") or "", "at": ts})
+    items = items[:30]   # 구글 뉴스가 정한 순서(지금 많이 다루는 순) 그대로
+    with NEWS_LOCK:
+        NEWS_CACHE[key] = (time.time(), items)
+    return items
+
+
 # ---------------------------------------------------------------------------
 # AI 시장 코멘트 (선택) — Claude API 로 화면이 모은 시장 데이터·뉴스 제목을 요약·해석
 # 키는 실행기가 환경변수 ANTHROPIC_API_KEY 로만 넘김 (파일 저장 없음). 같은 데이터면 1시간 동안 저장분 사용
@@ -735,6 +768,7 @@ CHAT_STYLE = (
     "- 데이터에 없는 건 '그건 지금 화면 데이터로는 알 수 없어요'라고 솔직히 말한다.\n"
     "- 마지막에 필요할 때만, 다음에 확인해 볼 것을 한 문장으로 제안한다.\n"
     "- 이 매매의 핵심: 저가권(3년 가격 범위의 아래쪽)에서 큰 하락 뒤 오래 횡보하며 200일 볼린저밴드가 최대로 좁아진 종목이 상단을 돌파할 때 사서(데이터의 스퀴즈), 산 뒤의 운용(손절선·매도선·2·3차 추가 매수 — 데이터의 운용현황)으로 대응하는 것이다. 고가권 돌파는 이 매매가 아니다. 종목을 볼 때 이 기준으로 위치를 말한다.\n"
+    "- 데이터의 주요뉴스는 지금 많이 다뤄지는 경제(또는 종합) 뉴스 제목이다. 시장 상황을 물으면 주요지수·시장 국면과 함께 참고하되, 제목에 있는 내용만 말한다.\n"
     "- 데이터의 인버스: 시장 국면이 하락이고 점수가 진입 기준 이하이면(지금판단) 인버스 ETF를 추천할 수 있다 — 1배, 점수가 더 나쁘면 2배. 근거(국면 점수·하락 근거 수·판정검증·주요지수)와 위험(반등하면 손실, 2배는 횡보에도 손실이 쌓이는 감쇠라 짧게, 판정이 틀릴 수 있음)을 수치로 같이 말한다. 상승·중립 국면에서는 인버스를 권하지 않는다. 실행은 결재함에서 사용자가 결재하고, 인버스 기준값은 설정 키 invOn·invEntry·invExit·invLev·invLevScore·invPct·invMaxDays·invExitMa·inv1·inv2.\n"
     "- 데이터의 시장후보요약에는 지금 종목군 전체의 오늘돌파신호·스퀴즈상단근처·상단근접 상위 종목과 수치(등락·상단대비·5일선대비·거래량배수·거래대금·섹터)가 있다. 오늘 살 만한 종목이나 후보 비교를 물으면 이 목록의 수치를 비교해 근거·위험과 함께 답하고, 가장 나은 후보를 차트에 띄워 줄 수 있다.\n"
     "- 데이터의 선택종목.최근20봉·최근뉴스가 있으면 최근 흐름(고점·저점·지지·저항)과 뉴스 제목까지 참고한다. 뉴스 내용은 제목에 있는 것만 말한다.\n"
@@ -809,14 +843,19 @@ CHAT_ACTIONS = (
     '{"do":"확대","bars":120} — 화면에 보일 봉 수 (작을수록 확대)\n'
     '{"do":"과거봉"} — 과거 봉 1000개 더 불러오기\n'
     '{"do":"탭","tab":"assist|bt|paper|set"} — 오른쪽 탭(비서·백테스트·모의투자·설정)\n'
-    '{"do":"리서치센터","tab":"brief|regime|sector|scen|news"} / {"do":"리서치센터닫기"} — 시장 국면 근거는 regime\n'
-    '{"do":"종목군","u":"WATCH|K200|Q150|ALL"} — 관심·코스피200·코스닥150·검색식\n'
+    '{"do":"리서치센터","tab":"brief|index|regime|sector|scen|news"} / {"do":"리서치센터닫기"} — 시장 국면 근거는 regime\n'
+    '{"do":"종목군","u":"WATCH|K200|Q150|ALL|INV"} — 관심·코스피200·코스닥150·검색식·인버스\n'
     '{"do":"관심","code":"...","on":true} — 관심종목 추가(true)·삭제(false)\n'
     '{"do":"패널","left":true,"right":false} — 좌우 패널 펼치기·접기\n'
     '{"do":"설정","set":{"exitMa":10}} — 키와 현재 값은 데이터의 화면.설정\n'
     '{"do":"주문","code":"...","side":"BUY|SELL","type":"MKT|LMT","price":0,"qty":1} — 모의 주문 (LMT는 price 필수)\n'
     '{"do":"즉시매도","code":"..."} — 보유 종목 전량 즉시 매도 (모의)\n'
     '{"do":"백테스트"} — 백테스트 다시 실행\n'
+    '{"do":"지수차트","sym":"^KS11|^KQ11|^GSPC|^IXIC|^DJI|^SOX|^VIX|KRW=X"} — 리서치센터에서 지수 차트 (코스피·코스닥·S&P500·나스닥·다우·반도체·VIX·원/달러)\n'
+    '{"do":"필터","f":"all|signal|squeeze|near|held"} 종목 목록 거르기 · {"do":"정렬","key":"name|price|chg|toUpper|","dir":"asc|desc"} 목록 정렬\n'
+    '{"do":"결재함"} 결재함 열기 · {"do":"지금판단"} 지금 가격으로 판단해 안건 올리기(결재제일 때만) · {"do":"인버스판단"} · {"do":"인버스백테스트"}\n'
+    '{"do":"알림","mode":"voice|quiet|off"} 먼저 알림 · {"do":"패널폭","left":244,"right":300} · {"do":"차트설정창","on":true} · {"do":"뉴스","q":"검색어"}\n'
+    '- 설정을 바꿀 때는 데이터 화면.설정에 있는 키(뜻과 현재 값이 함께 있음)를 {"do":"설정","set":{...}}로 바꾼다 — 매수 방식·저가권·손절·매도선·분할·인버스·결재제·매매 시간대 등 화면 설정 전부. 차트 모양은 차트설정, 그림은 그리기.\n'
     "규칙: 사용자가 분명히 요청한 것만 명령한다. 추천은 말로만 한다 — 주문 명령은 사용자가 종목·방향·수량을 직접 말했을 때만 만든다. "
     "주문·즉시매도·설정 변경은 화면이 사용자에게 확인을 받은 뒤 실행된다. 코드를 모르면 name을 쓴다. "
     "요청이 모호하면(예: 수량 없음) 명령 없이 되묻는다."
@@ -1593,7 +1632,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/rt/stream":
             return self._stream()
         now = datetime.now(KST)
-        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "market": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
+        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "market": True, "topnews": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
                          "kst": now.strftime("%Y-%m-%d %H:%M:%S")})
 
     def _stream(self):
@@ -1618,7 +1657,7 @@ class Handler(BaseHTTPRequestHandler):
             HUB.remove(q)
 
     def do_POST(self):
-        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/sectors", "/news", "/market/quotes", "/market/index", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
+        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/sectors", "/news", "/news/top", "/market/quotes", "/market/index", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
                              "/trade/status", "/trade/arm", "/trade/order", "/trade/cancel", "/trade/balance", "/trade/orders"):
             return self._json(404, {"error": "not found"})
         if not self._guard():
@@ -1701,6 +1740,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not q:
                     return self._json(400, {"error": "검색어가 필요합니다"})
                 return self._json(200, {"q": q, "items": news_search(q, max(1, min(100, int(req.get("n", 20)))))})
+            if self.path == "/news/top":
+                return self._json(200, {"items": news_top(str(req.get("kind", "BUSINESS")))})
             if self.path == "/market/quotes":
                 return self._json(200, market_quotes())
             if self.path == "/market/index":

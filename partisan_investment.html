@@ -67,7 +67,7 @@
     </div>
   </header>
   <!-- 주요 지수 띠: 코스피·코스닥·미국 지수·환율 (누르면 리서치센터 지수 차트) -->
-  <div id="idxBar" class="flex items-center gap-2 px-3 h-6 border-b border-[#e6e6e6] text-[11px] num overflow-x-auto overflow-y-hidden scroll whitespace-nowrap shrink-0"></div>
+  <div id="idxBar" class="flex items-center gap-2 px-3 h-6 border-b border-[#e6e6e6] text-[11px] num overflow-hidden whitespace-nowrap shrink-0"><div id="idxItems" class="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll"></div><div id="newsTicker" class="flex items-center gap-1.5 w-[42%] max-w-[640px] min-w-[220px] shrink-0 font-sans border-l border-[#e6e6e6] pl-2 overflow-hidden"></div></div>
   <!-- 리서치 센터 (큰 창): 시장 국면 · 섹터 · 시나리오 가이드 · 뉴스 -->
   <div id="centerPop" class="hidden fixed inset-0 z-50 bg-black/20 flex items-start justify-center pt-8">
     <div class="bg-white border border-[#111111] shadow-xl w-[min(1180px,96vw)] h-[86vh] flex flex-col">
@@ -100,11 +100,11 @@
   <main class="flex-1 flex min-h-0">
     <!-- 왼쪽: 종목 목록 -->
     <aside id="leftPane" class="w-[244px] shrink-0 border-r border-[#e6e6e6] flex flex-col min-h-0">
-      <button id="regimeBox" type="button" class="flex items-center gap-1.5 px-2 py-1.5 border-b border-[#e6e6e6] text-[11px] text-left hover:bg-[#fafafa]" title="시장 국면 근거 보기 (리서치)"></button>
+      <button id="regimeBox" type="button" class="block w-full px-2 py-1.5 border-b border-[#e6e6e6] text-[11px] text-left hover:bg-[#fafafa]" title="시장 국면 근거 보기 (리서치)"></button>
       <div class="flex border-b border-[#e6e6e6]" role="tablist" aria-label="종목군">
         <button type="button" data-universe="WATCH" class="uni-tab flex-1 py-1.5">관심</button>
-        <button type="button" data-universe="K200" class="uni-tab flex-1 py-1.5">코스피200</button>
-        <button type="button" data-universe="Q150" class="uni-tab flex-1 py-1.5">코스닥150</button>
+        <button type="button" data-universe="K200" class="uni-tab flex-1 py-1.5" title="코스피200 구성종목">코스피</button>
+        <button type="button" data-universe="Q150" class="uni-tab flex-1 py-1.5" title="코스닥150 구성종목">코스닥</button>
         <button type="button" data-universe="ALL" class="uni-tab flex-1 py-1.5" title="전체 시장에서 검색식 조건을 통과한 종목">검색식</button>
         <button type="button" data-universe="INV" class="uni-tab flex-1 py-1.5" title="인버스 ETF — 하락장 대응 (모의투자 탭 아래에서 관리)">인버스</button>
       </div>
@@ -2436,7 +2436,7 @@
       const badge = document.getElementById('modeBadge');
       try {
         const h = await bridge('/health');
-        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.market = !!h.market; setTimeout(() => loadMarketQuotes(), 300); state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
+        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.market = !!h.market; state.bridge.topnews = !!h.topnews; setTimeout(() => { loadMarketQuotes(); loadTopNews(); }, 300); state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
         badge.textContent = h.demo ? '● 데모 시세' : '● 나무증권 실시간';
         badge.className = `text-[11px] px-2 py-0.5 ${h.demo ? 'bg-[#e5383b] text-white' : 'bg-[#111111] text-white'}`;
         document.getElementById('demoBanner').classList.toggle('hidden', !h.demo);
@@ -3064,7 +3064,7 @@
       const box = document.getElementById('regimeBox');
       if (box) {
         box.innerHTML = !r ? '<span class="text-[#999999]">시장 국면 — 지수 데이터 받는 중</span>'
-          : `<span class="text-[#666666]">시장 국면</span> ${regimeChip(r.regime)} <span class="num ${REGIME[r.regime].cls}">${r.score >= 0 ? '+' : ''}${r.score}</span><span class="ml-auto text-[10px] text-[#999999]">근거 ${r.items.length}개 ›</span>`;
+          : `<div class="flex items-center gap-1.5 w-full"><span class="text-[#666666]">시장 국면</span> ${regimeChip(r.regime)} <span class="num ${REGIME[r.regime].cls}">${r.score >= 0 ? '+' : ''}${r.score}</span><span class="ml-auto text-[10px] text-[#999999]">근거 ${r.items.length}개 ›</span></div>${regimeNote(r)}`;
       }
       const el = document.getElementById('researchBody');
       if (!el) return;
@@ -4423,7 +4423,7 @@
           if (!TAB_NAMES[a.tab]) return `✖ 모르는 탭: ${a.tab}`;
           state.ui.right = true; saveStore(); applyPanes(); setTab(a.tab);
           return `✔ ${TAB_NAMES[a.tab]} 탭을 열었어요`;
-        case '리서치센터': openCenter(['brief', 'regime', 'sector', 'scen', 'news'].includes(a.tab) ? a.tab : null); return '✔ 리서치센터를 열었어요';
+        case '리서치센터': openCenter(['brief', 'index', 'regime', 'sector', 'scen', 'news'].includes(a.tab) ? a.tab : null); return '✔ 리서치센터를 열었어요';
         case '리서치센터닫기': document.getElementById('centerPop').classList.add('hidden'); return '✔ 리서치센터를 닫았어요';
         case '종목군': {
           const b = document.querySelector(`.uni-tab[data-universe="${a.u}"]`);
@@ -4473,6 +4473,58 @@
         case '관심추가': { const cs = (a.codes || []).filter((c) => /^[0-9A-Z]{6}$/.test(c)).slice(0, 30); cs.forEach((c) => toggleWatch(c, true)); return cs.length ? `✔ 관심종목에 ${cs.length}개를 넣었어요` : '✖ 넣을 종목이 없어요'; }
         case '그리기': if (src === 'widget') return '✖ 위젯은 차트에 그릴 수 없어요'; return drawAct(a);
         case '그림삭제': return drawClearAct(a);
+        case '지수차트': {
+          const sym = String(a.sym || '^KS11');
+          if (!IDX_LIST.some((x) => x[0] === sym)) return `✖ 모르는 지수: ${sym}`;
+          mkt.sym = sym; openCenter('index');
+          return `✔ ${IDX_LIST.find((x) => x[0] === sym)[1]} 지수 차트를 열었어요`;
+        }
+        case '필터': {
+          const F = { all: '전체', signal: '오늘 신호', squeeze: '스퀴즈', near: '상단 근접', held: '보유' }, f = String(a.f);
+          if (!F[f]) return `✖ 모르는 필터: ${f}`;
+          state.filter = f; renderSymbols();
+          return `✔ 종목 목록을 '${F[f]}'로 걸렀어요`;
+        }
+        case '정렬': {
+          const k = String(a.key || '');
+          if (k && !['name', 'price', 'chg', 'toUpper'].includes(k)) return `✖ 모르는 정렬: ${k}`;
+          state.sort = { key: k, dir: a.dir === 'asc' ? 'asc' : 'desc' }; renderSymbols();
+          return k ? '✔ 종목 목록을 정렬했어요' : '✔ 정렬을 풀었어요';
+        }
+        case '결재함': state.ui.right = true; saveStore(); applyPanes(); setTab('paper'); document.getElementById('agendaBox').scrollIntoView({ block: 'start' }); return '✔ 결재함을 열었어요';
+        case '인버스판단': {
+          if (src === 'widget') return '✖ 위젯은 할 수 없어요';
+          const on = state.cfg.invOn;
+          state.cfg.invOn = true;
+          const d = invEvaluate('manual');
+          state.cfg.invOn = on;
+          return d.act === 'buy' || d.act === 'sell' ? `✔ 인버스 ${d.act === 'buy' ? '진입' : '정리'} 안건을 결재함에 올렸어요 — ${d.why}` : `✔ 인버스: ${d.why}`;
+        }
+        case '인버스백테스트': {
+          const b = invBacktest(); renderInv();
+          return b.error ? `✖ ${b.error}` : `✔ 인버스 백테스트 ${fmtDate(b.from)}~${fmtDate(b.to)}: 거래 ${b.n}건 · 승률 ${b.win == null ? '-' : b.win.toFixed(0)}% · 누적 ${pctTxt(b.total)} · 최대낙폭 -${b.mdd.toFixed(1)}%`;
+        }
+        case '지금판단':
+          if (src === 'widget') return '✖ 위젯은 할 수 없어요';
+          if (!agendaOn()) return '✖ 완전 자동 모드에서는 비서가 판단 실행을 대신하지 않아요 (결재제를 켜면 가능)';
+          await paperDecide(true);
+          return '✔ 지금 가격으로 판단해서 필요한 안건을 결재함에 올렸어요';
+        case '알림': {
+          const m = String(a.mode);
+          if (!['voice', 'quiet', 'off'].includes(m)) return `✖ 모르는 알림 방식: ${m}`;
+          alertCfg.mode = m; saveAlertCfg(); renderAlertBtn();
+          return `✔ 먼저 알림을 ${m === 'voice' ? '소리까지 켰어요' : m === 'quiet' ? '화면에만 보이게 했어요' : '껐어요'}`;
+        }
+        case '패널폭':
+          if (Number(a.left)) state.ui.leftW = Math.min(480, Math.max(200, Number(a.left)));
+          if (Number(a.right)) state.ui.rightW = Math.min(560, Math.max(280, Number(a.right)));
+          saveStore(); applyPanes();
+          return '✔ 패널 폭을 바꿨어요';
+        case '차트설정창': openLook(a.on !== false); return a.on === false ? '✔ 차트 설정 창을 닫았어요' : '✔ 차트 설정 창을 열었어요';
+        case '뉴스':
+          openCenter('news');
+          if (a.q) { runNews(String(a.q).slice(0, 60)); return `✔ '${String(a.q).slice(0, 60)}' 뉴스를 찾아요`; }
+          return '✔ 뉴스를 열었어요';
         case '차트설정': case '보조지표': return lookAct(a);
         case '일지': return journalWhyAct(a);
         case '규칙추출': return runExtract();
@@ -5097,7 +5149,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.27', APP_DATE = '2026-10-29';
+    const APP_VERSION = '1.28', APP_DATE = '2026-10-30';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -6316,7 +6368,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (state.selected && state.bridge.ok && state.bridge.research && !newsCache[nameOf(state.selected)]) { try { await getNews(nameOf(state.selected), 10); } catch (_) {} }
       const pack = {
         안내: '파르티잔 인베스트먼트 화면의 지금 상태입니다. 이 수치를 근거로 분석·비교·추천해 주세요(근거 수치와 위험을 함께, 보장 표현 없이 — 결정은 사용자가 결재). 화면 조작·차트 작도·설정이 필요하면 <<명령>> [ ... ] 형식으로, 매매 규칙은 <<규칙 ...>>...<</규칙>>, 위젯은 <<위젯 ...>>...<</위젯>> 형식으로 답하면 사용자가 앱의 "📥 답 적용"에 붙여 넣어 실행합니다.',
-        ...assistFacts(), 화면: screenFacts(), 매매규칙: rulesFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 운용현황: manageFacts(), 표시구간: marksFacts(), 차트모양: lookFacts(),
+        ...assistFacts(), 화면: screenFacts(), 매매규칙: rulesFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 운용현황: manageFacts(), 주요뉴스: topNewsFacts(), 표시구간: marksFacts(), 차트모양: lookFacts(),
       };
       const text = `[파르티잔 인베스트먼트 지금 상황 — ${pack.시각}]\n${JSON.stringify(pack, null, 2)}`;
       try { await navigator.clipboard.writeText(text); toast('📋 지금 화면 상황을 복사했어요 — Gemini 대화창에 붙여 넣고 물어보세요'); }
@@ -6369,13 +6421,13 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (state.idxView) renderIndexToolbar();
     }
     function renderIdxBar() {
-      const el = document.getElementById('idxBar');
+      const el = document.getElementById('idxItems');
       if (!el) return;
       if (!state.bridge.ok) { el.innerHTML = '<span class="text-[#999999] font-sans">주요 지수 — 중계기에 연결하면 코스피·코스닥·미국 지수가 보여요</span>'; return; }
       if (!state.bridge.market) { el.innerHTML = '<span class="text-[#999999] font-sans">주요 지수 — 중계기를 새 버전으로 다시 켜면 보여요</span>'; return; }
       if (!mkt.items.length) { el.innerHTML = `<span class="text-[#999999] font-sans">${mkt.err ? `지수 오류: ${esc(mkt.err)}` : '주요 지수 불러오는 중…'}</span>`; return; }
       el.innerHTML = mkt.items.map((x) => `<button type="button" data-idx="${esc(x.sym)}" class="hover:underline whitespace-nowrap" title="${esc(x.name)}${x.time ? ` · ${esc(x.time)} 기준` : ''} — 눌러서 지수 차트 보기"><span class="font-sans text-[#666666]">${esc(x.name)}</span> <b>${idxNum(x.price)}</b> ${x.error ? '<span class="text-[#bbbbbb]">-</span>' : idxPct(x.chg)}</button>`).join('<span class="text-[#dddddd]">·</span>')
-        + `<span class="ml-auto pl-2 text-[9px] text-[#bbbbbb] font-sans whitespace-nowrap">지연 시세 · ${new Date(mkt.at + 9 * 3600000).toISOString().slice(11, 16)} 갱신</span>`;
+        + `<span class="pl-1 text-[9px] text-[#bbbbbb] font-sans whitespace-nowrap">지연 시세 · ${new Date(mkt.at + 9 * 3600000).toISOString().slice(11, 16)} 갱신</span>`;
     }
     document.getElementById('idxBar').addEventListener('click', (e) => { const b = e.target.closest('[data-idx]'); if (b) { mkt.sym = b.dataset.idx; openCenter('index'); } });
     // 리서치센터 '지수 차트' 탭 — 처음 한 번만 틀을 만들고, 그 뒤엔 위쪽 버튼 줄만 다시 그림 (차트가 지워지지 않게)
@@ -6632,6 +6684,46 @@ onmessage = (e) => { const { body, sets } = e.data;
     bgEvery(() => renderManage(), 2000);
     renderManage();
 
+    // ---- 주요 뉴스 띠: 지수 띠 오른쪽에 지금 가장 많이 다뤄지는 경제(또는 종합) 뉴스 제목을 6초마다 넘겨 보여 줌 · 3분마다 새로 받음 ----
+    const topNews = { kind: (() => { try { return localStorage.getItem('krx_news_kind') || 'BUSINESS'; } catch (_) { return 'BUSINESS'; } })(), items: [], at: 0, k: 0, err: '' };
+    async function loadTopNews() {
+      if (!state.bridge.ok || !state.bridge.topnews) { renderNewsTicker(); return; }
+      try { const r = await bridge('/news/top', { kind: topNews.kind }); topNews.items = r.items || []; topNews.at = Date.now(); topNews.err = ''; topNews.k = 0; }
+      catch (err) { topNews.err = err.message; }
+      renderNewsTicker();
+    }
+    const newsAgo = (ms) => { const m = Math.max(0, Math.round((Date.now() - ms) / 60000)); return m < 60 ? `${m}분 전` : m < 1440 ? `${Math.floor(m / 60)}시간 전` : `${Math.floor(m / 1440)}일 전`; };
+    function renderNewsTicker() {
+      const el = document.getElementById('newsTicker');
+      if (!el) return;
+      const kind = `<button type="button" data-nkind class="shrink-0 px-1 border border-[#d4d4d4] text-[9px] text-[#666666] hover:border-[#111111]" title="경제 뉴스 ↔ 종합 뉴스">${topNews.kind === 'BUSINESS' ? '경제' : '종합'}</button>`;
+      if (!state.bridge.ok || !state.bridge.topnews) { el.innerHTML = `${kind}<span class="text-[#bbbbbb] truncate">주요 뉴스 — ${state.bridge.ok ? '중계기를 새 버전으로 다시 켜면 보여요' : '중계기에 연결하면 보여요'}</span>`; return; }
+      const n = topNews.items[topNews.k % Math.max(1, topNews.items.length)];
+      el.innerHTML = kind + (n ? `<button type="button" data-nopen class="truncate text-left hover:underline min-w-0" title="${esc(n.title)} — 눌러서 기사 열기"><span class="text-[#e5383b]">●</span> ${esc(n.title)}</button><span class="shrink-0 text-[9px] text-[#999999]">${esc(n.source || '')} · ${n.at ? newsAgo(n.at) : ''}</span><button type="button" data-nmore class="shrink-0 text-[9px] underline text-[#888888]" title="리서치센터 뉴스 탭">더보기</button>`
+        : `<span class="text-[#bbbbbb] truncate">${topNews.err ? `뉴스 오류: ${esc(topNews.err)}` : '주요 뉴스 불러오는 중…'}</span>`);
+    }
+    document.getElementById('newsTicker').addEventListener('click', (e) => {
+      if (e.target.closest('[data-nkind]')) { topNews.kind = topNews.kind === 'BUSINESS' ? 'TOP' : 'BUSINESS'; try { localStorage.setItem('krx_news_kind', topNews.kind); } catch (_) {} topNews.items = []; renderNewsTicker(); loadTopNews(); return; }
+      if (e.target.closest('[data-nmore]')) { openCenter('news'); return; }
+      const n = topNews.items[topNews.k % Math.max(1, topNews.items.length)];
+      if (e.target.closest('[data-nopen]') && n && /^https:\/\//.test(n.link)) window.open(n.link, '_blank', 'noopener');
+    });
+    let newsHover = false;
+    document.getElementById('newsTicker').addEventListener('mouseenter', () => { newsHover = true; });
+    document.getElementById('newsTicker').addEventListener('mouseleave', () => { newsHover = false; });
+    bgEvery(() => { if (!newsHover && topNews.items.length > 1) { topNews.k = (topNews.k + 1) % Math.min(12, topNews.items.length); renderNewsTicker(); } }, 6000);
+    bgEvery(() => { if (!document.hidden) loadTopNews(); }, 180000);
+    const topNewsFacts = () => (topNews.items.length ? topNews.items.slice(0, 10).map((n) => `${n.title} (${n.source}${n.at ? ` · ${newsAgo(n.at)}` : ''})`) : null);
+    renderNewsTicker();
+
+    // ---- 시장 국면 기준 한 줄: 왼쪽 위 '시장 국면' 칸 아래에 판정 기준과 가장 큰 근거를 보여 줌 ----
+    function regimeNote(r) {
+      if (!r) return '';
+      const neg = r.items.filter((x) => x.score < 0), pos = r.items.filter((x) => x.score > 0);
+      const key = (r.regime === 'down' ? neg : r.regime === 'up' ? pos : [...neg, ...pos]).slice(0, 2).map((x) => `${x.label.replace(/\s*\(.*\)/, '')} ${x.value}`).join(' · ');
+      return `<div class="text-[10px] text-[#888888] leading-snug mt-0.5 text-left">기준: 근거 ${r.items.length}개(지수 추세·시장 체력·변동성)를 +1·0·−1로 매겨 평균 → <b class="up">+30 이상 상승</b> · <b class="down">−30 이하 하락</b> · 그 사이 중립 | 하락 근거 ${neg.length} · 상승 ${pos.length}${key ? `<br>주요: ${esc(key)}` : ''}${state.cfg.invOn ? `<br>인버스: 점수 ${state.cfg.invEntry} 이하면 안건 (${state.cfg.invLevScore} 이하 2배)` : ''}</div>`;
+    }
+
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
@@ -6641,7 +6733,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       chat.msgs.push({ role: 'user', text, at: Date.now() });
       chat.busy = true; renderChat(); saveChat();
       let reply;
-      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 운용현황: manageFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
+      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 운용현황: manageFacts(), 주요뉴스: topNewsFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
       catch (err) { reply = `(오류) ${err.message}`; }
       const bl = splitBlocks(reply);
       const { text: said, acts, prop } = splitActions(bl.text);
