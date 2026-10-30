@@ -486,6 +486,47 @@ def news_top(kind="BUSINESS"):
     return items
 
 
+# 폰 알림 — 텔레그램 봇. 토큰·채팅 번호는 화면이 요청마다 보내고 여기서는 저장·출력하지 않음
+def _tg_token_ok(token):
+    a, sep, b = str(token).partition(":")
+    return bool(sep) and a.isdigit() and len(b) >= 30 and all(ch.isalnum() or ch in "_-" for ch in b)
+
+
+def _tg_call(token, method, data=None):
+    if not _tg_token_ok(token):
+        raise RuntimeError("봇 토큰 형식이 아니에요 (숫자:영문 형태)")
+    body = urllib.parse.urlencode(data).encode() if data else None
+    req = urllib.request.Request(f"https://api.telegram.org/bot{token}/{method}", data=body)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as res:
+            r = json.load(res)
+    except urllib.error.HTTPError as e:
+        try:
+            r = json.load(e)
+        except ValueError:
+            raise RuntimeError(f"텔레그램 오류 {e.code}") from None
+    if not r.get("ok"):
+        raise RuntimeError(f"텔레그램: {r.get('description', '실패')}")
+    return r.get("result")
+
+
+def telegram_send(token, chat, text):
+    chat = str(chat).strip()
+    if not chat.lstrip("-").isdigit():
+        raise RuntimeError("채팅 번호가 없어요 — 내 봇에게 아무 말이나 보낸 뒤 '찾기'를 누르세요")
+    _tg_call(token, "sendMessage", {"chat_id": chat, "text": str(text)[:3500]})
+    return {"ok": True}
+
+
+def telegram_chat(token):
+    for u in reversed(_tg_call(token, "getUpdates") or []):
+        m = u.get("message") or u.get("channel_post") or {}
+        ch = m.get("chat")
+        if ch:
+            return {"chat": ch["id"], "name": ch.get("first_name") or ch.get("title") or ""}
+    raise RuntimeError("봇에게 먼저 아무 말이나 보내 주세요 (그 뒤 '찾기')")
+
+
 # ---------------------------------------------------------------------------
 # AI 시장 코멘트 (선택) — Claude API 로 화면이 모은 시장 데이터·뉴스 제목을 요약·해석
 # 키는 실행기가 환경변수 ANTHROPIC_API_KEY 로만 넘김 (파일 저장 없음). 같은 데이터면 1시간 동안 저장분 사용
@@ -768,6 +809,7 @@ CHAT_STYLE = (
     "- 데이터에 없는 건 '그건 지금 화면 데이터로는 알 수 없어요'라고 솔직히 말한다.\n"
     "- 마지막에 필요할 때만, 다음에 확인해 볼 것을 한 문장으로 제안한다.\n"
     "- 이 매매의 핵심: 저가권(3년 가격 범위의 아래쪽)에서 큰 하락 뒤 오래 횡보하며 200일 볼린저밴드가 최대로 좁아진 종목이 상단을 돌파할 때 사서(데이터의 스퀴즈), 산 뒤의 운용(손절선·매도선·2·3차 추가 매수 — 데이터의 운용현황)으로 대응하는 것이다. 고가권 돌파는 이 매매가 아니다. 종목을 볼 때 이 기준으로 위치를 말한다.\n"
+    "- 데이터의 돌파대기는 저가권 200일 스퀴즈 상태로 상단 가까이 온 종목(상단까지 % · 오늘 돌파)이다. 살 만한 후보를 물으면 이 목록을 근거·위험과 함께 먼저 본다. 장중에 상단을 뚫으면 화면이 알리고 결재 안건을 미리 올린다(실제 매수는 매매 시간대에 돌파가 유지될 때).\n"
     "- 데이터의 주요뉴스는 지금 많이 다뤄지는 경제(또는 종합) 뉴스 제목이다. 시장 상황을 물으면 주요지수·시장 국면과 함께 참고하되, 제목에 있는 내용만 말한다.\n"
     "- 데이터의 인버스: 시장 국면이 하락이고 점수가 진입 기준 이하이면(지금판단) 인버스 ETF를 추천할 수 있다 — 1배, 점수가 더 나쁘면 2배. 근거(국면 점수·하락 근거 수·판정검증·주요지수)와 위험(반등하면 손실, 2배는 횡보에도 손실이 쌓이는 감쇠라 짧게, 판정이 틀릴 수 있음)을 수치로 같이 말한다. 상승·중립 국면에서는 인버스를 권하지 않는다. 실행은 결재함에서 사용자가 결재하고, 인버스 기준값은 설정 키 invOn·invEntry·invExit·invLev·invLevScore·invPct·invMaxDays·invExitMa·inv1·inv2.\n"
     "- 데이터의 시장후보요약에는 지금 종목군 전체의 오늘돌파신호·스퀴즈상단근처·상단근접 상위 종목과 수치(등락·상단대비·5일선대비·거래량배수·거래대금·섹터)가 있다. 오늘 살 만한 종목이나 후보 비교를 물으면 이 목록의 수치를 비교해 근거·위험과 함께 답하고, 가장 나은 후보를 차트에 띄워 줄 수 있다.\n"
@@ -1632,7 +1674,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/rt/stream":
             return self._stream()
         now = datetime.now(KST)
-        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "market": True, "topnews": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
+        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "market": True, "topnews": True, "notify": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
                          "kst": now.strftime("%Y-%m-%d %H:%M:%S")})
 
     def _stream(self):
@@ -1657,7 +1699,7 @@ class Handler(BaseHTTPRequestHandler):
             HUB.remove(q)
 
     def do_POST(self):
-        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/sectors", "/news", "/news/top", "/market/quotes", "/market/index", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
+        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/sectors", "/news", "/news/top", "/notify/telegram", "/notify/telegram_chat", "/market/quotes", "/market/index", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
                              "/trade/status", "/trade/arm", "/trade/order", "/trade/cancel", "/trade/balance", "/trade/orders"):
             return self._json(404, {"error": "not found"})
         if not self._guard():
@@ -1740,6 +1782,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not q:
                     return self._json(400, {"error": "검색어가 필요합니다"})
                 return self._json(200, {"q": q, "items": news_search(q, max(1, min(100, int(req.get("n", 20)))))})
+            if self.path == "/notify/telegram":
+                return self._json(200, telegram_send(req.get("token", ""), req.get("chat", ""), req.get("text", "")))
+            if self.path == "/notify/telegram_chat":
+                return self._json(200, telegram_chat(req.get("token", "")))
             if self.path == "/news/top":
                 return self._json(200, {"items": news_top(str(req.get("kind", "BUSINESS")))})
             if self.path == "/market/quotes":

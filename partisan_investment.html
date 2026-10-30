@@ -113,7 +113,7 @@
         <button type="button" data-filter="all" class="flt btn px-1.5 py-0.5">전체</button>
         <button type="button" data-filter="signal" class="flt btn px-1.5 py-0.5">오늘 신호</button>
         <button type="button" data-filter="near" class="flt btn px-1.5 py-0.5">상단 근접</button>
-        <button type="button" data-filter="squeeze" class="flt btn px-1.5 py-0.5" title="200일 스퀴즈 상태로 상단 −8%~+3% 근처">스퀴즈</button>
+        <button type="button" data-filter="squeeze" class="flt btn px-1.5 py-0.5" title="저가권 200일 스퀴즈 상태로 상단 가까이 온 종목 (상단까지 가까운 순) + 오늘 스퀴즈 돌파">돌파 대기</button>
         <button type="button" data-filter="held" class="flt btn px-1.5 py-0.5">보유</button>
       </div>
       <div class="flex-1 overflow-y-auto overflow-x-hidden scroll">
@@ -220,6 +220,7 @@
           <div id="paperAcct" class="num text-[11px] bg-[#fafafa] border border-[#e6e6e6] px-2 py-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5"></div>
           <div id="agendaBox" class="space-y-1.5"></div>
           <div id="manageBox" class="hidden border border-[#111111] p-1.5 space-y-1"></div>
+          <div id="waitBox" class="border border-[#e6e6e6] p-1.5 space-y-0.5"></div>
           <div id="invBox" class="border border-[#e6e6e6] p-1.5 space-y-1"></div>
 
           <!-- 선택 종목이 보유 중이면: 보유 정보 · 즉시 매도 -->
@@ -307,6 +308,8 @@
 
         <!-- 설정 -->
         <div data-panel="set" class="tab-panel p-2.5 space-y-3">
+          <!-- 폰 알림 (텔레그램) — 토큰은 이 브라우저에만 -->
+          <div id="phoneBox" class="border border-[#111111] p-2 space-y-1.5"></div>
           <!-- AI 분석 키 (Claude · Gemini) — 계좌 동기화 파일에는 넣지 않음 -->
           <div id="aiBox" class="border border-[#111111] p-2 space-y-1.5">
             <div class="text-[10px] uppercase tracking-wider text-[#888888]">AI 비서</div>
@@ -346,7 +349,7 @@
     const DEFAULTS = {
       capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true, approval: true,
       invOn: false, invEntry: -30, invExit: -10, invLev: 'AUTO', invLevScore: -60, invPct: 30, invMaxDays: 15, invExitMa: 10, inv1: '114800', inv2: '252670',
-      entryMode: 'SQ', sqPct: 15, sqDrop: 30, sqRange: 60, sqZone: 50, sqFollow: false, sqFollowDays: 20, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false,
+      entryMode: 'SQ', sqPct: 15, sqDrop: 30, sqRange: 60, sqZone: 50, sqFollow: false, sqFollowDays: 20, waitPct: 10, waitAlertPct: 2, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false,
       bbPeriod: 200, bbStd: 2.0,
       exitMa: 10, pullbackPct: 1.5, stopMode: 'BREAK',
       w1: 50, w2: 50, w3: 0,
@@ -383,6 +386,8 @@
         { k: 'sqRange', label: '스퀴즈: 120일 고점·저점 차이 % 이하 (횡보)', min: 10, max: 300, step: 5 },
         { k: 'sqFollow', label: '스퀴즈 돌파 뒤 전고점을 다시 넘으면 그때도 매수 (첫 봉을 놓쳐도 잡음)', type: 'bool' },
         { k: 'sqFollowDays', label: '└ 스퀴즈 돌파 뒤 며칠 안까지', min: 5, max: 60, step: 1 },
+        { k: 'waitPct', label: '돌파 대기 목록: 상단까지 % 이내인 스퀴즈 종목', min: 1, max: 30, step: 1 },
+        { k: 'waitAlertPct', label: '돌파 대기 알림: 상단까지 % 이내면 알림', min: 0.5, max: 10, step: 0.5 },
         { k: 'sqZone', label: '저가권: 돌파 가격이 3년 가격 범위의 아래 몇 % 안 (100이면 안 봄)', min: 10, max: 100, step: 1 },
         { k: 'lcWait', label: '장대양봉으로 돌파하면 바로 사지 않고 눌림·안정 뒤 매수', type: 'bool' },
         { k: 'lcAtr', label: '장대양봉: 몸통 ≥ 20일 평균 변동폭 ×', min: 1, max: 5, step: 0.1 },
@@ -753,7 +758,7 @@
         if (i >= P) { const o = bars[i - P].c; s -= o; s2 -= o * o; }
         const n = Math.min(i + 1, P), m = s / n;
         const sd = Math.sqrt(Math.max(0, s2 / n - m * m));
-        b.mid = m; b.upper = m + K * sd; b.lower = m - K * sd; b.ready = i >= P - 1; b.sqK = null;
+        b.mid = m; b.upper = m + K * sd; b.lower = m - K * sd; b.ready = i >= P - 1; b.sqK = null; b.swK = null;
         MA_LIST.forEach((x, j) => { maSum[j] += b.c; if (i >= x.p) maSum[j] -= bars[i - x.p].c; b['ma' + x.p] = i >= x.p - 1 ? maSum[j] / x.p : null; });
         vs += b.v; if (i >= 20) vs -= bars[i - 20].v;
         b.volMa = vs / Math.min(i + 1, 20);
@@ -790,28 +795,40 @@
     }
     // 200일 스퀴즈: 돌파 전날 밴드 폭이 최근 3년(750일) 중 하위 sqPct% + 하락 흔적(1년 저점 ≤ 2년 고점 × (1-sqDrop%)) + 120일 횡보(고저 폭 ≤ sqRange%)
     //  밴드 폭 비교에 일봉이 700개쯤 있어야 함 (BB 200일 + 비교 500일). 돌파한 날만 계산하고 봉에 기억
-    function isSqueeze(bars, i) {
-      const c = state.cfg, b = bars[i], key = `${c.bbPeriod}|${c.bbStd}|${c.sqPct}|${c.sqDrop}|${c.sqRange}|${c.sqZone}`;
-      if (b.sqK === key) return b.sqV;
-      let v = false;
-      const p = i - 1, w = (x) => (x && x.ready && x.mid > 0 ? (x.upper - x.lower) / x.mid : null), w0 = w(bars[p]);
-      if (w0 != null) {
-        let n = 0, below = 0;
-        for (let k = Math.max(0, p - 749); k < p; k++) { const x = w(bars[k]); if (x == null) continue; n++; if (x < w0) below++; }
-        if (n >= 499 && below / n <= c.sqPct / 100) {
-          let hh = -Infinity, ll = Infinity, h1 = -Infinity, l1 = Infinity;
-          for (let k = Math.max(0, p - 499); k <= p; k++) hh = Math.max(hh, bars[k].h);
-          for (let k = Math.max(0, p - 249); k <= p; k++) ll = Math.min(ll, bars[k].l);
-          for (let k = Math.max(0, p - 119); k <= p; k++) { h1 = Math.max(h1, bars[k].h); l1 = Math.min(l1, bars[k].l); }
-          v = ll / hh <= 1 - c.sqDrop / 100 && h1 / l1 <= 1 + c.sqRange / 100;
-          if (v && c.sqZone > 0 && c.sqZone < 100) {   // 저가권: 돌파 가격이 3년(750일) 가격 범위의 아래쪽 sqZone% 안 — 고가권 돌파는 뺌
-            let H = -Infinity, L = Infinity;
-            for (let k = Math.max(0, p - 749); k <= p; k++) { H = Math.max(H, bars[k].h); L = Math.min(L, bars[k].l); }
-            v = H > L && (b.c - L) / (H - L) <= c.sqZone / 100;
-          }
-        }
+    // 스퀴즈 판정 핵심: p일까지의 밴드 폭·하락 흔적·횡보 + price 가 저가권인지
+    function squeezeCore(bars, p, price) {
+      const c = state.cfg, w = (x) => (x && x.ready && x.mid > 0 ? (x.upper - x.lower) / x.mid : null), w0 = w(bars[p]);
+      if (w0 == null) return false;
+      let n = 0, below = 0;
+      for (let k = Math.max(0, p - 749); k < p; k++) { const x = w(bars[k]); if (x == null) continue; n++; if (x < w0) below++; }
+      if (!(n >= 499 && below / n <= c.sqPct / 100)) return false;
+      let hh = -Infinity, ll = Infinity, h1 = -Infinity, l1 = Infinity;
+      for (let k = Math.max(0, p - 499); k <= p; k++) hh = Math.max(hh, bars[k].h);
+      for (let k = Math.max(0, p - 249); k <= p; k++) ll = Math.min(ll, bars[k].l);
+      for (let k = Math.max(0, p - 119); k <= p; k++) { h1 = Math.max(h1, bars[k].h); l1 = Math.min(l1, bars[k].l); }
+      let v = ll / hh <= 1 - c.sqDrop / 100 && h1 / l1 <= 1 + c.sqRange / 100;
+      if (v && c.sqZone > 0 && c.sqZone < 100) {   // 저가권: 가격이 3년(750일) 가격 범위의 아래쪽 sqZone% 안 — 고가권 돌파는 뺌
+        let H = -Infinity, L = Infinity;
+        for (let k = Math.max(0, p - 749); k <= p; k++) { H = Math.max(H, bars[k].h); L = Math.min(L, bars[k].l); }
+        v = H > L && (price - L) / (H - L) <= c.sqZone / 100;
       }
+      return v;
+    }
+    const sqKey = () => { const c = state.cfg; return `${c.bbPeriod}|${c.bbStd}|${c.sqPct}|${c.sqDrop}|${c.sqRange}|${c.sqZone}`; };
+    // 돌파한 날(i)의 스퀴즈: 전날까지 수축 상태였나
+    function isSqueeze(bars, i) {
+      const b = bars[i], key = sqKey();
+      if (b.sqK === key) return b.sqV;
+      const v = i >= 1 && squeezeCore(bars, i - 1, b.c);
       b.sqK = key; b.sqV = v;
+      return v;
+    }
+    // 돌파 대기: 오늘(i)까지 스퀴즈 상태이고 아직 상단 아래
+    function squeezeSetup(bars, i) {
+      const b = bars[i], key = sqKey();
+      if (b.swK === key) return b.swV;
+      const v = !!(b.ready && b.c <= b.upper && squeezeCore(bars, i, b.c));
+      b.swK = key; b.swV = v;
       return v;
     }
     // 장대양봉: 몸통 ≥ 직전 20일 평균 변동폭 × lcAtr 또는 상승률 ≥ lcChg%, 그리고 몸통이 봉 길이의 60% 이상
@@ -1128,8 +1145,9 @@
       const held = !!(state.paper && (state.paper.positions[code] || (state.paper.manual && state.paper.manual[code])));
       if (d._bkLen !== bars.length) { d._bk = priceBroken(bars); d._bkLen = bars.length; }
       const broken = d._bk;
-      const squeeze = !broken && i >= 1 && toUpper != null && toUpper >= -8 && toUpper <= 3 && isSqueeze(bars, i);   // 200일 스퀴즈 상태로 상단 근처
-      return { price, chg, toUpper, signal: signal && !broken, squeeze, near: toUpper != null && toUpper < 0 && toUpper > -3, held, broken };
+      const squeeze = !broken && i >= 1 && toUpper != null && toUpper >= -8 && toUpper <= 3 && isSqueeze(bars, i);
+      const wait = !broken && bars.length > 700 && squeezeSetup(bars, i) ? (b.upper - price) / price * 100 : null;   // 돌파 대기: 상단까지 %   // 200일 스퀴즈 상태로 상단 근처
+      return { price, chg, toUpper, signal: signal && !broken, squeeze, wait, near: toUpper != null && toUpper < 0 && toUpper > -3, held, broken };
     }
 
     function renderSymbols() {
@@ -1144,11 +1162,12 @@
       const rows = codes.map((code) => ({ code, info: rowInfo(code) })).filter(({ info }) => {
         if (state.filter === 'all') return true;
         if (!info) return false;
-        return state.filter === 'signal' ? info.signal : state.filter === 'squeeze' ? info.squeeze : state.filter === 'near' ? info.near : info.held;
+        return state.filter === 'signal' ? info.signal : state.filter === 'squeeze' ? (info.wait != null && info.wait <= state.cfg.waitPct) || (info.signal && info.squeeze) : state.filter === 'near' ? info.near : info.held;
       });
       const LIMIT = 300;
       const sk = state.sort.key, mul = state.sort.dir === 'asc' ? 1 : -1;
       if (sk) rows.sort((a, b) => (sk === 'name' ? nameOf(a.code).localeCompare(nameOf(b.code), 'ko') : ((a.info && a.info[sk]) ?? -Infinity) - ((b.info && b.info[sk]) ?? -Infinity)) * mul);
+      else if (state.filter === 'squeeze') rows.sort((a, b) => ((a.info && a.info.signal ? -99 : a.info && a.info.wait) ?? 99) - ((b.info && b.info.signal ? -99 : b.info && b.info.wait) ?? 99));
       else if (state.universe === 'ALL') rows.sort((a, b) => ((b.info && b.info.toUpper) ?? -999) - ((a.info && a.info.toUpper) ?? -999));
       const total = rows.length;
       if (rows.length > LIMIT) rows.length = LIMIT;
@@ -1158,7 +1177,7 @@
         const sel = code === state.selected ? 'bg-[#f3f3f3]' : '';
         const cls = info ? (info.chg > 0 ? 'up' : info.chg < 0 ? 'down' : '') : '';
         const tag = !info ? '' : info.broken ? `<span class="ml-1 text-[9px] px-1 border border-[#e5383b] text-[#e5383b]" title="${fmtDate(info.broken)} 가격이 하루 30% 넘게 변해 수정주가 오류로 보고 매매에서 제외">⚠ 제외</span>`
-          : (info.held ? '<span class="ml-1 text-[9px] px-1 border border-[#111111]">보유</span>' : '') + (info.signal ? '<span class="ml-1 text-[9px] px-1 bg-[#e5383b] text-white">신호</span>' : '') + (info.squeeze ? '<span class="ml-1 text-[9px] px-1 bg-[#f3e8ff] text-[#7c3aed]" title="200일 스퀴즈 상태로 상단 근처">스퀴즈</span>' : '');
+          : (info.held ? '<span class="ml-1 text-[9px] px-1 border border-[#111111]">보유</span>' : '') + (info.signal ? '<span class="ml-1 text-[9px] px-1 bg-[#e5383b] text-white">신호</span>' : '') + (info.signal && info.squeeze ? '<span class="ml-1 text-[9px] px-1 bg-[#f3e8ff] text-[#7c3aed]" title="저가권 200일 스퀴즈 돌파">스퀴즈 돌파</span>' : info.wait != null && info.wait <= state.cfg.waitPct ? `<span class="ml-1 text-[9px] px-1 bg-[#f3e8ff] text-[#7c3aed]" title="저가권 스퀴즈 — 상단까지 남은 거리">대기 ${info.wait.toFixed(1)}%</span>` : '');
         const rm = state.universe === 'WATCH' ? `<button type="button" data-remove="${code}" class="ml-1 text-[#bbbbbb] hover:text-[#111111]" aria-label="관심종목 삭제">×</button>` : '';
         return `<tr data-code="${code}" class="cursor-pointer border-t border-[#f3f3f3] hover:bg-[#fafafa] ${sel}">
           <td class="px-2 py-1 overflow-hidden"><div class="font-sans text-[11px] text-[#111111] truncate">${esc(nameOf(code))}${tag}${rm}</div><div class="text-[9px] text-[#999999]">${code}</div></td>
@@ -2436,7 +2455,7 @@
       const badge = document.getElementById('modeBadge');
       try {
         const h = await bridge('/health');
-        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.market = !!h.market; state.bridge.topnews = !!h.topnews; setTimeout(() => { loadMarketQuotes(); loadTopNews(); }, 300); state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
+        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.market = !!h.market; state.bridge.topnews = !!h.topnews; state.bridge.notify = !!h.notify; setTimeout(() => { loadMarketQuotes(); loadTopNews(); }, 300); state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
         badge.textContent = h.demo ? '● 데모 시세' : '● 나무증권 실시간';
         badge.className = `text-[11px] px-2 py-0.5 ${h.demo ? 'bg-[#e5383b] text-white' : 'bg-[#111111] text-white'}`;
         document.getElementById('demoBanner').classList.toggle('hidden', !h.demo);
@@ -2635,7 +2654,8 @@
       const p = acct();
       const rows = [...document.querySelectorAll('#symbolBody tr[data-code]')].map((r) => r.dataset.code);
       const winCodes = Object.entries(win.watch).filter(([, w]) => !w.done).sort((a, b) => (b[1].s || 0) - (a[1].s || 0)).map(([c]) => c);
-      return [...new Set([state.selected, ...Object.keys(p.manual), ...Object.keys(p.positions), ...winCodes, ...p.orders.map((o) => o.code), ...state.watch, ...rows]
+      const wc = (() => { try { return waitCodes(); } catch (_) { return []; } })();   // 돌파 대기 종목도 실시간으로 (장중 돌파 감시)
+      return [...new Set([state.selected, ...Object.keys(p.manual), ...Object.keys(p.positions), ...winCodes, ...wc, ...p.orders.map((o) => o.code), ...state.watch, ...rows]
         .filter((c) => c && /^[0-9A-Z]{6}$/.test(c)))].slice(0, Math.min(30, state.cfg.rtMax));   // 나무 웹소켓은 체결 등록 30종목까지
     }
     function rtSubscribe() {
@@ -5149,7 +5169,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.29', APP_DATE = '2026-10-30';
+    const APP_VERSION = '1.30', APP_DATE = '2026-10-30';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5349,6 +5369,7 @@ onmessage = (e) => { const { body, sets } = e.data;
     const sayQ = [];
     function raiseAlert(a) {   // { lv: 'high'|'info', text, say, code }
       if (alertCfg.mode === 'off') return;
+      try { phoneNotify(a); } catch (_) {}
       chat.msgs.push({ role: 'assistant', text: `🔔 ${a.text}`, at: Date.now(), alert: true, ...(a.code ? { prop: [{ do: '종목', code: a.code }] } : {}) });
       saveChat(); renderChat();
       showAlertCard(a);
@@ -6368,7 +6389,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (state.selected && state.bridge.ok && state.bridge.research && !newsCache[nameOf(state.selected)]) { try { await getNews(nameOf(state.selected), 10); } catch (_) {} }
       const pack = {
         안내: '파르티잔 인베스트먼트 화면의 지금 상태입니다. 이 수치를 근거로 분석·비교·추천해 주세요(근거 수치와 위험을 함께, 보장 표현 없이 — 결정은 사용자가 결재). 화면 조작·차트 작도·설정이 필요하면 <<명령>> [ ... ] 형식으로, 매매 규칙은 <<규칙 ...>>...<</규칙>>, 위젯은 <<위젯 ...>>...<</위젯>> 형식으로 답하면 사용자가 앱의 "📥 답 적용"에 붙여 넣어 실행합니다.',
-        ...assistFacts(), 화면: screenFacts(), 매매규칙: rulesFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 운용현황: manageFacts(), 주요뉴스: topNewsFacts(), 표시구간: marksFacts(), 차트모양: lookFacts(),
+        ...assistFacts(), 화면: screenFacts(), 매매규칙: rulesFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 운용현황: manageFacts(), 주요뉴스: topNewsFacts(), 돌파대기: waitList().slice(0, 10).map((x) => ({ 종목: `${nameOf(x.code)}(${x.code})`, 상단까지: x.broke ? '오늘 돌파' : +x.dist.toFixed(1), 현재가: x.px, 상단: Math.round(x.upper) })), 표시구간: marksFacts(), 차트모양: lookFacts(),
       };
       const text = `[파르티잔 인베스트먼트 지금 상황 — ${pack.시각}]\n${JSON.stringify(pack, null, 2)}`;
       try { await navigator.clipboard.writeText(text); toast('📋 지금 화면 상황을 복사했어요 — Gemini 대화창에 붙여 넣고 물어보세요'); }
@@ -6724,6 +6745,118 @@ onmessage = (e) => { const { body, sets } = e.data;
       return `<div class="text-[10px] text-[#888888] leading-snug mt-0.5 text-left">기준: 근거 ${r.items.length}개(지수 추세·시장 체력·변동성)를 +1·0·−1로 매겨 평균 → <b class="up">+30 이상 상승</b> · <b class="down">−30 이하 하락</b> · 그 사이 중립 | 하락 근거 ${neg.length} · 상승 ${pos.length}${key ? `<br>주요: ${esc(key)}` : ''}${state.cfg.invOn ? `<br>인버스: 점수 ${state.cfg.invEntry} 이하면 안건 (${state.cfg.invLevScore} 이하 2배)` : ''}</div>`;
     }
 
+    // ---- 1. 돌파 대기 목록: 저가권 200일 스퀴즈 상태인데 아직 상단 아래 — 상단까지 가까운 순, 가까워지면 알림 ----
+    //  일봉 700개 이상 있는 종목(관심·코스피200·코스닥150·보유)만 판정할 수 있음
+    let waitCache = { key: '', list: [] };
+    function waitList() {
+      const key = `${Object.keys(state.data).length}|${state.cfg.waitPct}|${state.cfg.sqZone}|${state.cfg.sqPct}|${Math.floor(Date.now() / 20000)}`;
+      if (waitCache.key === key) return waitCache.list;
+      const codes = [...new Set([...state.watch, ...state.lists.K200, ...state.lists.Q150, ...universeCodes()])].filter((c) => state.data[c] && state.data[c].bars.length > 700 && !priceBroken(state.data[c].bars));
+      const list = [];
+      codes.forEach((code) => {
+        const b = state.data[code].bars, i = b.length - 1, x = b[i];
+        if (!x.ready) return;
+        const px = lastPrice(code) || x.c;
+        if (i >= 1 && baseBreakout(b, i) && isSqueeze(b, i)) list.push({ code, dist: (x.upper - px) / px * 100, upper: x.upper, px, broke: true });
+        else if (squeezeSetup(b, i)) { const dist = (x.upper - px) / px * 100; if (dist <= state.cfg.waitPct) list.push({ code, dist, upper: x.upper, px, broke: false }); }
+      });
+      list.sort((a, b) => a.dist - b.dist);
+      waitCache = { key, list };
+      return list;
+    }
+    const waitCodes = () => waitList().slice(0, 12).map((x) => x.code);
+    function renderWait() {
+      const el = document.getElementById('waitBox');
+      if (!el) return;
+      const L = waitList(), c = state.cfg;
+      const sig = JSON.stringify([L.map((x) => [x.code, x.dist.toFixed(1), x.broke]), c.waitPct, c.waitAlertPct]);
+      if (el.dataset.sig === sig) return;
+      el.dataset.sig = sig;
+      el.innerHTML = `<div class="flex items-center justify-between"><span class="text-[11px] font-semibold">돌파 대기 목록 <span class="font-normal text-[#888888]">${L.length}종목</span></span><span class="text-[10px] text-[#888888]">상단 ${c.waitPct}% 안 · ${c.waitAlertPct}% 안이면 알림</span></div>`
+        + (L.length ? L.slice(0, 15).map((x) => `<button type="button" data-wcode="${x.code}" class="w-full flex justify-between gap-1 text-[10px] py-0.5 border-t border-[#f3f3f3] hover:bg-[#fafafa]"><span class="truncate text-left">${x.broke ? '<b class="text-[#e5383b]">돌파!</b> ' : ''}${esc(nameOf(x.code))}</span><span class="num whitespace-nowrap ${x.broke ? 'up' : x.dist <= c.waitAlertPct ? 'text-[#e5383b]' : 'text-[#666666]'}">${x.broke ? `상단 ${won(Math.round(x.upper))} 위` : `상단까지 ${x.dist.toFixed(1)}%`} · ${won(x.px)}</span></button>`).join('')
+          : '<div class="text-[10px] text-[#999999]">지금은 저가권 스퀴즈 상태로 상단 가까이 온 종목이 없어요. (일봉 3000개를 받은 관심·지수 종목에서 찾아요)</div>')
+        + `<div class="text-[9px] text-[#999999]">저가권에서 오래 횡보하며 200일 밴드가 좁아진 종목 — 상단을 종가로 뚫으면 매수 신호(매매 시간대·결재). 장중에 뚫으면 바로 알려요.</div>`;
+    }
+    document.getElementById('waitBox').addEventListener('click', (e) => { const b = e.target.closest('[data-wcode]'); if (b) selectCode(b.dataset.wcode); });
+    function waitAlerts() {
+      if (alertCfg.mode === 'off' || !state.bridge.ok) return;
+      const day = kstNow().ymd;
+      waitList().forEach((x) => { if (!x.broke && x.dist <= state.cfg.waitAlertPct && alertOnce(`wait-${x.code}-${day}`)) raiseAlert({ lv: 'info', code: x.code, text: `${nameOf(x.code)} 돌파 대기 — 200일 밴드 상단(${won(Math.round(x.upper))}원)까지 ${x.dist.toFixed(1)}% 남았어요 (지금 ${won(x.px)}원).` }); });
+    }
+
+    // ---- 2. 장중 돌파 감시: 장중(매매 시간대 전)에 대기 종목이 상단을 뚫으면 바로 알리고, 결재 안건을 미리 올려 둠 ----
+    //  실제 매수는 지금처럼 매매 시간대(종가 근처)에 돌파가 유지될 때만 — 미리 결재해 둬도 그때 풀렸으면 사지 않음
+    const ibw = { refAt: 0, busy: false };
+    async function intradayWatch() {
+      if (!state.bridge.ok || !marketOpenNow()) return;
+      const k = kstNow(), ws = hmToMin(state.cfg.winStart);
+      if (k.min >= ws - 10) return;   // 그 뒤는 매매 시간대가 맡음
+      const L = waitList().slice(0, 25);
+      if (!L.length) return;
+      // 실시간 체결이 안 들어오는 대기 종목은 2분마다 시세를 다시 받음
+      const fresh = (c) => rt.connected && Date.now() - (rt.lastTickAt[c] || 0) < 90000;
+      const stale = L.map((x) => x.code).filter((c) => !fresh(c));
+      if (stale.length && !ibw.busy && Date.now() - ibw.refAt > 120000) {
+        ibw.busy = true; ibw.refAt = Date.now();
+        try { await refreshQuotes(stale); } catch (_) {}
+        ibw.busy = false;
+      }
+      const p = paper();
+      L.forEach((x) => {
+        const i = liveBar(x.code);
+        if (i == null) return;
+        const bars = state.data[x.code].bars;
+        if (!isBreakout(bars, i) || !alertOnce(`ib-${x.code}-${k.ymd}`)) return;
+        const px = lastPrice(x.code), label = entryLabel(bars, i);
+        const pre = agendaOn() && !p.positions[x.code] && !agendaFind(x.code, 'BUY');
+        if (pre) agendaCreate(x.code, 'BUY', { note: `장중 돌파 감시 — ${label}`, price: px, src: 'window' });
+        raiseAlert({ lv: 'high', code: x.code, key: `ib-${x.code}`, text: `장중 돌파 — ${nameOf(x.code)} ${won(px)}원, 200일 밴드 상단 ${won(Math.round(bars[i].upper))}원 위 (${label}). 종가까지 유지되면 ${state.cfg.winStart}~${state.cfg.winEnd}에 매매 규칙대로${pre ? ' — 결재함에 미리 올렸어요' : ''}.`, say: `${nameOf(x.code)}이 장중에 상단을 돌파했어요.` });
+      });
+      renderWait();
+    }
+    bgEvery(() => { renderWait(); waitAlerts(); }, 15000);
+    bgEvery(() => { intradayWatch(); }, 30000);
+    renderWait();
+
+    // ---- 3. 폰 알림(텔레그램): 결재 안건 · 장중 돌파 · 매도/손절 조건 같은 중요한 알림을 폰으로 ----
+    //  봇 토큰·채팅 번호는 이 브라우저에만 저장(동기화 파일·백업에 넣지 않음). 중계기가 보낼 때만 받아서 쓰고 저장하지 않음. 결재는 PC 화면에서만
+    const PHONE_KEY = 'krx_phone_v1';
+    const phone = (() => { try { return { on: false, token: '', chat: '', level: 'high', ...JSON.parse(localStorage.getItem(PHONE_KEY) || '{}') }; } catch (_) { return { on: false, token: '', chat: '', level: 'high' }; } })();
+    const savePhone = () => { try { localStorage.setItem(PHONE_KEY, JSON.stringify(phone)); } catch (_) {} };
+    const phoneSent = {};
+    function phoneNotify(a) {
+      if (!phone.on || !phone.token || !phone.chat || !state.bridge.ok || !state.bridge.notify) return;
+      if (phone.level === 'high' && a.lv !== 'high') return;
+      const text = `[파르티잔] ${a.text}`;
+      if (phoneSent[text] && Date.now() - phoneSent[text] < 600000) return;   // 같은 알림 10분 안 다시 안 보냄
+      phoneSent[text] = Date.now();
+      bridge('/notify/telegram', { token: phone.token, chat: phone.chat, text }).catch((err) => { phone.err = err.message; renderPhone(); });
+    }
+    function renderPhone() {
+      const el = document.getElementById('phoneBox');
+      if (!el) return;
+      el.innerHTML = `<div class="text-[10px] uppercase tracking-wider text-[#888888]">폰 알림 (텔레그램)</div>
+        <label class="flex items-center gap-1 text-[11px]"><input type="checkbox" data-ph="on" ${phone.on ? 'checked' : ''}> 중요한 알림을 폰으로 받기</label>
+        <label class="flex items-center justify-between gap-2 text-[11px] text-[#444444]">봇 토큰<input data-ph="token" type="password" value="${esc(phone.token)}" placeholder="123456:ABC…" class="w-40" autocomplete="off"></label>
+        <label class="flex items-center justify-between gap-2 text-[11px] text-[#444444]">채팅 번호<span class="flex gap-1"><input data-ph="chat" type="text" value="${esc(phone.chat)}" class="w-28 num"><button type="button" data-phfind class="btn px-1.5 text-[10px]">찾기</button></span></label>
+        <label class="flex items-center justify-between gap-2 text-[11px] text-[#444444]">보낼 알림<select data-ph="level"><option value="high" ${phone.level === 'high' ? 'selected' : ''}>중요한 것만 (결재·장중 돌파·매도 조건)</option><option value="all" ${phone.level === 'all' ? 'selected' : ''}>모든 알림</option></select></label>
+        <div class="flex gap-1"><button type="button" data-phtest class="btn px-2 py-0.5 text-[10px]">시험 보내기</button>${phone.err ? `<span class="text-[10px] text-[#e5383b]">${esc(phone.err)}</span>` : ''}</div>
+        <p class="text-[10px] text-[#888888] leading-snug">① 텔레그램에서 <b>@BotFather</b> → <b>/newbot</b>으로 내 봇을 만들고 받은 토큰을 붙여 넣기 ② 내 봇에게 아무 말이나 보낸 뒤 '찾기' ③ 시험 보내기. 토큰은 이 브라우저에만 저장되고, 폰에서는 알림만 받아요 — 결재는 PC 화면에서 해요.</p>`;
+    }
+    const phEl = document.getElementById('phoneBox');
+    phEl.addEventListener('change', (e) => { const k = e.target.dataset.ph; if (!k) return; phone[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value.trim(); phone.err = ''; savePhone(); renderPhone(); });
+    phEl.addEventListener('click', async (e) => {
+      if (!state.bridge.ok || !state.bridge.notify) { if (e.target.closest('button')) toast('새 버전 중계기에 연결해야 보낼 수 있어요'); return; }
+      if (e.target.closest('[data-phfind]')) {
+        try { const r = await bridge('/notify/telegram_chat', { token: phone.token }); phone.chat = String(r.chat); phone.err = ''; savePhone(); renderPhone(); toast(`채팅 번호를 찾았어요 (${r.name || r.chat})`); }
+        catch (err) { phone.err = err.message; renderPhone(); }
+      } else if (e.target.closest('[data-phtest]')) {
+        try { await bridge('/notify/telegram', { token: phone.token, chat: phone.chat, text: '[파르티잔] 폰 알림 시험이에요. 이제 결재 안건·장중 돌파·매도 조건을 여기로 알려 드릴게요.' }); phone.err = ''; renderPhone(); toast('✔ 시험 알림을 보냈어요 — 폰을 확인하세요'); }
+        catch (err) { phone.err = err.message; renderPhone(); }
+      }
+    });
+    renderPhone();
+
     async function chatSend(text) {
       text = String(text || '').trim();
       if (!text || chat.busy) return;
@@ -6736,7 +6869,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       chat.msgs.push({ role: 'user', text, at: Date.now() });
       chat.busy = true; renderChat(); saveChat();
       let reply;
-      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 운용현황: manageFacts(), 주요뉴스: topNewsFacts(), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
+      try { reply = (await bridge('/ai/ask', { purpose: 'chat', facts: { ...assistFacts(), 화면: screenFacts(), 내도구: customFacts(), 실계좌: realFacts(), 표시구간: marksFacts(), 매매규칙: rulesFacts(), 뽑은규칙: extractFacts(), 매매일지: journalFacts(), 차트그림: drawFacts(), 차트모양: lookFacts(), 결재함: agendaFacts(), 주요지수: marketFacts(), 인버스: invFacts(), 운용현황: manageFacts(), 주요뉴스: topNewsFacts(), 돌파대기: waitList().slice(0, 10).map((x) => ({ 종목: `${nameOf(x.code)}(${x.code})`, 상단까지: x.broke ? '오늘 돌파' : +x.dist.toFixed(1), 현재가: x.px, 상단: Math.round(x.upper) })), 마지막검색: lastScreen }, question: text, history, fast: chat.convo, ...aiPayload() })).text; }
       catch (err) { reply = `(오류) ${err.message}`; }
       const bl = splitBlocks(reply);
       const { text: said, acts, prop } = splitActions(bl.text);
