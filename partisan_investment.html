@@ -349,7 +349,7 @@
     const DEFAULTS = {
       capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true, approval: true,
       invOn: false, invEntry: -30, invExit: -10, invLev: 'AUTO', invLevScore: -60, invPct: 30, invMaxDays: 15, invExitMa: 10, inv1: '114800', inv2: '252670',
-      entryMode: 'SQ', sqPct: 15, sqDrop: 30, sqRange: 60, sqZone: 50, sqFollow: false, sqFollowDays: 20, waitPct: 10, waitAlertPct: 2, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false,
+      entryMode: 'SQ', sqPct: 15, sqDrop: 30, sqRange: 60, sqZone: 50, sqFollow: false, sqFollowDays: 20, waitPct: 10, waitAlertPct: 2, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false, accOn: false, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1,
       bbPeriod: 200, bbStd: 2.0,
       exitMa: 10, pullbackPct: 1.5, stopMode: 'BREAK',
       w1: 50, w2: 50, w3: 0,
@@ -386,6 +386,11 @@
         { k: 'sqRange', label: '스퀴즈: 120일 고점·저점 차이 % 이하 (횡보)', min: 10, max: 300, step: 5 },
         { k: 'sqFollow', label: '스퀴즈 돌파 뒤 전고점을 다시 넘으면 그때도 매수 (첫 봉을 놓쳐도 잡음)', type: 'bool' },
         { k: 'sqFollowDays', label: '└ 스퀴즈 돌파 뒤 며칠 안까지', min: 5, max: 60, step: 1 },
+        { k: 'accOn', label: '매집 경로: 하락 흔적이 없어도 밴드 폭 수축 + 120일 횡보 + 거래량 누적(매집)이면 매수', type: 'bool' },
+        { k: 'accPct', label: '└ 매집: 밴드 폭이 최근 3년 중 하위 %', min: 5, max: 50, step: 1 },
+        { k: 'accDays', label: '└ 매집: OBV(누적 거래량)가 며칠 신고가', min: 20, max: 250, step: 10 },
+        { k: 'accFlat', label: '└ 매집: 그 기간 가격 변화 % 안 (횡보)', min: 5, max: 50, step: 1 },
+        { k: 'accCmf', label: '└ 매집: CMF(20일 자금 흐름) 이상', min: 0, max: 0.5, step: 0.05 },
         { k: 'waitPct', label: '돌파 대기 목록: 상단까지 % 이내인 스퀴즈 종목', min: 1, max: 30, step: 1 },
         { k: 'waitAlertPct', label: '돌파 대기 알림: 상단까지 % 이내면 알림', min: 0.5, max: 10, step: 0.5 },
         { k: 'sqZone', label: '저가권: 돌파 가격이 3년 가격 범위의 아래 몇 % 안 (100이면 안 봄)', min: 10, max: 100, step: 1 },
@@ -751,17 +756,22 @@
       const P = state.cfg.bbPeriod, K = state.cfg.bbStd;
       let s = 0, s2 = 0, vs = 0;
       const maSum = MA_LIST.map(() => 0);
-      let trS = 0, pS = 0, mS = 0, adx = 0;
+      let trS = 0, pS = 0, mS = 0, adx = 0, obv = 0, mfS = 0;
       for (let i = 0; i < bars.length; i++) {
         const b = bars[i];
         s += b.c; s2 += b.c * b.c;
         if (i >= P) { const o = bars[i - P].c; s -= o; s2 -= o * o; }
         const n = Math.min(i + 1, P), m = s / n;
         const sd = Math.sqrt(Math.max(0, s2 / n - m * m));
-        b.mid = m; b.upper = m + K * sd; b.lower = m - K * sd; b.ready = i >= P - 1; b.sqK = null; b.swK = null;
+        b.mid = m; b.upper = m + K * sd; b.lower = m - K * sd; b.ready = i >= P - 1; b.sqK = null; b.swK = null; b.sqA = false;
         MA_LIST.forEach((x, j) => { maSum[j] += b.c; if (i >= x.p) maSum[j] -= bars[i - x.p].c; b['ma' + x.p] = i >= x.p - 1 ? maSum[j] / x.p : null; });
         vs += b.v; if (i >= 20) vs -= bars[i - 20].v;
         b.volMa = vs / Math.min(i + 1, 20);
+        if (i) obv += b.c > bars[i - 1].c ? b.v : b.c < bars[i - 1].c ? -b.v : 0;
+        b.obv = obv;
+        b.mf = b.h > b.l ? ((b.c - b.l) - (b.h - b.c)) / (b.h - b.l) * b.v : 0;   // CMF: 종가가 그날 고가 쪽이면 +, 저가 쪽이면 −, 거래량 가중
+        mfS += b.mf; if (i >= 20) mfS -= bars[i - 20].mf;
+        b.cmf = i >= 19 && vs > 0 ? mfS / vs : null;
         if (i > 0) {
           const p = bars[i - 1];
           const up = b.h - p.h, dn = p.l - b.l;
@@ -793,15 +803,36 @@
       if (c.adxFilter && !(b.adx >= c.adxMin)) return false;
       return r ? b.rE === 1 : true;   // 돌파 + 내 매수 규칙
     }
+    // p일 밴드 폭이 최근 3년(750일) 중 하위 pct% 안인가 (비교할 날이 500일쯤 있어야 함)
+    function widthLow(bars, p, pct) {
+      const w = (x) => (x && x.ready && x.mid > 0 ? (x.upper - x.lower) / x.mid : null), w0 = w(bars[p]);
+      if (w0 == null) return false;
+      let n = 0, below = 0;
+      for (let k = Math.max(0, p - 749); k < p; k++) { const x = w(bars[k]); if (x == null) continue; n++; if (x < w0) below++; }
+      return n >= 499 && below / n <= pct / 100;
+    }
+    // 매집: OBV가 accDays일 신고가 + 그 기간 가격 변화 accFlat% 안 + CMF(20) ≥ accCmf — 가격은 제자리인데 사는 거래량이 쌓임
+    function isAccum(bars, i) {
+      const c = state.cfg, b = bars[i], n = c.accDays;
+      if (i < n || b.cmf == null || !(b.cmf >= c.accCmf)) return false;
+      if (!(Math.abs(b.c / bars[i - n].c - 1) * 100 < c.accFlat)) return false;
+      for (let k = i - n + 1; k < i; k++) if (bars[k].obv > b.obv) return false;
+      return true;
+    }
+    // 매집 경로: 하락 흔적·저가권은 안 보고, p일 밴드 폭 하위 accPct% + 120일 횡보(sqRange) + i일 매집
+    function accSqueeze(bars, p, i) {
+      const c = state.cfg;
+      if (!c.accOn || p < 0 || !isAccum(bars, i) || !widthLow(bars, p, c.accPct)) return false;
+      let h1 = -Infinity, l1 = Infinity;
+      for (let k = Math.max(0, p - 119); k <= p; k++) { h1 = Math.max(h1, bars[k].h); l1 = Math.min(l1, bars[k].l); }
+      return h1 / l1 <= 1 + c.sqRange / 100;
+    }
     // 200일 스퀴즈: 돌파 전날 밴드 폭이 최근 3년(750일) 중 하위 sqPct% + 하락 흔적(1년 저점 ≤ 2년 고점 × (1-sqDrop%)) + 120일 횡보(고저 폭 ≤ sqRange%)
     //  밴드 폭 비교에 일봉이 700개쯤 있어야 함 (BB 200일 + 비교 500일). 돌파한 날만 계산하고 봉에 기억
     // 스퀴즈 판정 핵심: p일까지의 밴드 폭·하락 흔적·횡보 + price 가 저가권인지
     function squeezeCore(bars, p, price) {
-      const c = state.cfg, w = (x) => (x && x.ready && x.mid > 0 ? (x.upper - x.lower) / x.mid : null), w0 = w(bars[p]);
-      if (w0 == null) return false;
-      let n = 0, below = 0;
-      for (let k = Math.max(0, p - 749); k < p; k++) { const x = w(bars[k]); if (x == null) continue; n++; if (x < w0) below++; }
-      if (!(n >= 499 && below / n <= c.sqPct / 100)) return false;
+      const c = state.cfg;
+      if (!widthLow(bars, p, c.sqPct)) return false;
       let hh = -Infinity, ll = Infinity, h1 = -Infinity, l1 = Infinity;
       for (let k = Math.max(0, p - 499); k <= p; k++) hh = Math.max(hh, bars[k].h);
       for (let k = Math.max(0, p - 249); k <= p; k++) ll = Math.min(ll, bars[k].l);
@@ -814,20 +845,20 @@
       }
       return v;
     }
-    const sqKey = () => { const c = state.cfg; return `${c.bbPeriod}|${c.bbStd}|${c.sqPct}|${c.sqDrop}|${c.sqRange}|${c.sqZone}`; };
+    const sqKey = () => { const c = state.cfg; return `${c.bbPeriod}|${c.bbStd}|${c.sqPct}|${c.sqDrop}|${c.sqRange}|${c.sqZone}|${c.accOn}|${c.accPct}|${c.accDays}|${c.accFlat}|${c.accCmf}`; };
     // 돌파한 날(i)의 스퀴즈: 전날까지 수축 상태였나
     function isSqueeze(bars, i) {
       const b = bars[i], key = sqKey();
       if (b.sqK === key) return b.sqV;
-      const v = i >= 1 && squeezeCore(bars, i - 1, b.c);
-      b.sqK = key; b.sqV = v;
-      return v;
+      const v0 = i >= 1 && squeezeCore(bars, i - 1, b.c), va = !v0 && i >= 1 && accSqueeze(bars, i - 1, i);   // va: 매집 경로로만 통과
+      b.sqK = key; b.sqV = v0 || va; b.sqA = va;
+      return b.sqV;
     }
     // 돌파 대기: 오늘(i)까지 스퀴즈 상태이고 아직 상단 아래
     function squeezeSetup(bars, i) {
       const b = bars[i], key = sqKey();
       if (b.swK === key) return b.swV;
-      const v = !!(b.ready && b.c <= b.upper && squeezeCore(bars, i, b.c));
+      const v = !!(b.ready && b.c <= b.upper && (squeezeCore(bars, i, b.c) || accSqueeze(bars, i, i)));
       b.swK = key; b.swV = v;
       return v;
     }
@@ -915,7 +946,7 @@
       return rawLabel(bars, i);
     }
     function rawLabel(bars, i) {
-      if (baseBreakout(bars, i) && !(state.cfg.lcWait && isLongCandle(bars, i))) return isSqueeze(bars, i) ? '200일 스퀴즈 돌파' : `BB${state.cfg.bbPeriod} 상단 돌파`;
+      if (baseBreakout(bars, i) && !(state.cfg.lcWait && isLongCandle(bars, i))) return isSqueeze(bars, i) ? (bars[i].sqA ? '매집 돌파 (밴드 수축 + 거래량 누적)' : '200일 스퀴즈 돌파') : `BB${state.cfg.bbPeriod} 상단 돌파`;
       if (state.cfg.entryMode === 'SQ' && state.cfg.sqFollow && sqFollowFrom(bars, i) != null) return '스퀴즈 돌파 뒤 전고점 돌파';
       return reBreakFrom(bars, i) != null ? '장대양봉 대기 뒤 전고점 돌파' : '장대양봉 뒤 눌림 반등';
     }
@@ -1516,7 +1547,7 @@
       document.getElementById('chartSignal').innerHTML = info ? (info.signal ? `<span class="px-1.5 bg-[#e5383b] text-white">돌파 신호</span>${info.squeeze ? ' <span class="px-1 bg-[#f3e8ff] text-[#7c3aed]">스퀴즈</span>' : ''}` : info.squeeze ? '<span class="px-1 bg-[#f3e8ff] text-[#7c3aed]" title="200일 스퀴즈 상태로 상단 근처">스퀴즈 · 상단 근처</span>' :
         info.toUpper != null ? `<span class="text-[#666666]">일봉 상단선까지 ${info.toUpper >= 0 ? '이미 위' : pct(info.toUpper, 1)}</span>` : '') : '';
       const LKs = state.look;
-      document.getElementById('maLegend').innerHTML = (LKs.bb ? `<span style="color:${LKs.bbMid}">━</span>중심 <span style="color:${LKs.bbUp}">┅</span>상단 <span style="color:${LKs.bbLow}">┅</span>하단 ` : '') + (state.tf === 'D' ? `${LKs.exitLine ? `<b style="color:${LKs.exitColor}">━</b>매도 ${state.cfg.exitMa}선 ` : ''}<span style="color:#e5383b">△</span>매수${state.cfg.entryMode === 'SQ' ? '(스퀴즈만)' : ''} <span style="color:#7c3aed">◆</span>스퀴즈 ${state.cfg.lcWait ? '<span style="color:#999">□</span>장대양봉 대기 ' : ''}` : '') + lookLegend() + drawLegend();
+      document.getElementById('maLegend').innerHTML = (LKs.bb ? `<span style="color:${LKs.bbMid}">━</span>중심 <span style="color:${LKs.bbUp}">┅</span>상단 <span style="color:${LKs.bbLow}">┅</span>하단 ` : '') + (state.tf === 'D' ? `${LKs.exitLine ? `<b style="color:${LKs.exitColor}">━</b>매도 ${state.cfg.exitMa}선 ` : ''}<span style="color:#e5383b">△</span>매수${state.cfg.entryMode === 'SQ' ? '(스퀴즈만)' : ''} <span style="color:#7c3aed">◆</span>스퀴즈 ${state.cfg.accOn ? '<span style="color:#0f766e">◆</span>매집 돌파 ' : ''}${LKs.accMark ? '<span style="color:#14b8a6">•</span>매집 ' : ''}${state.cfg.lcWait ? '<span style="color:#999">□</span>장대양봉 대기 ' : ''}` : '') + lookLegend() + drawLegend();
     }
 
     function selectCode(code) {
@@ -4098,7 +4129,7 @@
       return {
         종목: `${nameOf(code)} (${code})`, 현재가: px, 오늘등락: f.dayChg, 수익률: { '5일': ret(5), '20일': ret(20), '60일': ret(60) },
         BB상단: x.ready ? Math.round(x.upper) : null, BB중심: x.ready ? Math.round(x.mid) : null, '5일선': x.ma5 ? Math.round(x.ma5) : null, '20일선': x.ma20 ? Math.round(x.ma20) : null,
-        스퀴즈돌파: i >= 1 && baseBreakout(b, i) && isSqueeze(b, i), '1년고점': hi || null,
+        스퀴즈돌파: i >= 1 && baseBreakout(b, i) && isSqueeze(b, i) ? (b[i].sqA ? '매집 경로' : '200일 스퀴즈') : false, 매집: isAccum(b, i), CMF20: x.cmf == null ? null : +x.cmf.toFixed(2), '1년고점': hi || null,
         최근20봉: b.slice(-20).map((y) => ({ 날짜: y.t, 시: y.o, 고: y.h, 저: y.l, 종: y.c, 거래량: y.v })),
         최근뉴스: nh && nh.items ? nh.items.slice(0, 5).map((n) => n.title) : null,
         BB상단대비: f.toUpper, 오늘돌파신호: sig, '5일선대비': f.ma5gap, 거래량_20일평균대비: f.volRatio, '20일평균거래대금_억': f.value20,
@@ -5171,7 +5202,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.31', APP_DATE = '2026-10-30';
+    const APP_VERSION = '1.32', APP_DATE = '2026-10-31';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5309,13 +5340,14 @@ onmessage = (e) => { const { body, sets } = e.data;
           <button type="button" data-cmp="volMult" class="btn px-1.5 py-0 text-[10px]">거래량 1.5·2·3배</button>
           <button type="button" data-cmp="bbPeriod" class="btn px-1.5 py-0 text-[10px]">BB 120·200·250</button>
           <button type="button" data-cmp="entry" class="btn px-1.5 py-0 text-[10px]">스퀴즈·장대양봉 대기</button>
-          <button type="button" data-cmp="ma5" class="btn px-1.5 py-0 text-[10px]">5일선 2일 확인</button></div>`;
+          <button type="button" data-cmp="ma5" class="btn px-1.5 py-0 text-[10px]">5일선 2일 확인</button>
+          <button type="button" data-cmp="acc" class="btn px-1.5 py-0 text-[10px]">매집 경로</button></div>`;
     }
     document.getElementById('rulesBox').addEventListener('click', async (e) => {
       const cb = e.target.closest('[data-cmp]');
       if (cb) {
         const vals = { exitMa: [5, 10, 20], volMult: [1.5, 2, 3], bbPeriod: [120, 200, 250] }[cb.dataset.cmp];
-        const msg = await runCompare(cb.dataset.cmp === 'entry' ? { variants: ENTRY_VARIANTS } : cb.dataset.cmp === 'ma5' ? { variants: MA5_VARIANTS } : { key: cb.dataset.cmp, values: vals });
+        const msg = await runCompare(cb.dataset.cmp === 'entry' ? { variants: ENTRY_VARIANTS } : cb.dataset.cmp === 'ma5' ? { variants: MA5_VARIANTS } : cb.dataset.cmp === 'acc' ? { variants: ACC_VARIANTS } : { key: cb.dataset.cmp, values: vals });
         state.ui.right = true; saveStore(); applyPanes(); setTab('assist'); toast(msg);
         return;
       }
@@ -5349,10 +5381,11 @@ onmessage = (e) => { const { body, sets } = e.data;
           if (sq || lc) {
             const yy = y(b.l) + 32;
             ctx.font = '9px Noto Sans KR, sans-serif';
-            if (sq) { ctx.fillStyle = '#7c3aed'; ctx.beginPath(); ctx.moveTo(xx, yy - 5); ctx.lineTo(xx + 4, yy); ctx.lineTo(xx, yy + 5); ctx.lineTo(xx - 4, yy); ctx.closePath(); ctx.fill(); if (xx - sqTx > 34) { ctx.fillText('스퀴즈', xx - 13, yy + 15); sqTx = xx; } }
+            if (sq) { ctx.fillStyle = bars[i].sqA ? '#0f766e' : '#7c3aed'; ctx.beginPath(); ctx.moveTo(xx, yy - 5); ctx.lineTo(xx + 4, yy); ctx.lineTo(xx, yy + 5); ctx.lineTo(xx - 4, yy); ctx.closePath(); ctx.fill(); if (xx - sqTx > 34) { ctx.fillText(bars[i].sqA ? '매집' : '스퀴즈', xx - (bars[i].sqA ? 9 : 13), yy + 15); sqTx = xx; } }
             if (lc) { ctx.strokeStyle = '#999999'; ctx.strokeRect(xx - 3.5, yy - (sq ? 22 : 3.5), 7, 7); ctx.fillStyle = '#999999'; ctx.fillText('대기', xx - 9, yy + (sq ? 26 : 15)); }
           }
         }
+        if (state.look.accMark && isAccum(bars, i)) { ctx.fillStyle = '#14b8a6'; ctx.beginPath(); ctx.arc(xx, y(b.l) + 8, 1.6, 0, Math.PI * 2); ctx.fill(); }
         if (rx && b.rX === 1) { ctx.fillStyle = '#1e6bd6'; ctx.beginPath(); ctx.arc(xx, y(b.h) - 16, 2.2, 0, Math.PI * 2); ctx.fill(); }
       });
     }
@@ -5512,7 +5545,15 @@ onmessage = (e) => { const { body, sets } = e.data;
       { name: '스퀴즈만 · 당일 매수', set: { entryMode: 'SQ', ma5Confirm: false } },
       { name: '스퀴즈만 · 5일선 2일 확인', set: { entryMode: 'SQ', ma5Confirm: true } },
     ];
-    const SET_NAMES = { sqFollow: '전고점 돌파 매수', sqFollowDays: '전고점 돌파 기간', sqZone: '저가권 %', stopMode: '손절', ma5Confirm: '5일선 2일 확인', entryMode: '진입', lcWait: '장대양봉 대기', sqPct: '스퀴즈 폭 하위%', exitMa: '매도선', volMult: '거래량 배수', volFilter: '거래량 확인', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxMin: 'ADX', adxFilter: 'ADX 확인', nearPct: '후보 범위', maxPos: '최대 보유', slotPct: '종목당 비중' };
+    const ACC_VARIANTS = [
+      { name: '스퀴즈만 · 매집 경로 끔', set: { entryMode: 'SQ', accOn: false } },
+      { name: '매집 경로 켬 (폭 25% · OBV 120일 · 횡보 15% · CMF 0.1)', set: { entryMode: 'SQ', accOn: true, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1 } },
+      { name: '매집 경로 켬 · 폭 15%', set: { entryMode: 'SQ', accOn: true, accPct: 15, accDays: 120, accFlat: 15, accCmf: 0.1 } },
+      { name: '매집 경로 켬 · CMF 0 이상', set: { entryMode: 'SQ', accOn: true, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0 } },
+      { name: '매집 경로 켬 · 전고점 돌파 매수 끔', set: { entryMode: 'SQ', accOn: true, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1, sqFollow: false } },
+      { name: '매집 경로만 (하락 흔적 스퀴즈 끔)', set: { entryMode: 'SQ', accOn: true, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1, sqDrop: 90 } },
+    ];
+    const SET_NAMES = { accOn: '매집 경로', accPct: '매집 폭 하위%', accDays: 'OBV 신고가 기간', accFlat: '매집 횡보%', accCmf: 'CMF', sqDrop: '하락 흔적%', sqFollow: '전고점 돌파 매수', sqFollowDays: '전고점 돌파 기간', sqZone: '저가권 %', stopMode: '손절', ma5Confirm: '5일선 2일 확인', entryMode: '진입', lcWait: '장대양봉 대기', sqPct: '스퀴즈 폭 하위%', exitMa: '매도선', volMult: '거래량 배수', volFilter: '거래량 확인', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxMin: 'ADX', adxFilter: 'ADX 확인', nearPct: '후보 범위', maxPos: '최대 보유', slotPct: '종목당 비중' };
     const setLabel = (set) => Object.entries(set).map(([k, v]) => `${SET_NAMES[k] || k} ${v === true ? '켬' : v === false ? '끔' : k === 'exitMa' ? `${v}선` : v}`).join(' · ');
     // variants: [{ name, set }] — 최대 6개. 지금 설정은 맨 앞에 자동으로 넣어 비교 기준으로 씀
     async function compareVariants(variants) {
@@ -5932,28 +5973,32 @@ onmessage = (e) => { const { body, sets } = e.data;
         calc: (b, [p], c) => ({ lines: [{ v: LK.rma(b.map((x, i) => (i ? Math.max(x.h - x.l, Math.abs(x.h - b[i - 1].c), Math.abs(x.l - b[i - 1].c)) : null)), p), c }] }) },
       { k: 'obv', name: 'OBV', pane: 'sub', params: [], c: '#0f766e',
         calc: (b, _, c) => { let s = 0; return { lines: [{ v: b.map((x, i) => (i ? (s += x.c > b[i - 1].c ? x.v : x.c < b[i - 1].c ? -x.v : 0) : 0)), c }] }; } },
+      { k: 'cmf', name: 'CMF', pane: 'sub', params: [['기간', 20, 2, 100]], c: '#0f766e', levels: [0, 0.1],
+        calc: (b, [p], c) => { const mf = b.map((x) => (x.h > x.l ? ((x.c - x.l) - (x.h - x.c)) / (x.h - x.l) * x.v : 0)); return { lines: [{ v: b.map((x, i) => { if (i < p - 1) return null; let a = 0, s = 0; for (let k = i - p + 1; k <= i; k++) { a += mf[k]; s += b[k].v; } return s ? a / s : 0; }), c, hist: false }] }; } },
       { k: 'disp', name: '이격도', pane: 'sub', params: [['기간', 20, 2, 400]], c: '#f08c00', levels: [100],
         calc: (b, [p], c) => { const m = LK.sma(cl(b), p); return { lines: [{ v: m.map((x, i) => (x == null ? null : b[i].c / x * 100)), c }] }; } },
       { k: 'vr', name: '거래량 비율', pane: 'sub', params: [['기간', 20, 2, 100]], c: '#8b5cf6', levels: [100],
         calc: (b, [p], c) => ({ lines: [{ v: b.map((x, i) => { if (i < p) return null; let u = 0, d = 0, e = 0; for (let k = i - p + 1; k <= i; k++) { const ch = b[k].c - b[k - 1].c; if (ch > 0) u += b[k].v; else if (ch < 0) d += b[k].v; else e += b[k].v; } return d + e / 2 ? (u + e / 2) / (d + e / 2) * 100 : null; }), c }] }) },
     ];
-    const IND_ALIAS = { 그물망: 'mesh', 그물: 'mesh', 볼린저: 'bb', 엔벨로프: 'env', 일목: 'ichi', 일목균형표: 'ichi', 파라볼릭: 'sar', 지수이평: 'ema', 스토캐스틱: 'stoch', 윌리엄스: 'willr', dmi: 'adx', 이격도: 'disp', 거래량비율: 'vr', 'vr': 'vr' };
+    const IND_ALIAS = { 자금흐름: 'cmf', 매집: 'cmf', 그물망: 'mesh', 그물: 'mesh', 볼린저: 'bb', 엔벨로프: 'env', 일목: 'ichi', 일목균형표: 'ichi', 파라볼릭: 'sar', 지수이평: 'ema', 스토캐스틱: 'stoch', 윌리엄스: 'willr', dmi: 'adx', 이격도: 'disp', 거래량비율: 'vr', 'vr': 'vr' };
     const indDef = (k) => { const s = String(k || '').toLowerCase().replace(/\s/g, ''); return IND_LIB.find((d) => d.k === s || d.k === IND_ALIAS[s] || d.name.replace(/\s/g, '').toLowerCase() === s); };
     const indLabel = (d) => { const L = indDef(d.k); return `${L.name}${d.p.length ? `(${d.p.join(',')})` : ''}`; };
-    const LOOK_DEF = { up: '#e5383b', down: '#1e6bd6', hollow: false, exitLine: true, exitColor: '#1e6bd6', bb: true, bbUp: '#e5383b', bbMid: '#111111', bbLow: '#1e6bd6', vol: true, grid: true,
-      mas: MA_LIST.map((m) => ({ p: m.p, c: m.c, on: true })), ind: [{ k: 'mesh', p: [5, 120, 5], c: '#86efac', on: true }], v: 2 };
+    const LOOK_DEF = { up: '#e5383b', down: '#1e6bd6', hollow: false, exitLine: true, exitColor: '#1e6bd6', accMark: true, bb: true, bbUp: '#e5383b', bbMid: '#111111', bbLow: '#1e6bd6', vol: true, grid: true,
+      mas: MA_LIST.map((m) => ({ p: m.p, c: m.c, on: true })), ind: [{ k: 'mesh', p: [5, 120, 5], c: '#86efac', on: true }, { k: 'cmf', p: [20], c: '#0f766e', on: true }], v: 3 };
     const clone = (o) => JSON.parse(JSON.stringify(o));
     function normalizeLook(d) {
       const o = clone(LOOK_DEF);
       if (!d || typeof d !== 'object') return o;
       ['up', 'down', 'bbUp', 'bbMid', 'bbLow', 'exitColor'].forEach((k) => { o[k] = lookColor(d[k], o[k]); });
-      ['hollow', 'exitLine', 'bb', 'vol', 'grid'].forEach((k) => { if (typeof d[k] === 'boolean') o[k] = d[k]; });
+      ['hollow', 'exitLine', 'accMark', 'bb', 'vol', 'grid'].forEach((k) => { if (typeof d[k] === 'boolean') o[k] = d[k]; });
       if (Array.isArray(d.mas)) o.mas = d.mas.slice(0, 8).map((m, i) => ({ p: Math.round(Math.min(400, Math.max(1, Number(m.p) || 5))), c: lookColor(m.c, MA_PALETTE[i % 8]), on: m.on !== false }));
       // v2: 그물망(5~120일선, 연한 초록)을 한 번 켜 줌 — 그 뒤 지우면 다시 생기지 않음
       const addMesh = (d.v || 1) < 2;
       if (Array.isArray(d.ind)) o.ind = d.ind.map((x) => { const L = indDef(x && x.k); if (!L) return null; return { k: L.k, p: L.params.map((q, j) => { const v = Number(x.p && x.p[j]); return isFinite(v) && x.p[j] !== '' ? Math.min(q[3], Math.max(q[2], v)) : q[1]; }), c: lookColor(x.c, L.c), on: x.on !== false }; }).filter(Boolean).slice(0, 8);
       if (addMesh && !o.ind.some((x) => x.k === 'mesh')) o.ind.unshift({ k: 'mesh', p: [5, 120, 5], c: '#86efac', on: true });
-      o.v = 2;
+      // v3: CMF(20) 보조지표를 한 번 켜 줌
+      if ((d.v || 1) < 3 && !o.ind.some((x) => x.k === 'cmf') && o.ind.length < 8) o.ind.push({ k: 'cmf', p: [20], c: '#0f766e', on: true });
+      o.v = 3;
       return o;
     }
     state.look = clone(LOOK_DEF);
@@ -6057,6 +6102,7 @@ onmessage = (e) => { const { body, sets } = e.data;
         ${sec('봉')}<div class="flex items-center gap-3">양봉 ${col('up', L.up)} 음봉 ${col('down', L.down)} ${chk('hollow', L.hollow, '양봉 속 비우기')}</div>
         <div class="flex items-center gap-3 mt-1">${chk('vol', L.vol, '거래량')} ${chk('grid', L.grid, '격자')}</div>
         ${sec(`매도 기준선 (${state.cfg.exitMa}일선 · 굵은 선)`)}<div class="flex items-center gap-2">${chk('exitLine', L.exitLine, '보기')} 색 ${col('exitColor', L.exitColor)}<span class="text-[10px] text-[#999999]">기간은 설정 탭 '매도선'</span></div>
+        <div class="flex items-center gap-2">${chk('accMark', L.accMark, '매집인 날 봉 아래 청록 점 (OBV 신고가 · 가격 횡보 · CMF)')}</div>
         ${sec(`볼린저 ${state.cfg.bbPeriod} (전략선)`)}<div class="flex items-center gap-2">${chk('bb', L.bb, '보기')} 상단 ${col('bbUp', L.bbUp)} 중심 ${col('bbMid', L.bbMid)} 하단 ${col('bbLow', L.bbLow)}</div>
         ${sec('이동평균선')}${L.mas.map((m, i) => `<div class="flex items-center gap-1.5 mb-0.5">${chk(`mas.${i}.on`, m.on)} ${num(`mas.${i}.p`, m.p, ['기간', 1, 1, 400])}일 ${col(`mas.${i}.c`, m.c)}<span class="flex-1"></span><button type="button" data-lk-del-ma="${i}" class="text-[#999999] hover:text-[#e5383b] px-1" aria-label="이평선 지우기">✕</button></div>`).join('')}
         ${L.mas.length < 8 ? '<button type="button" data-lk-add-ma class="btn px-1.5 py-0 text-[10px]">+ 이평선 추가</button>' : ''}
@@ -6113,7 +6159,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (a.undo) done.push('이전 모양으로');
       else if (a.reset) done.push('기본 모양으로');
       const s = a.set || {};
-      const CN = { up: '양봉', down: '음봉', bbUp: 'BB 상단', bbMid: 'BB 중심', bbLow: 'BB 하단', exitColor: '매도 기준선' }, BN = { hollow: '양봉 속 비우기', exitLine: '매도 기준선', bb: '볼린저', vol: '거래량', grid: '격자' };
+      const CN = { up: '양봉', down: '음봉', bbUp: 'BB 상단', bbMid: 'BB 중심', bbLow: 'BB 하단', exitColor: '매도 기준선' }, BN = { hollow: '양봉 속 비우기', exitLine: '매도 기준선', accMark: '매집 표시', bb: '볼린저', vol: '거래량', grid: '격자' };
       Object.entries(s).forEach(([k, v]) => {
         if (CN[k]) { const c = lookColor(v, null); if (c) { L[k] = c; done.push(`${CN[k]} 색`); } else bad.push(`${k}=${v}`); }
         else if (BN[k]) { L[k] = v === true || v === 'true'; done.push(`${BN[k]} ${L[k] ? '켬' : '끔'}`); }
@@ -6149,7 +6195,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       runAction.undo = { do: '차트설정', look: prev, undo: true };
       return `✔ 차트 모양을 바꿨어요 — ${done.join(' · ')}${bad.length ? ` (모르는 값: ${bad.join(', ')})` : ''}`;
     }
-    const lookFacts = () => { const L = state.look; return { 매도기준선: L.exitLine ? `${state.cfg.exitMa}일선 굵은 선 ${L.exitColor} (이평선 목록과 별개 — set.exitLine·exitColor 로 바꿈)` : '숨김', 봉색: { 양봉: L.up, 음봉: L.down, 속비우기: L.hollow }, 볼린저선: L.bb ? { 상단: L.bbUp, 중심: L.bbMid, 하단: L.bbLow } : '숨김', 이평선: L.mas.map((m) => `${m.p}일 ${m.c}${m.on ? '' : ' (꺼짐)'}`), 보조지표: L.ind.map((d) => `${indLabel(d)} ${d.c}${d.on ? '' : ' (꺼짐)'}`), 거래량: L.vol, 격자: L.grid }; };
+    const lookFacts = () => { const L = state.look; return { 매도기준선: L.exitLine ? `${state.cfg.exitMa}일선 굵은 선 ${L.exitColor} (이평선 목록과 별개 — set.exitLine·exitColor 로 바꿈)` : '숨김', 봉색: { 양봉: L.up, 음봉: L.down, 속비우기: L.hollow }, 볼린저선: L.bb ? { 상단: L.bbUp, 중심: L.bbMid, 하단: L.bbLow } : '숨김', 이평선: L.mas.map((m) => `${m.p}일 ${m.c}${m.on ? '' : ' (꺼짐)'}`), 보조지표: L.ind.map((d) => `${indLabel(d)} ${d.c}${d.on ? '' : ' (꺼짐)'}`), 거래량: L.vol, 격자: L.grid, 매집표시: L.accMark }; };
 
     // ---- 투자위원회 결재: 신호 → 안건 상정 → 리스크 점검표 + AI 리스크 브리핑(꼭 읽기) → 비서와 토론 → 내 결재 → 실행 → 사후 평가 ----
     //  결재제(기본)에서는 모의 자동매매가 매수·매도 모두 결재 없이는 실행하지 않음. 비서·위젯은 대신 결재할 수 없음
@@ -6177,7 +6223,7 @@ onmessage = (e) => { const { body, sets } = e.data;
         add('info', `제안 ${qty.toLocaleString()}주 × ${won(px)}원 = ${won(Math.round(amt))}원 (평가자산의 ${eq ? (amt / eq * 100).toFixed(1) : '-'}%)`);
         if (ma && px > ma) add(px / ma - 1 > 0.08 ? 'mid' : 'info', `매도 기준 ${c.exitMa}일선 ${won(Math.round(ma))}원까지 ${((px / ma - 1) * 100).toFixed(1)}% — 다음 날 바로 이탈하면 약 ${won(Math.round((px - ma) * qty))}원 손실 (갭 하락이면 더 커질 수 있음)`);
         if (b && isLongCandle(b, i)) add('mid', '오늘 봉이 장대양봉 — 돌파 뒤 되돌림이 자주 나오는 자리');
-        if (b && baseBreakout(b, i) && isSqueeze(b, i)) add('info', '200일 스퀴즈 돌파 — 장기 추세 시작 신호일 수 있지만 절대적이지 않음');
+        if (b && baseBreakout(b, i) && isSqueeze(b, i)) add(b[i].sqA ? 'mid' : 'info', b[i].sqA ? '매집 돌파 — 하락 흔적·저가권은 안 본 신호 (밴드 수축 + 거래량 누적만). 지금 가격이 3년 범위의 어디쯤인지 확인' : '200일 스퀴즈 돌파 — 장기 추세 시작 신호일 수 있지만 절대적이지 않음');
         if (c.w2 || c.w3) add('info', `승인하면 계획에 따라 눌림 반등 때 2차 ${c.w2}%${c.w3 ? `, 전고점 돌파 때 3차 ${c.w3}%` : ''}를 자동으로 더 삼`);
         const bt = state.bt && state.bt.stats;
         if (bt) add('info', `지금 전략 백테스트: 승률 ${bt.win.toFixed(0)}% · 거래당 평균 ${pctTxt(bt.avgRet)} · 최대낙폭 -${bt.mdd.toFixed(1)}% — 대부분의 거래는 작은 손실로 끝남`);
