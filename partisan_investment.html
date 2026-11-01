@@ -349,7 +349,7 @@
     const DEFAULTS = {
       capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true, approval: true,
       invOn: false, invEntry: -30, invExit: -10, invLev: 'AUTO', invLevScore: -60, invPct: 30, invMaxDays: 15, invExitMa: 10, inv1: '114800', inv2: '252670',
-      entryMode: 'SQ', sqPct: 15, sqDrop: 30, sqRange: 60, sqZone: 50, sqFollow: false, sqFollowDays: 20, waitPct: 10, waitAlertPct: 2, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false, accOn: false, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1,
+      entryMode: 'SQ', sqPct: 15, sqDrop: 30, sqRange: 60, sqZone: 50, sqFollow: false, sqFollowDays: 20, waitPct: 10, waitAlertPct: 2, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false, accOn: false, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1, midSettleDays: 5, smallPH: true, smallCap: 5000,
       bbPeriod: 200, bbStd: 2.0,
       exitMa: 10, pullbackPct: 1.5, stopMode: 'BREAK',
       w1: 50, w2: 50, w3: 0,
@@ -386,6 +386,9 @@
         { k: 'sqRange', label: '스퀴즈: 120일 고점·저점 차이 % 이하 (횡보)', min: 10, max: 300, step: 5 },
         { k: 'sqFollow', label: '스퀴즈 돌파 뒤 전고점을 다시 넘으면 그때도 매수 (첫 봉을 놓쳐도 잡음)', type: 'bool' },
         { k: 'sqFollowDays', label: '└ 스퀴즈 돌파 뒤 며칠 안까지', min: 5, max: 60, step: 1 },
+        { k: 'midSettleDays', label: '중심선 안착: 돌파 전 며칠 동안 종가가 BB 중심선 위였어야 (0이면 안 봄)', min: 0, max: 20, step: 1 },
+        { k: 'smallPH', label: '소형주는 앞서 상단을 찔렀다 밀린 전고점이 있을 때만 매수', type: 'bool' },
+        { k: 'smallCap', label: '└ 소형주 기준: 시가총액 몇 억 원 미만', min: 1000, max: 50000, step: 500 },
         { k: 'accOn', label: '매집 경로: 하락 흔적이 없어도 밴드 폭 수축 + 120일 횡보 + 거래량 누적(매집)이면 매수', type: 'bool' },
         { k: 'accPct', label: '└ 매집: 밴드 폭이 최근 3년 중 하위 %', min: 5, max: 50, step: 1 },
         { k: 'accDays', label: '└ 매집: OBV(누적 거래량)가 며칠 신고가', min: 20, max: 250, step: 10 },
@@ -794,13 +797,53 @@
       return null;
     }
 
-    function baseBreakout(bars, i) {
-      const c = state.cfg, b = bars[i], p = bars[i - 1], r = ruleOn('entry');
-      if (r && r.mode === 'replace') return b.rE === 1;   // 내 매수 규칙만으로
+    // ---- 시가총액(상장주식수 × 가격) — 중계기가 하루 한 번 공개 상장주식수 자료를 받아 줌. 모르면 소형주 조건은 안 봄 ----
+    const CAPS_KEY = 'krx_caps_v1';
+    const caps = (() => { try { return { at: 0, date: '', shares: {}, ...JSON.parse(localStorage.getItem(CAPS_KEY) || '{}') }; } catch (_) { return { at: 0, date: '', shares: {} }; } })();
+    async function loadCaps() {
+      if (!state.bridge.ok || !state.bridge.caps || (Date.now() / 1000 - caps.at < 20 * 3600 && Object.keys(caps.shares).length)) return;
+      try {
+        const r = await bridge('/krx/caps', {});
+        if (r && r.shares && Object.keys(r.shares).length > 1000) { Object.assign(caps, r); try { localStorage.setItem(CAPS_KEY, JSON.stringify(caps)); } catch (_) {} }
+      } catch (_) {}
+    }
+    const barsCode = new WeakMap();
+    function codeOfBars(bars) {
+      const k0 = barsCode.get(bars);
+      if (k0) return k0;
+      for (const k in state.data) if (state.data[k].bars === bars) { barsCode.set(bars, k); return k; }
+      return null;
+    }
+    const capOf = (code, px) => (code && caps.shares[code] ? caps.shares[code] * px : null);   // 원
+    // BB 상단 종가 돌파 (전날은 상단 아래, 양봉) + 거래량·ADX 확인
+    function bbCross(bars, i) {
+      const c = state.cfg, b = bars[i], p = bars[i - 1];
       if (!p || !b.ready || !p.ready) return false;
       if (!(b.c > b.upper && p.c <= p.upper && b.c > b.o)) return false;
       if (c.volFilter && !(b.v >= c.volMult * bars[i - 1].volMa)) return false;
       if (c.adxFilter && !(b.adx >= c.adxMin)) return false;
+      return true;
+    }
+    // 돌파 모양 확인 (2026-11 검증): 사지 않을 이유가 있으면 그 이유, 없으면 ''
+    //  ① 중심선 안착: 돌파 전 midSettleDays일 안에 종가가 BB 중심선 아래였으면 — 중심선 밑에서 짧게 상단까지 뚫은 돌파는 실패가 많음
+    //  ② 소형주 전고점: 시가총액 smallCap억 미만이면 직전 120일 안에 상단을 찔렀다가 음봉으로 밀린 봉(전고점)이 있어야 — 첫 시도 돌파는 실패가 많음
+    function structWhy(bars, i) {
+      const c = state.cfg, b = bars[i];
+      for (let k = 1; k <= c.midSettleDays && i - k >= 0; k++) { const x = bars[i - k]; if (x.ready && x.c < x.mid) return `중심선 아래에서 빠르게 올라옴 (${k}일 전 종가가 중심선 아래)`; }
+      if (c.smallPH) {
+        const cap = capOf(codeOfBars(bars), b.c);
+        if (cap != null && cap < c.smallCap * 1e8) {
+          let ph = false;
+          for (let k = Math.max(1, i - 120); k <= i - 3; k++) { const x = bars[k]; if (x.ready && x.h >= x.upper && x.c < x.o) { ph = true; break; } }
+          if (!ph) return `소형주(시총 ${Math.round(cap / 1e8).toLocaleString()}억)인데 앞선 상단 시도(전고점)가 없음`;
+        }
+      }
+      return '';
+    }
+    function baseBreakout(bars, i) {
+      const r = ruleOn('entry'), b = bars[i];
+      if (r && r.mode === 'replace') return b.rE === 1;   // 내 매수 규칙만으로
+      if (!bbCross(bars, i) || structWhy(bars, i)) return false;
       return r ? b.rE === 1 : true;   // 돌파 + 내 매수 규칙
     }
     // p일 밴드 폭이 최근 3년(750일) 중 하위 pct% 안인가 (비교할 날이 500일쯤 있어야 함)
@@ -1547,7 +1590,7 @@
       document.getElementById('chartSignal').innerHTML = info ? (info.signal ? `<span class="px-1.5 bg-[#e5383b] text-white">돌파 신호</span>${info.squeeze ? ' <span class="px-1 bg-[#f3e8ff] text-[#7c3aed]">스퀴즈</span>' : ''}` : info.squeeze ? '<span class="px-1 bg-[#f3e8ff] text-[#7c3aed]" title="200일 스퀴즈 상태로 상단 근처">스퀴즈 · 상단 근처</span>' :
         info.toUpper != null ? `<span class="text-[#666666]">일봉 상단선까지 ${info.toUpper >= 0 ? '이미 위' : pct(info.toUpper, 1)}</span>` : '') : '';
       const LKs = state.look;
-      document.getElementById('maLegend').innerHTML = (LKs.bb ? `<span style="color:${LKs.bbMid}">━</span>중심 <span style="color:${LKs.bbUp}">┅</span>상단 <span style="color:${LKs.bbLow}">┅</span>하단 ` : '') + (state.tf === 'D' ? `${LKs.exitLine ? `<b style="color:${LKs.exitColor}">━</b>매도 ${state.cfg.exitMa}선 ` : ''}<span style="color:#e5383b">△</span>매수${state.cfg.entryMode === 'SQ' ? '(스퀴즈만)' : ''} <span style="color:#7c3aed">◆</span>스퀴즈 ${state.cfg.accOn ? '<span style="color:#0f766e">◆</span>매집 돌파 ' : ''}${LKs.accMark ? '<span style="color:#14b8a6">•</span>매집 ' : ''}${state.cfg.lcWait ? '<span style="color:#999">□</span>장대양봉 대기 ' : ''}` : '') + lookLegend() + drawLegend();
+      document.getElementById('maLegend').innerHTML = (LKs.bb ? `<span style="color:${LKs.bbMid}">━</span>중심 <span style="color:${LKs.bbUp}">┅</span>상단 <span style="color:${LKs.bbLow}">┅</span>하단 ` : '') + (state.tf === 'D' ? `${LKs.exitLine ? `<b style="color:${LKs.exitColor}">━</b>매도 ${state.cfg.exitMa}선 ` : ''}<span style="color:#e5383b">△</span>매수${state.cfg.entryMode === 'SQ' ? '(스퀴즈만)' : ''} <span style="color:#7c3aed">◆</span>스퀴즈 <span style="color:#9ca3af">✕</span>모양 제외 ${state.cfg.accOn ? '<span style="color:#0f766e">◆</span>매집 돌파 ' : ''}${LKs.accMark ? '<span style="color:#14b8a6">•</span>매집 ' : ''}${state.cfg.lcWait ? '<span style="color:#999">□</span>장대양봉 대기 ' : ''}` : '') + lookLegend() + drawLegend();
     }
 
     function selectCode(code) {
@@ -2486,7 +2529,7 @@
       const badge = document.getElementById('modeBadge');
       try {
         const h = await bridge('/health');
-        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.market = !!h.market; state.bridge.topnews = !!h.topnews; state.bridge.notify = !!h.notify; state.bridge.tgcmd = !!h.tgcmd; setTimeout(() => { loadMarketQuotes(); loadTopNews(); tgStart(); }, 300); state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
+        state.bridge.ok = true; state.bridge.demo = !!h.demo; state.bridge.chart = !!h.chart; state.bridge.rt = !!h.rt; state.bridge.research = !!h.research; state.bridge.market = !!h.market; state.bridge.topnews = !!h.topnews; state.bridge.notify = !!h.notify; state.bridge.tgcmd = !!h.tgcmd; state.bridge.caps = !!h.caps; setTimeout(() => { loadMarketQuotes(); loadTopNews(); tgStart(); loadCaps(); }, 300); state.bridge.ai = !!h.ai; state.bridge.trade = !!h.trade; realRefresh(true);
         badge.textContent = h.demo ? '● 데모 시세' : '● 나무증권 실시간';
         badge.className = `text-[11px] px-2 py-0.5 ${h.demo ? 'bg-[#e5383b] text-white' : 'bg-[#111111] text-white'}`;
         document.getElementById('demoBanner').classList.toggle('hidden', !h.demo);
@@ -4129,7 +4172,7 @@
       return {
         종목: `${nameOf(code)} (${code})`, 현재가: px, 오늘등락: f.dayChg, 수익률: { '5일': ret(5), '20일': ret(20), '60일': ret(60) },
         BB상단: x.ready ? Math.round(x.upper) : null, BB중심: x.ready ? Math.round(x.mid) : null, '5일선': x.ma5 ? Math.round(x.ma5) : null, '20일선': x.ma20 ? Math.round(x.ma20) : null,
-        스퀴즈돌파: i >= 1 && baseBreakout(b, i) && isSqueeze(b, i) ? (b[i].sqA ? '매집 경로' : '200일 스퀴즈') : false, 매집: isAccum(b, i), CMF20: x.cmf == null ? null : +x.cmf.toFixed(2), '1년고점': hi || null,
+        스퀴즈돌파: i >= 1 && baseBreakout(b, i) && isSqueeze(b, i) ? (b[i].sqA ? '매집 경로' : '200일 스퀴즈') : false, 돌파제외이유: i >= 1 && bbCross(b, i) ? structWhy(b, i) || null : null, 시가총액_억: (() => { const v = capOf(code, px); return v == null ? null : Math.round(v / 1e8); })(), 매집: isAccum(b, i), CMF20: x.cmf == null ? null : +x.cmf.toFixed(2), '1년고점': hi || null,
         최근20봉: b.slice(-20).map((y) => ({ 날짜: y.t, 시: y.o, 고: y.h, 저: y.l, 종: y.c, 거래량: y.v })),
         최근뉴스: nh && nh.items ? nh.items.slice(0, 5).map((n) => n.title) : null,
         BB상단대비: f.toUpper, 오늘돌파신호: sig, '5일선대비': f.ma5gap, 거래량_20일평균대비: f.volRatio, '20일평균거래대금_억': f.value20,
@@ -5202,7 +5245,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.32', APP_DATE = '2026-10-31';
+    const APP_VERSION = '1.33', APP_DATE = '2026-11-01';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5341,13 +5384,14 @@ onmessage = (e) => { const { body, sets } = e.data;
           <button type="button" data-cmp="bbPeriod" class="btn px-1.5 py-0 text-[10px]">BB 120·200·250</button>
           <button type="button" data-cmp="entry" class="btn px-1.5 py-0 text-[10px]">스퀴즈·장대양봉 대기</button>
           <button type="button" data-cmp="ma5" class="btn px-1.5 py-0 text-[10px]">5일선 2일 확인</button>
-          <button type="button" data-cmp="acc" class="btn px-1.5 py-0 text-[10px]">매집 경로</button></div>`;
+          <button type="button" data-cmp="acc" class="btn px-1.5 py-0 text-[10px]">매집 경로</button>
+          <button type="button" data-cmp="struct" class="btn px-1.5 py-0 text-[10px]">중심선·전고점</button></div>`;
     }
     document.getElementById('rulesBox').addEventListener('click', async (e) => {
       const cb = e.target.closest('[data-cmp]');
       if (cb) {
         const vals = { exitMa: [5, 10, 20], volMult: [1.5, 2, 3], bbPeriod: [120, 200, 250] }[cb.dataset.cmp];
-        const msg = await runCompare(cb.dataset.cmp === 'entry' ? { variants: ENTRY_VARIANTS } : cb.dataset.cmp === 'ma5' ? { variants: MA5_VARIANTS } : cb.dataset.cmp === 'acc' ? { variants: ACC_VARIANTS } : { key: cb.dataset.cmp, values: vals });
+        const msg = await runCompare(cb.dataset.cmp === 'entry' ? { variants: ENTRY_VARIANTS } : cb.dataset.cmp === 'ma5' ? { variants: MA5_VARIANTS } : cb.dataset.cmp === 'acc' ? { variants: ACC_VARIANTS } : cb.dataset.cmp === 'struct' ? { variants: STRUCT_VARIANTS } : { key: cb.dataset.cmp, values: vals });
         state.ui.right = true; saveStore(); applyPanes(); setTab('assist'); toast(msg);
         return;
       }
@@ -5386,6 +5430,7 @@ onmessage = (e) => { const { body, sets } = e.data;
           }
         }
         if (state.look.accMark && isAccum(bars, i)) { ctx.fillStyle = '#14b8a6'; ctx.beginPath(); ctx.arc(xx, y(b.l) + 8, 1.6, 0, Math.PI * 2); ctx.fill(); }
+        if (i >= 1 && !ruleOn('entry') && bbCross(bars, i) && structWhy(bars, i)) { const yy = y(b.l) + 18; ctx.strokeStyle = '#9ca3af'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(xx - 3.5, yy - 3.5); ctx.lineTo(xx + 3.5, yy + 3.5); ctx.moveTo(xx + 3.5, yy - 3.5); ctx.lineTo(xx - 3.5, yy + 3.5); ctx.stroke(); ctx.lineWidth = 1; }
         if (rx && b.rX === 1) { ctx.fillStyle = '#1e6bd6'; ctx.beginPath(); ctx.arc(xx, y(b.h) - 16, 2.2, 0, Math.PI * 2); ctx.fill(); }
       });
     }
@@ -5553,7 +5598,15 @@ onmessage = (e) => { const { body, sets } = e.data;
       { name: '매집 경로 켬 · 전고점 돌파 매수 끔', set: { entryMode: 'SQ', accOn: true, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1, sqFollow: false } },
       { name: '매집 경로만 (하락 흔적 스퀴즈 끔)', set: { entryMode: 'SQ', accOn: true, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1, sqDrop: 90 } },
     ];
-    const SET_NAMES = { accOn: '매집 경로', accPct: '매집 폭 하위%', accDays: 'OBV 신고가 기간', accFlat: '매집 횡보%', accCmf: 'CMF', sqDrop: '하락 흔적%', sqFollow: '전고점 돌파 매수', sqFollowDays: '전고점 돌파 기간', sqZone: '저가권 %', stopMode: '손절', ma5Confirm: '5일선 2일 확인', entryMode: '진입', lcWait: '장대양봉 대기', sqPct: '스퀴즈 폭 하위%', exitMa: '매도선', volMult: '거래량 배수', volFilter: '거래량 확인', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxMin: 'ADX', adxFilter: 'ADX 확인', nearPct: '후보 범위', maxPos: '최대 보유', slotPct: '종목당 비중' };
+    const STRUCT_VARIANTS = [
+      { name: '둘 다 끔 (예전)', set: { midSettleDays: 0, smallPH: false } },
+      { name: '중심선 안착(5일)만', set: { midSettleDays: 5, smallPH: false } },
+      { name: '소형주 전고점만', set: { midSettleDays: 0, smallPH: true, smallCap: 5000 } },
+      { name: '둘 다 (기본)', set: { midSettleDays: 5, smallPH: true, smallCap: 5000 } },
+      { name: '중심선 10일 + 소형주 전고점', set: { midSettleDays: 10, smallPH: true, smallCap: 5000 } },
+      { name: '중심선 5일 + 2조 미만 전고점', set: { midSettleDays: 5, smallPH: true, smallCap: 20000 } },
+    ];
+    const SET_NAMES = { midSettleDays: '중심선 안착 일수', smallPH: '소형주 전고점', smallCap: '소형주 기준(억)', accOn: '매집 경로', accPct: '매집 폭 하위%', accDays: 'OBV 신고가 기간', accFlat: '매집 횡보%', accCmf: 'CMF', sqDrop: '하락 흔적%', sqFollow: '전고점 돌파 매수', sqFollowDays: '전고점 돌파 기간', sqZone: '저가권 %', stopMode: '손절', ma5Confirm: '5일선 2일 확인', entryMode: '진입', lcWait: '장대양봉 대기', sqPct: '스퀴즈 폭 하위%', exitMa: '매도선', volMult: '거래량 배수', volFilter: '거래량 확인', bbPeriod: 'BB 기간', bbStd: 'BB 배수', adxMin: 'ADX', adxFilter: 'ADX 확인', nearPct: '후보 범위', maxPos: '최대 보유', slotPct: '종목당 비중' };
     const setLabel = (set) => Object.entries(set).map(([k, v]) => `${SET_NAMES[k] || k} ${v === true ? '켬' : v === false ? '끔' : k === 'exitMa' ? `${v}선` : v}`).join(' · ');
     // variants: [{ name, set }] — 최대 6개. 지금 설정은 맨 앞에 자동으로 넣어 비교 기준으로 씀
     async function compareVariants(variants) {

@@ -296,6 +296,63 @@ def krx_master(force=False):
 
 
 # ---------------------------------------------------------------------------
+# 상장주식수 (시가총액 계산용) — FinanceDataReader 공개 캐시(GitHub)의 거래소 전종목 목록. 키 불필요, 하루 한 번
+# ---------------------------------------------------------------------------
+CAPS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "krx_caps.json")
+CAPS_LOCK = threading.Lock()
+CAPS_URL = "https://raw.githubusercontent.com/FinanceData/fdr_krx_data_cache/refs/heads/master/data/listing/krx/{}.csv"
+
+
+def krx_caps(force=False):
+    """{"at", "date", "shares": {코드: 상장주식수}} — 저장분이 20시간 안이면 그대로 (실패하면 저장분)"""
+    import csv
+    import io
+    with CAPS_LOCK:
+        saved = None
+        try:
+            with open(CAPS_FILE, encoding="utf-8") as f:
+                saved = json.load(f)
+        except (OSError, ValueError):
+            pass
+        if saved and not force and time.time() - saved.get("at", 0) < 20 * 3600:
+            return saved
+        try:
+            for back in range(0, 14):
+                day = time.strftime("%Y-%m-%d", time.localtime(time.time() - back * 86400))
+                try:
+                    req = urllib.request.Request(CAPS_URL.format(day), headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=20) as res:
+                        raw = res.read().decode("utf-8-sig")
+                except urllib.error.HTTPError as e:
+                    if e.code == 404:
+                        continue
+                    raise
+                shares = {}
+                for r in csv.DictReader(io.StringIO(raw)):
+                    code, n = (r.get("Code") or "").strip(), r.get("Stocks")
+                    if len(code) == 6 and n:
+                        try:
+                            shares[code] = int(float(n))
+                        except ValueError:
+                            pass
+                if len(shares) < 1000:
+                    continue
+                out = {"at": time.time(), "date": day, "shares": shares}
+                tmp = CAPS_FILE + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(out, f)
+                os.replace(tmp, CAPS_FILE)
+                print(f"[{time.strftime('%H:%M:%S')}] 상장주식수 {len(shares)}종목 받음 ({day})")
+                return out
+            raise RuntimeError("최근 2주 상장주식수 자료가 없어요")
+        except Exception as err:
+            print(f"[{time.strftime('%H:%M:%S')}] 상장주식수 받기 실패: {err}")
+            if saved:
+                return saved
+            return {"at": 0, "date": "", "shares": {}}
+
+
+# ---------------------------------------------------------------------------
 # 업종 정보 (섹터 분석용) — 한국거래소 KIND 상장법인 목록: 종목별 업종(표준산업분류)·주요제품. 하루 한 번
 # ---------------------------------------------------------------------------
 SECTOR_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "krx_sectors.json")
@@ -895,7 +952,7 @@ CHAT_ACTIONS = (
     "\n매매 조건 바꾸기(가장 중요): 사용자가 매수·매도 조건을 말하면 말로 설명만 하지 말고 반드시 실제로 바꾼다.\n"
     "- 설정 값으로 되는 것은 설정 명령: BB 기간 bbPeriod·배수 bbStd, 매도선 exitMa(N선), 거래량 확인 volFilter+volMult(배), ADX adxFilter+adxMin, 후보 범위 nearPct, "
     '진입 방식 entryMode("ALL" 모든 상단 돌파 / "SQ" 200일 스퀴즈 돌파만 — 스퀴즈 기준 sqPct 밴드 폭 3년 중 하위%·sqDrop 하락 흔적%·sqRange 120일 횡보 폭%), '
-    "장대양봉 대기 lcWait(장대양봉으로 돌파하면 바로 사지 않고 눌림 뒤 첫 반등에 매수 — lcAtr 몸통 배수·lcChg 상승률%·lcDays 최대 대기일), 스퀴즈 돌파 뒤 전고점 돌파 매수 sqFollow·sqFollowDays, 매집 경로 accOn(하락 흔적이 없어도 밴드 폭 하위 accPct% + 120일 횡보 + 매집이면 매수 — 매집 = OBV accDays일 신고가 · 그 기간 가격 변화 accFlat% 안 · CMF(20) ≥ accCmf), 저가권 sqZone(3년 범위 아래 %), 손절 stopMode(BREAK·BOX·NONE), 매수 타이밍 ma5Confirm(신호 뒤 2일 연속 종가가 5일선 위면 둘째 날 매수), 복리 배분 slotAuto. "
+    "장대양봉 대기 lcWait(장대양봉으로 돌파하면 바로 사지 않고 눌림 뒤 첫 반등에 매수 — lcAtr 몸통 배수·lcChg 상승률%·lcDays 최대 대기일), 스퀴즈 돌파 뒤 전고점 돌파 매수 sqFollow·sqFollowDays, 돌파 모양 확인 midSettleDays(돌파 전 N일 동안 종가가 BB 중심선 위였어야, 0이면 끔 — 기본 5)·smallPH(시가총액 smallCap억 미만 소형주는 직전 120일 안에 상단을 찔렀다 음봉으로 밀린 전고점이 있어야 매수 — 기본 켬, 5000억), 매집 경로 accOn(하락 흔적이 없어도 밴드 폭 하위 accPct% + 120일 횡보 + 매집이면 매수 — 매집 = OBV accDays일 신고가 · 그 기간 가격 변화 accFlat% 안 · CMF(20) ≥ accCmf), 저가권 sqZone(3년 범위 아래 %), 손절 stopMode(BREAK·BOX·NONE), 매수 타이밍 ma5Confirm(신호 뒤 2일 연속 종가가 5일선 위면 둘째 날 매수), 복리 배분 slotAuto. "
     "스퀴즈 돌파는 장기 추세의 신호일 뿐 절대적인 매수 근거가 아니라고 설명한다. 진입 방식을 바꾸기 전에는 비교 명령으로 "
     '{"do":"비교","variants":[{"name":"스퀴즈만","set":{"entryMode":"SQ"}},{"name":"스퀴즈만+장대양봉 대기","set":{"entryMode":"SQ","lcWait":true}}]} 처럼 먼저 보여 준다.\n'
     "- 설정으로 안 되는 조건(RSI, 전고점 돌파, 연속 양봉, 갭, 이격도, 특정 이평선 정배열 등)은 규칙 블록으로 직접 코드를 짠다:\n"
@@ -1730,7 +1787,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/rt/stream":
             return self._stream()
         now = datetime.now(KST)
-        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "market": True, "topnews": True, "notify": True, "tgcmd": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
+        self._json(200, {"ok": True, "demo": DEMO, "keys": bool(APPKEY and APPSECRET), "chart": True, "rt": True, "sync": (not DEMO) or "--state" in sys.argv, "master": True, "research": True, "market": True, "topnews": True, "notify": True, "tgcmd": True, "caps": True, "ai": ai_available(), "stateFile": STATE_FILE, "backupDir": "" if DEMO else BACKUP_DIR, "trade": trade_available(),
                          "kst": now.strftime("%Y-%m-%d %H:%M:%S")})
 
     def _stream(self):
@@ -1755,7 +1812,7 @@ class Handler(BaseHTTPRequestHandler):
             HUB.remove(q)
 
     def do_POST(self):
-        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/sectors", "/news", "/news/top", "/notify/telegram", "/notify/telegram_chat", "/notify/tg_start", "/notify/tg_stop", "/market/quotes", "/market/index", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
+        if self.path not in ("/krx/daily", "/krx/chart", "/krx/components", "/rt/subscribe", "/state/get", "/state/put", "/krx/master", "/krx/caps", "/krx/sectors", "/news", "/news/top", "/notify/telegram", "/notify/telegram_chat", "/notify/tg_start", "/notify/tg_stop", "/market/quotes", "/market/index", "/ai/brief", "/ai/test", "/ai/ask", "/ai/stt", "/ai/tts",
                              "/trade/status", "/trade/arm", "/trade/order", "/trade/cancel", "/trade/balance", "/trade/orders"):
             return self._json(404, {"error": "not found"})
         if not self._guard():
@@ -1852,6 +1909,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, market_quotes())
             if self.path == "/market/index":
                 return self._json(200, market_index(str(req.get("sym", "")), str(req.get("range", "10y"))))
+            if self.path == "/krx/caps":
+                return self._json(200, krx_caps(bool(req.get("force"))))
             if self.path == "/krx/master":
                 m = krx_master(bool(req.get("force")))
                 return self._json(200, {"at": m.get("at", 0), "items": m["items"]})

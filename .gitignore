@@ -9,6 +9,7 @@ krx_state*.json
 # 중계기가 다시 받아 오는 데이터
 krx_master.json
 krx_sectors.json
+krx_caps.json
 
 # 예전 수동 백업 — 이제 git 기록이 대신함
 *.backup-*
@@ -24,3 +25,4 @@ research/report.txt
 
 # Gemini 대화창용 자료·적용 결과 (다시 만들 수 있음)
 gemini_pack/
+research/listing.json
