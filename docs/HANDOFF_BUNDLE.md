@@ -225,9 +225,9 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 ## partisan_investment.html
 
-총 7,532줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
+총 7,586줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
 
-화면 버전: v1.33 · 2026-11-01 (pre-commit 훅이 자동으로 올림)
+화면 버전: v1.34 · 2026-11-01 (pre-commit 훅이 자동으로 올림)
 
 ### 구역과 함수 (줄 번호)
 
@@ -694,138 +694,143 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 **5995** · ---- 차트 꾸미기: 봉·볼린저·이평선 색, 이평선 기간, 보조지표 (차트 위 겹쳐 그리기 / 아래 칸)
 - `lookColor` 5998
 - `cl` 6009
-- `indDef` 6070
-- `indLabel` 6071
-- `clone` 6074
-- `normalizeLook` 6075
-- `lookSubs` 6091
-- `lookSeries` 6094
-- `strokeSeries` 6102
-- `fillBetween` 6109
-- `drawLookOverlays` 6119
-- `drawLookSubs` 6131
-- `numShort` 6170
-- `lookLegend` 6171
-- `renderLookCard` 6179
-- `lookChanged` 6199
-- `openLook` 6204
-- `lkSet` 6210
-- `lookAct` 6241
-- `lookFacts` 6284
+- `indDef` 6072
+- `indLabel` 6073
+- `clone` 6076
+- `normalizeLook` 6077
+- `lookSubs` 6095
+- `lookSeries` 6098
+- `strokeSeries` 6106
+- `fillBetween` 6113
 
-**6286** · ---- 투자위원회 결재: 신호 → 안건 상정 → 리스크 점검표 + AI 리스크 브리핑(꼭 읽기) → 비서와 토론 → 내 결재 → 실행 → 사후 평가
-- `agendaOn` 6289
-- `agendaKey` 6290
-- `agendaFind` 6291
-- `equityNow` 6292
-- `freeCash` 6293
-- `planBuyQty` 6294
-- `agendaChecks` 6299
-- `agendaCreate` 6328
-- `agendaBrief` 6342
-- `agendaGate` 6357
-- `agendaDone` 6365
-- `winActiveFor` 6366
-- `paperBuyNow` 6368
-- `agendaExecNow` 6386
-- `agendaDecide` 6410
-- `agendaExpire` 6424
-- `agendaOutcome` 6431
-- `agendaHistLine` 6436
-- `renderAgenda` 6441
-- `agendaFacts` 6512
+**6123** · ---- 매물대: 가격대별 거래량 — 봉마다 거래량을 저가~고가에 고르게 나눠 칸에 쌓음 (양봉 거래량 · 음봉 거래량 따로)
+- `vpBins` 6124
+- `drawVP` 6139
+- `vpFacts` 6163
+- `drawLookOverlays` 6172
+- `drawLookSubs` 6185
+- `numShort` 6224
+- `lookLegend` 6225
+- `renderLookCard` 6233
+- `lookChanged` 6253
+- `openLook` 6258
+- `lkSet` 6264
+- `lookAct` 6295
+- `lookFacts` 6338
 
-**6522** · ---- 비서 단축 버튼 · 외부 Gemini 대화창 연동(지금 상황 복사 📋 / 받은 답 붙여 넣어 실행 📥)
-- `copyGeminiBrief` 6523
-- `applyExternalReply` 6533
+**6340** · ---- 투자위원회 결재: 신호 → 안건 상정 → 리스크 점검표 + AI 리스크 브리핑(꼭 읽기) → 비서와 토론 → 내 결재 → 실행 → 사후 평가
+- `agendaOn` 6343
+- `agendaKey` 6344
+- `agendaFind` 6345
+- `equityNow` 6346
+- `freeCash` 6347
+- `planBuyQty` 6348
+- `agendaChecks` 6353
+- `agendaCreate` 6382
+- `agendaBrief` 6396
+- `agendaGate` 6411
+- `agendaDone` 6419
+- `winActiveFor` 6420
+- `paperBuyNow` 6422
+- `agendaExecNow` 6440
+- `agendaDecide` 6464
+- `agendaExpire` 6478
+- `agendaOutcome` 6485
+- `agendaHistLine` 6490
+- `renderAgenda` 6495
+- `agendaFacts` 6566
 
-**6564** · ---- 주요 지수: 위쪽 지수 띠(코스피·코스닥·미국 지수·환율) + 리서치센터 '지수 차트' (메인 차트를 그대로 옮겨 와 같은 차트로 봄)
-- `idxNum` 6570
-- `idxPct` 6571
-- `loadMarketQuotes` 6572
-- `renderIdxBar` 6579
-- `renderIndexTab` 6590
-- `renderIndexToolbar` 6599
-- `idxEnter` 6608
-- `idxExit` 6629
-- `marketFacts` 6640
+**6576** · ---- 비서 단축 버튼 · 외부 Gemini 대화창 연동(지금 상황 복사 📋 / 받은 답 붙여 넣어 실행 📥)
+- `copyGeminiBrief` 6577
+- `applyExternalReply` 6587
 
-**6644** · ---- 인버스 — 하락장 대응: 인버스 ETF 목록 관리 + 시장 국면이 하락이면 인버스(1배·2배) 안건 → 결재 → 실행, 국면 회복·반등·보유 기한이면 정리 안건
-- `invList` 6647
-- `invLevOf` 6648
-- `invHeld` 6649
-- `invDecision` 6651
-- `invEvaluate` 6669
-- `invExec` 6683
-- `invBacktest` 6697
-- `invBtLine` 6732
-- `renderInv` 6734
-- `invFacts` 6778
-- `invChecks` 6791
+**6618** · ---- 주요 지수: 위쪽 지수 띠(코스피·코스닥·미국 지수·환율) + 리서치센터 '지수 차트' (메인 차트를 그대로 옮겨 와 같은 차트로 봄)
+- `idxNum` 6624
+- `idxPct` 6625
+- `loadMarketQuotes` 6626
+- `renderIdxBar` 6633
+- `renderIndexTab` 6644
+- `renderIndexToolbar` 6653
+- `idxEnter` 6662
+- `idxExit` 6683
+- `marketFacts` 6694
 
-**6810** · ---- 운용 현황: 전략으로 산 종목마다 지금 단계 · 손절선 · 매도선 · 다음 할 일 (산 뒤의 대응이 이 매매의 핵심)
-- `manageRows` 6811
-- `renderManage` 6822
-- `manageFacts` 6839
+**6698** · ---- 인버스 — 하락장 대응: 인버스 ETF 목록 관리 + 시장 국면이 하락이면 인버스(1배·2배) 안건 → 결재 → 실행, 국면 회복·반등·보유 기한이면 정리 안건
+- `invList` 6701
+- `invLevOf` 6702
+- `invHeld` 6703
+- `invDecision` 6705
+- `invEvaluate` 6723
+- `invExec` 6737
+- `invBacktest` 6751
+- `invBtLine` 6786
+- `renderInv` 6788
+- `invFacts` 6832
+- `invChecks` 6845
 
-**6843** · ---- 주요 뉴스 띠: 지수 띠 오른쪽에 지금 가장 많이 다뤄지는 경제(또는 종합) 뉴스 제목을 6초마다 넘겨 보여 줌 · 3분마다 새로 받음
-- `loadTopNews` 6845
-- `newsAgo` 6851
-- `renderNewsTicker` 6852
-- `topNewsFacts` 6872
+**6864** · ---- 운용 현황: 전략으로 산 종목마다 지금 단계 · 손절선 · 매도선 · 다음 할 일 (산 뒤의 대응이 이 매매의 핵심)
+- `manageRows` 6865
+- `renderManage` 6876
+- `manageFacts` 6893
 
-**6875** · ---- 시장 국면 기준 한 줄: 왼쪽 위 '시장 국면' 칸 아래에 판정 기준과 가장 큰 근거를 보여 줌
-- `regimeNote` 6876
+**6897** · ---- 주요 뉴스 띠: 지수 띠 오른쪽에 지금 가장 많이 다뤄지는 경제(또는 종합) 뉴스 제목을 6초마다 넘겨 보여 줌 · 3분마다 새로 받음
+- `loadTopNews` 6899
+- `newsAgo` 6905
+- `renderNewsTicker` 6906
+- `topNewsFacts` 6926
 
-**6883** · ---- 1. 돌파 대기 목록: 저가권 200일 스퀴즈 상태인데 아직 상단 아래 — 상단까지 가까운 순, 가까워지면 알림
-- `waitList` 6886
-- `waitCodes` 6902
-- `renderWait` 6903
-- `waitAlerts` 6916
+**6929** · ---- 시장 국면 기준 한 줄: 왼쪽 위 '시장 국면' 칸 아래에 판정 기준과 가장 큰 근거를 보여 줌
+- `regimeNote` 6930
 
-**6922** · ---- 2. 장중 돌파 감시: 장중(매매 시간대 전)에 대기 종목이 상단을 뚫으면 바로 알리고, 결재 안건을 미리 올려 둠
-- `intradayWatch` 6925
+**6937** · ---- 1. 돌파 대기 목록: 저가권 200일 스퀴즈 상태인데 아직 상단 아래 — 상단까지 가까운 순, 가까워지면 알림
+- `waitList` 6940
+- `waitCodes` 6956
+- `renderWait` 6957
+- `waitAlerts` 6970
 
-**6956** · ---- 3. 폰 알림(텔레그램): 결재 안건 · 장중 돌파 · 매도/손절 조건 같은 중요한 알림을 폰으로
-- `phone` 6959
-- `savePhone` 6960
-- `phoneNotify` 6962
-- `renderPhone` 6970
+**6976** · ---- 2. 장중 돌파 감시: 장중(매매 시간대 전)에 대기 종목이 상단을 뚫으면 바로 알리고, 결재 안건을 미리 올려 둠
+- `intradayWatch` 6979
 
-**7002** · ---- 텔레그램 명령: 폰에서 보낸 말을 중계기가 받아 여기로 전달 → 조회 · 비서 대화 · 모의 결재(리스크 브리핑 읽기 + PIN + 이유) → 답을 폰으로
-- `pinHash` 7006
-- `tgReply` 7011
-- `agShort` 7015
-- `agByShort` 7016
-- `tgHandle` 7019
-- `tgStart` 7090
-- `savePin` 7098
-- `chatSend` 7103
-- `convoNext` 7129
-- `convoToggle` 7135
-- `voiceSel` 7151
-- `stopSpeaking` 7153
-- `speechChunks` 7160
-- `pcmToWavBlob` 7167
-- `audioBlob` 7175
-- `speakText` 7180
-- `browserSpeak` 7214
-- `micToggle` 7228
-- `silenceMs` 7237
-- `endWait` 7242
-- `startSR` 7250
-- `startRecorder` 7301
+**7010** · ---- 3. 폰 알림(텔레그램): 결재 안건 · 장중 돌파 · 매도/손절 조건 같은 중요한 알림을 폰으로
+- `phone` 7013
+- `savePhone` 7014
+- `phoneNotify` 7016
+- `renderPhone` 7024
 
-**7373** · 22. 매매 스타일 학습 — 작은 신경망(입력 9 → 은닉 12 → 출력 1)으로 '진입 조건 → 수익 여부'를 학습
-- `featVec` 7381
-- `mlpForward` 7386
-- `aucOf` 7391
-- `trainStyle` 7399
-- `retrainStyle` 7450
-- `predictWin` 7463
-- `predictBin` 7470
-- `styleProfile` 7477
-- `renderStyle` 7486
+**7056** · ---- 텔레그램 명령: 폰에서 보낸 말을 중계기가 받아 여기로 전달 → 조회 · 비서 대화 · 모의 결재(리스크 브리핑 읽기 + PIN + 이유) → 답을 폰으로
+- `pinHash` 7060
+- `tgReply` 7065
+- `agShort` 7069
+- `agByShort` 7070
+- `tgHandle` 7073
+- `tgStart` 7144
+- `savePin` 7152
+- `chatSend` 7157
+- `convoNext` 7183
+- `convoToggle` 7189
+- `voiceSel` 7205
+- `stopSpeaking` 7207
+- `speechChunks` 7214
+- `pcmToWavBlob` 7221
+- `audioBlob` 7229
+- `speakText` 7234
+- `browserSpeak` 7268
+- `micToggle` 7282
+- `silenceMs` 7291
+- `endWait` 7296
+- `startSR` 7304
+- `startRecorder` 7355
+
+**7427** · 22. 매매 스타일 학습 — 작은 신경망(입력 9 → 은닉 12 → 출력 1)으로 '진입 조건 → 수익 여부'를 학습
+- `featVec` 7435
+- `mlpForward` 7440
+- `aucOf` 7445
+- `trainStyle` 7453
+- `retrainStyle` 7504
+- `predictWin` 7517
+- `predictBin` 7524
+- `styleProfile` 7531
+- `renderStyle` 7540
 
 ### 설정 키 (`DEFAULTS` — `SETTING_DEFS`에 화면 항목)
 
@@ -843,7 +848,7 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 ### 보조지표 (`IND_LIB`)
 
-`mesh` 그물망(위), `ema` 지수이평(위), `bb` 볼린저(위), `env` 엔벨로프(위), `ichi` 일목균형표(위), `sar` 파라볼릭(위), `rsi` RSI(아래), `macd` MACD(아래), `stoch` 스토캐스틱(아래), `cci` CCI(아래), `willr` 윌리엄스 %R(아래), `mfi` MFI(아래), `adx` DMI·ADX(아래), `atr` ATR(아래), `obv` OBV(아래), `cmf` CMF(아래), `disp` 이격도(아래), `vr` 거래량 비율(아래)
+`mesh` 그물망(위), `vp` 매물대(위), `ema` 지수이평(위), `bb` 볼린저(위), `env` 엔벨로프(위), `ichi` 일목균형표(위), `sar` 파라볼릭(위), `rsi` RSI(아래), `macd` MACD(아래), `stoch` 스토캐스틱(아래), `cci` CCI(아래), `willr` 윌리엄스 %R(아래), `mfi` MFI(아래), `adx` DMI·ADX(아래), `atr` ATR(아래), `obv` OBV(아래), `cmf` CMF(아래), `disp` 이격도(아래), `vr` 거래량 비율(아래)
 
 ## nh_bridge_core.py
 
