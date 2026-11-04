@@ -91,4 +91,13 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 - **단축키**(`?`로 안내): `/` 검색 · `1~4` 탭 · `[ ]` 패널 · `S` 관심 · `D W M` 주기 · `+ −` 확대 · `End` 최신 · `R` 리서치 센터.
 - **엑셀로 저장**(CSV): 백테스트 거래 목록, 매매 일지.
 - 알림 글(`toast`)이 겹치지 않게 쌓임(최대 4개, 같은 글은 하나로, 눌러서 닫기).
-- `docs/CODE_MAP.md`는 아직 다시 만들지 않음 — 파이썬이 있는 컴퓨터에서 `python tools/make_handoff.py`.
+- `docs/CODE_MAP.md`는 다시 만들었음 (`python tools/make_handoff.py`).
+
+### 2026-11-04 전략 2판 (Claude Code, 사용자 요청 "전부 바꾸고 성공률을 높여 줘")
+- **위 6장 첫 줄의 전략 기본값은 2판으로 바뀜**: 한 번에 100% 매수 · 매집 경로 켬 · 시장 체력(200일선 위 종목 비율) 40% 이상 `brOn`·`brMin` · 시가총액 2천억 이상 `sigCap` · 매집 확인(OBV 120일 신고가) `obvNeed` · 매도 20일선 · 평단 +10% 절반 익절 뒤 본전 손절 `tpPct` · 전체 시장(`universe 'ALL'`, `mktBars` 760). 검증 수치는 `docs/STRATEGY.md` 맨 위.
+- 예전 판으로 저장된 설정은 화면을 열 때 한 번 옮기고 알림(`applySynced`의 `stratV` < 2). 사용자가 설정 탭에서 다시 바꿀 수 있음.
+- 새 함수: `breadthAt`(시장 체력, 받아 둔 일봉으로 계산·캐시), `tpTarget`·`seqSellHalf`·`paperSellHalf`(절반 익절), `stratText`(AI에 넘기는 전략 한 줄). `structWhy`에 시장 체력·시총·OBV 확인. 손절선 `stopPrice`는 익절 뒤 본전(`seq.beStop`).
+- 절반 익절은 백테스트·완전 자동은 장중 고가로, 매매 시간대(결재제)에서는 현재가가 목표 위일 때 '절반 익절' 결재 안건(`agenda.half`)으로 처리. 실제 계좌에서는 지정가를 미리 거는 것이 검증과 같음 — 점검표·운용 현황에 안내.
+- 돌파 직전 선취매는 검증에서 나빠(PF 0.87) 넣지 않음. 전체 시장 첫 일봉 받기는 오래 걸릴 수 있음(매매 시간대 밖에서만 받음).
+- 맥: `맥에서_실행.command`가 이미 켜진 화면 서버를 다시 쓰고 `--demo`·`--trade`를 넘기며 `caffeinate`로 잠들지 않게 함. 여행용 안내는 `맥북_사용_안내.md`.
+- 중계기 AI 설명(`ASK_PURPOSE.stock`, `CHAT_ACTIONS`)에 새 설정 키 추가 — 중계기를 다시 켜야 반영.

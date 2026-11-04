@@ -370,17 +370,19 @@
     const DEFAULTS = {
       capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true, approval: true,
       invOn: false, invEntry: -30, invExit: -10, invLev: 'AUTO', invLevScore: -60, invPct: 30, invMaxDays: 15, invExitMa: 10, inv1: '114800', inv2: '252670',
-      entryMode: 'SQ', sqPct: 15, sqDrop: 30, sqRange: 60, sqZone: 50, sqFollow: false, sqFollowDays: 20, waitPct: 10, waitAlertPct: 2, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false, accOn: false, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1, midSettleDays: 5, smallPH: true, smallCap: 5000, phOn: true, phCap: 5000, phDays: 120,
+      entryMode: 'SQ', sqPct: 15, sqDrop: 30, sqRange: 60, sqZone: 50, sqFollow: false, sqFollowDays: 20, waitPct: 10, waitAlertPct: 2, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false, accOn: true, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1, midSettleDays: 5, smallPH: true, smallCap: 5000, phOn: true, phCap: 5000, phDays: 120,
+      brOn: true, brMin: 40, sigCap: 2000, obvNeed: true,   // 2026-11-04 검증: 시장 체력 · 시가총액 · 매집(OBV) 확인
       bbPeriod: 200, bbStd: 2.0,
-      exitMa: 10, pullbackPct: 1.5, stopMode: 'BREAK',
-      w1: 50, w2: 50, w3: 0,
-      scrMarket: 'ALL', scrMinValue: 10, scrMinPrice: 1000, mktBars: 300, nearPct: 15,
+      exitMa: 20, pullbackPct: 1.5, stopMode: 'BREAK', tpPct: 10,
+      w1: 100, w2: 0, w3: 0,
+      scrMarket: 'ALL', scrMinValue: 10, scrMinPrice: 1000, mktBars: 760, nearPct: 15,
       winStart: '15:00', winEnd: '15:20',
       volFilter: false, volMult: 1.5, adxFilter: false, adxMin: 20,
       rank: 'VALUE',
       buyFee: 0.01, sellFee: 0.01, taxPct: 0.20, slipPct: 0.05,
       barCount: 1000, minCount: 800, liveSec: 10, listMin: 5, rtMax: 30,
-      decisionTime: '15:20', pollMin: 5, holidays: ''
+      decisionTime: '15:20', pollMin: 5, holidays: '',
+      stratV: 2   // 전략 판 번호 (화면 설정 아님) — 예전 판으로 저장된 설정을 한 번 새 전략으로 옮김
     };
     const SETTING_DEFS = [
       { group: '자금 관리', items: [
@@ -402,6 +404,10 @@
         { k: 'rank', label: '신호가 많을 때 우선순위', type: 'select', opts: [['VALUE', '거래대금 큰 순'], ['STRENGTH', '상단선 돌파 강도 순']] }] },
       { group: '진입 방식 — 200일 스퀴즈 · 장대양봉', items: [
         { k: 'entryMode', label: '어떤 돌파를 살까', type: 'select', opts: [['SQ', '저가권 200일 스퀴즈 돌파만 (기본)'], ['ALL', '모든 상단 돌파 (예전 방식)']] },
+        { k: 'brOn', label: '시장 체력 확인: 200일선 위에 있는 종목이 적은 날(시장이 약한 날)의 돌파는 사지 않음', type: 'bool' },
+        { k: 'brMin', label: '└ 200일선 위 종목 비율 % 이상일 때만', min: 0, max: 90, step: 5 },
+        { k: 'sigCap', label: '시가총액 몇 억 원 이상만 매수 (0이면 안 봄)', min: 0, max: 100000, step: 500 },
+        { k: 'obvNeed', label: '매집 확인: 돌파한 날 OBV(누적 거래량)가 120일 신고가일 때만 매수', type: 'bool' },
         { k: 'sqPct', label: '스퀴즈: 밴드 폭이 최근 3년 중 하위 %', min: 1, max: 50, step: 1 },
         { k: 'sqDrop', label: '스퀴즈: 1년 저점이 2년 고점보다 % 이상 낮음 (하락 흔적)', min: 0, max: 90, step: 5 },
         { k: 'sqRange', label: '스퀴즈: 120일 고점·저점 차이 % 이하 (횡보)', min: 10, max: 300, step: 5 },
@@ -439,7 +445,8 @@
         { k: 'inv2', label: '2배 상품', type: 'select', opts: [['252670', 'KODEX 200선물인버스2X'], ['252710', 'TIGER 200선물인버스2X'], ['253230', 'KIWOOM 200선물인버스2X']] }] },
       { group: '운용 — 매도선 · 손절', items: [
         { k: 'exitMa', label: '종가가 N일 이동평균선 아래면 매도 (N)', min: 2, max: 60, step: 1 },
-        { k: 'stopMode', label: '손절 — 돌파가 실패하면', type: 'select', opts: [['BREAK', '종가가 돌파한 날 저가 아래 (기본)'], ['BOX', '종가가 횡보 박스(60일) 저가 아래'], ['NONE', '손절 없음']] }] },
+        { k: 'stopMode', label: '손절 — 돌파가 실패하면', type: 'select', opts: [['BREAK', '종가가 돌파한 날 저가 아래 (기본)'], ['BOX', '종가가 횡보 박스(60일) 저가 아래'], ['NONE', '손절 없음']] },
+        { k: 'tpPct', label: '절반 익절: 평단보다 % 오르면 절반 팔고 손절선을 본전으로 (0이면 안 함)', min: 0, max: 50, step: 1 }] },
       { group: '검색식 — 전체 시장 종목군', items: [
         { k: 'scrMarket', label: '시장', type: 'select', opts: [['ALL', '코스피 + 코스닥'], ['KOSPI', '코스피만'], ['KOSDAQ', '코스닥만']] },
         { k: 'scrMinValue', label: '20일 평균 거래대금 ≥ (억원)', min: 0, max: 10000, step: 1 },
@@ -504,8 +511,15 @@
     };
 
     // 컴퓨터끼리 동기화되는 부분 (설정 · 관심종목 · 종목군 · 모의 계좌 · 종목명)
+    let stratMoved = false;
     function applySynced(d) {
       if (d.cfg && d.cfg.exitMa === undefined) { d.cfg = { ...d.cfg, w1: 50, w2: 50, w3: 0 }; }
+      // 2026-11-04 전략 2판: 한 번에 사기 · 매집 경로 · 시장 체력/시가총액/OBV 확인 · 20일선 매도 + 절반 익절 · 전체 시장 (사용자 요청으로 기존 설정을 한 번 옮김)
+      if (d.cfg && !(d.cfg.stratV >= 2)) {
+        d.cfg = { ...d.cfg, w1: 100, w2: 0, w3: 0, accOn: true, exitMa: 20, tpPct: 10, brOn: true, brMin: 40, sigCap: 2000, obvNeed: true, mktBars: Math.max(Number(d.cfg.mktBars) || 0, 760), stratV: 2 };
+        d.universe = 'ALL';
+        if (!stratMoved) { stratMoved = true; setTimeout(() => { saveStore(); toast('새 전략(2판)으로 바꿨어요 — 시장 체력·시가총액·매집 확인 · 한 번에 매수 · 20일선 매도 + 10% 절반 익절 · 전체 시장. 설정 탭에서 바꿀 수 있어요'); }, 2000); }
+      }
       if (d.cfg) Object.keys(DEFAULTS).forEach((k) => { if (typeof d.cfg[k] === typeof DEFAULTS[k]) state.cfg[k] = d.cfg[k]; });
       if (Array.isArray(d.watch)) state.watch = d.watch.filter((c) => /^[0-9A-Z]{6}$/.test(c));
       if (d.universe) state.universe = d.universe;
@@ -863,6 +877,34 @@
       return null;
     }
     const capOf = (code, px) => (code && caps.shares[code] ? caps.shares[code] * px : null);   // 원
+    // 시장 체력: 그날 종가가 200일선(BB 중심선) 위인 종목 비율 — 받아 둔 일봉 전체(지수 구성종목·전체 시장)로 계산, 종목 50개 이상인 날만
+    //  오늘 봉이 아직 적은 날(장중)은 가장 최근에 계산된 날 값을 씀
+    let brCache = { key: '', map: new Map(), last: null, at: 0 };
+    function breadthAt(t) {
+      let key = brCache.key;
+      if (Date.now() - brCache.at > 3000) {   // 시세가 바뀌었나는 3초에 한 번만 확인 (백테스트 중 반복 호출이 많음)
+        let n = 0, sum = 0;
+        for (const k in state.data) { const b = state.data[k].bars; if (b && b.length) { n += b.length; sum += b[b.length - 1].c; } }
+        key = `${n}|${sum}|${state.cfg.bbPeriod}|${state.cfg.bbStd}`;
+        brCache.at = Date.now();
+      }
+      if (brCache.key !== key) {
+        const skip = new Set([...Object.values(UNIVERSE_ETF), ...state.invList.map((x) => x.code)]);
+        const cnt = new Map();
+        for (const k in state.data) {
+          if (skip.has(k)) continue;
+          const b = state.data[k].bars;
+          if (!b) continue;
+          for (const x of b) { if (!x.ready) continue; const r = cnt.get(x.t) || [0, 0]; if (x.c > x.mid) r[0]++; r[1]++; cnt.set(x.t, r); }
+        }
+        const map = new Map();
+        let last = null;
+        cnt.forEach((r, d) => { if (r[1] >= 50) { map.set(d, r[0] / r[1]); if (last == null || d > last) last = d; } });
+        brCache = { key, map, last, at: brCache.at };
+      }
+      if (brCache.map.has(t)) return brCache.map.get(t);
+      return brCache.last != null && t > brCache.last ? brCache.map.get(brCache.last) : null;
+    }
     // BB 상단 종가 돌파 (전날은 상단 아래, 양봉) + 거래량·ADX 확인
     function bbCross(bars, i) {
       const c = state.cfg, b = bars[i], p = bars[i - 1];
@@ -875,8 +917,13 @@
     // 돌파 모양 확인 (2026-11 검증): 사지 않을 이유가 있으면 그 이유, 없으면 ''
     //  ① 중심선 안착: 돌파 전 midSettleDays일 안에 종가가 BB 중심선 아래였으면 — 중심선 밑에서 짧게 상단까지 뚫은 돌파는 실패가 많음
     //  ② 소형주 전고점: 시가총액 smallCap억 미만이면 직전 120일 안에 상단을 찔렀다가 음봉으로 밀린 봉(전고점)이 있어야 — 첫 시도 돌파는 실패가 많음
+    //  ③ 시장 체력 (brOn): 그날 200일선 위 종목 비율이 brMin% 미만이면 — 약한 시장의 돌파는 본전 근처 (research/v2_*.py)
+    //  ④ 시가총액 sigCap억 미만이면  ⑤ 매집 확인 (obvNeed): 그날 OBV가 120일 신고가가 아니면
     function structWhy(bars, i) {
       const c = state.cfg, b = bars[i];
+      if (c.brOn && c.brMin > 0) { const br = breadthAt(b.t); if (br != null && br * 100 < c.brMin) return `시장 체력 약함 (200일선 위 종목 ${Math.round(br * 100)}% < ${c.brMin}%)`; }
+      if (c.sigCap > 0) { const cap = capOf(codeOfBars(bars), b.c); if (cap != null && cap < c.sigCap * 1e8) return `시가총액 ${Math.round(cap / 1e8).toLocaleString()}억 < ${c.sigCap.toLocaleString()}억`; }
+      if (c.obvNeed && b.obv != null && i >= 120) { for (let k = i - 119; k < i; k++) if (bars[k].obv > b.obv) return '매집 확인 안 됨 (OBV가 120일 신고가 아님)'; }
       for (let k = 1; k <= c.midSettleDays && i - k >= 0; k++) { const x = bars[i - k]; if (x.ready && x.c < x.mid) return `중심선 아래에서 빠르게 올라옴 (${k}일 전 종가가 중심선 아래)`; }
       if (c.smallPH) {
         const cap = capOf(codeOfBars(bars), b.c);
@@ -1059,10 +1106,15 @@
     // =========================================================================
     // 5. 전략 엔진 — 백테스트와 모의투자가 같은 함수를 씀
     //    진입: BB 상단 돌파 (기본 1차 100% — 2·3차 비중을 주면 눌림 반등·전고점 돌파 때 추가 매수)
-    //    청산: 손절·목표가 없음. 매수 다음 날부터 종가가 N일선(기본 5일) 아래면 매도
+    //    청산: 돌파봉 저가 손절 · 평단 +tpPct% 절반 익절 뒤 본전 손절 · 매수 다음 날부터 종가가 N일선(기본 20일) 아래면 매도
     // =========================================================================
     // 종목당 비중: 복리 배분이면 100 ÷ 최대 보유. 금액은 매수할 때마다 그 시점 평가자산(현금+보유 평가)에 곱함 → 불어나면 다음 매수도 커짐
     const slotPctNow = () => (state.cfg.slotAuto ? 100 / Math.max(1, state.cfg.maxPos) : state.cfg.slotPct);
+    // AI에게 넘기는 지금 전략 한 줄
+    function stratText() {
+      const c = state.cfg;
+      return `BB${c.bbPeriod} 상단 종가 돌파 매수(${c.winStart}~${c.winEnd}) — 200일 스퀴즈·전고점·매집 경로, 시장 체력 ${c.brOn ? `200일선 위 종목 ${c.brMin}% 이상` : '안 봄'}, 시가총액 ${c.sigCap ? `${c.sigCap}억 이상` : '안 봄'}, 매집(OBV 120일 신고가) 확인 ${c.obvNeed ? '켬' : '끔'} · 한 번에 ${c.w1}% · 손절 ${STOP_NAMES[c.stopMode]}${c.tpPct > 0 ? ` · 평단 +${c.tpPct}% 절반 익절 뒤 본전 손절` : ''} · 종가 ${c.exitMa}일선 이탈 매도`;
+    }
     function costBuy() { return (state.cfg.buyFee + state.cfg.slipPct) / 100; }
     function costSell() { return (state.cfg.sellFee + state.cfg.taxPct + state.cfg.slipPct) / 100; }
 
@@ -1090,6 +1142,19 @@
       seq.qty += qty;
       seq.invested += cash;
       seq.entries.push({ t, price, qty, stage: seq.stage, rule });
+      return cash;
+    }
+    // 절반 익절: 평단 × (1 + tpPct%) 에 닿으면 절반 팔고 손절선을 본전(평단)으로 — 한 번만
+    function tpTarget(seq) { const c = state.cfg; return c.tpPct > 0 && !seq.tpDone && seq.qty >= 2 && seq.avg > 0 ? seq.avg * (1 + c.tpPct / 100) : null; }
+    function seqSellHalf(seq, price, reason, t) {
+      const qty = Math.floor(seq.qty / 2);
+      if (qty < 1) return 0;
+      const cash = qty * price * (1 - costSell());
+      seq.proceeds += cash;
+      seq.exits.push({ t, price, qty, reason, half: true });
+      seq.qty -= qty;
+      seq.tpDone = true;
+      seq.beStop = seq.avg;
       return cash;
     }
     function seqSellAll(seq, price, reason, t) {
@@ -1130,6 +1195,11 @@
         seq.extreme = b.h;
       }
       if (entered || seq.qty === 0 || opt.skipExit) return { exited: false, cash };
+      const tp = tpTarget(seq);
+      if (tp && i > seq.startIdx && b.h >= tp) {   // 장중 고가가 목표에 닿음 → 목표가(시가가 더 높으면 시가)에 절반
+        const px = Math.max(tp, b.o);
+        cash += seqSellHalf(seq, px, `절반 익절 — ${won(Math.round(px))} (평단 +${state.cfg.tpPct}%) · 손절선을 본전으로`, b.t);
+      }
       const ex = exitOrStop(seq, bars, i);
       if (i > seq.startIdx && ex.hit) {
         cash += seqSellAll(seq, b.c, `종가 ${won(b.c)} — ${ex.note}`, b.t);
@@ -1574,7 +1644,7 @@
         const marks = [];
         [...state.bt.trades, ...state.bt.open].filter((tr) => tr.code === state.selected).forEach((tr) => {
           tr.entries.forEach((e) => marks.push({ t: e.t, p: e.price, kind: 'buy', label: `${e.stage}차` }));
-          tr.exits.forEach((e) => marks.push({ t: e.t, p: e.price, kind: 'sell', label: tr.pnl >= 0 ? `+${tr.ret.toFixed(1)}%` : `${tr.ret.toFixed(1)}%`, up: tr.pnl >= 0 }));
+          tr.exits.forEach((e) => marks.push({ t: e.t, p: e.price, kind: 'sell', label: e.half ? '½ 익절' : tr.pnl >= 0 ? `+${tr.ret.toFixed(1)}%` : `${tr.ret.toFixed(1)}%`, up: e.half || tr.pnl >= 0 }));
         });
         state.bt.skipped.filter((s) => s.code === state.selected).forEach((s) => marks.push({ t: s.t, p: s.price, kind: 'skip' }));
         const pos = new Map(bars.map((b, i) => [b.t, i]));
@@ -2105,6 +2175,17 @@
       if (label) st.textContent = '';
     }
 
+    function paperSellHalf(code, price, reason) {
+      const p = paper(), seq = p.positions[code];
+      if (!seq || seq.tpDone) return false;
+      const qty = Math.floor(seq.qty / 2);
+      if (qty < 1) return false;
+      p.cash += seqSellHalf(seq, price, reason, kstNow().ymd);
+      plog('절반 익절', code, `${qty}주 @ ${won(price)} · ${reason}`, Math.round((price * (1 - costSell()) - seq.avg * (1 + costBuy())) * qty));
+      assistOnTrade(code, 'SELL', qty, price, reason);
+      toast(`[모의] ${nameOf(code)} 절반 익절 ${qty}주 @ ${won(price)} — 남은 물량 손절선은 본전`);
+      return true;
+    }
     function paperExit(code, price, reason) {
       const p = paper(), seq = p.positions[code];
       if (!seq) return;
@@ -2166,11 +2247,12 @@
         const i = idxOf(code);
         const seq = p.positions[code];
         if (seq.lastStepT === d.bars[i].t) continue;
-        const before = seq.entries.length;
+        const before = seq.entries.length, xb = seq.exits.length;
         const r = stepSeq(seq, d.bars, i, { maxCash: Math.max(0, p.cash - reservedCash()) });
         if (r.cash !== 0 || r.exited || !manual) seq.lastStepT = d.bars[i].t;
         p.cash += r.cash;
         if (seq.entries.length > before) { const e = seq.entries[seq.entries.length - 1]; plog('추가 매수', code, `${e.stage}차 ${e.qty}주 @ ${won(e.price)} · ${e.rule}`); }
+        seq.exits.slice(xb).filter((e) => e.half).forEach((e) => plog('절반 익절', code, `${e.qty}주 @ ${won(e.price)} · ${e.reason}`));
         if (r.exited) {
           const res = seqResult(seq);
           p.closed.unshift({ ...res, name: nameOf(code), closedAt: Date.now(), ctx: seq.ctx || null, hold: calDays(seq.startT) });
@@ -3787,7 +3869,13 @@
         const i = liveBar(code);
         if (i == null) return;
         const ex = exitOrStop(seq, state.data[code].bars, i);
-        if (ex.hit && !win.watch[code]) { win.watch[code] = { side: 'SELL', since: Date.now(), n: 0, sum: 0, lastAt: 0, done: false, note: ex.note }; if (agendaOn()) agendaCreate(code, 'SELL', { note: ex.note, price: lastPrice(code), src: 'window' }); }
+        if (ex.hit && !win.watch[code]) { win.watch[code] = { side: 'SELL', since: Date.now(), n: 0, sum: 0, lastAt: 0, done: false, note: ex.note }; if (agendaOn()) agendaCreate(code, 'SELL', { note: ex.note, price: lastPrice(code), src: 'window' }); return; }
+        const tp = tpTarget(seq), px = lastPrice(code);
+        if (tp && px >= tp && !win.watch[code]) {
+          const note = `절반 익절 — 평단 +${c.tpPct}% (${won(Math.round(tp))}) 도달`;
+          win.watch[code] = { side: 'SELL', tp: true, since: Date.now(), n: 0, sum: 0, lastAt: 0, done: false, note };
+          if (agendaOn()) agendaCreate(code, 'SELL', { note, price: px, src: 'window', half: true });
+        }
       });
       win.near.forEach((code) => {
         if (p.positions[code] || win.watch[code]) return;
@@ -3826,6 +3914,18 @@
         if (w.side === 'SELL') {
           const seq = p.positions[code];
           if (!seq) { w.done = true; continue; }
+          if (w.tp) {   // 절반 익절: 목표가 위면 바로 (기다리면 놓치기 쉬움)
+            const tp = tpTarget(seq);
+            if (!tp) { w.done = true; continue; }
+            if (price < tp) { w.note = `절반 익절 대기 — 목표 ${won(Math.round(tp))} 아래로 내려옴`; continue; }
+            let ag = null;
+            if (agendaOn()) { const g = agendaGate(code, 'SELL', w.note, price); if (g.st !== 'go') { w.note = `${g.msg} · 절반 익절`; if (g.stop) w.done = true; continue; } ag = g.a; }
+            if (ag) jWhy = `결재: ${ag.reason}`;
+            try { paperSellHalf(code, price, `${k.hm} 절반 익절 — 현재가 ${won(price)} (평단 +${c.tpPct}% 넘음)`); } finally { jWhy = ''; }
+            if (ag) agendaDone(ag, price);
+            w.done = true; changed = true;
+            continue;
+          }
           const ex = exitOrStop(seq, bars, i, price);
           if (!ex.hit) { w.note = '매도 조건 풀림 — 매도 보류'; continue; }
           w.note = `${ex.note} · 관찰 평균 ${won(Math.round(avgPx))}`;
@@ -4458,7 +4558,7 @@
         const j = journal(true);
         assist.journalAi = 'AI가 매매 기록을 정리하는 중…'; renderAssist();
         const pack = (a) => a && { 전체: a.overall, 나쁜조건: a.bad, 좋은조건: a.good, 조건별: a.groups };
-        try { assist.journalAi = await askAi('journal', { 내매매: pack(j.mine), 전략과거: pack(j.strat), 전략규칙: `BB${state.cfg.bbPeriod} 상단 돌파 진입, 종가 ${state.cfg.exitMa}일선 이탈 매도, 손절 없음` }); }
+        try { assist.journalAi = await askAi('journal', { 내매매: pack(j.mine), 전략과거: pack(j.strat), 전략규칙: stratText() }); }
         catch (err) { assist.journalAi = err.message; }
         renderAssist();
       }
@@ -4476,7 +4576,7 @@
           계좌: { 현금: Math.round(paper().cash), 전략보유: Object.entries(paper().positions).map(([c, q]) => ({ 종목: nameOf(c), 수량: q.qty, 평단: Math.round(q.avg), 현재가: lastPrice(c) })), 수동보유: Object.entries(paper().manual).map(([c, m]) => ({ 종목: nameOf(c), 수량: m.qty, 평단: Math.round(m.avg), 현재가: lastPrice(c) })) },
           내매매분석: j.mine && { 전체: j.mine.overall, 나쁜조건: j.mine.bad },
           전략과거분석: j.strat && { 전체: j.strat.overall, 나쁜조건: j.strat.bad, 좋은조건: j.strat.good },
-          전략규칙: `BB${state.cfg.bbPeriod} 상단 돌파 진입(${state.cfg.winStart}~${state.cfg.winEnd}), 종가 ${state.cfg.exitMa}일선 이탈 매도, 손절 없음`,
+          전략규칙: stratText(),
         }, q);
       } catch (err) { assist.answer = err.message; }
       renderAssist();
@@ -4527,7 +4627,7 @@
           선택종목_예측승률: state.selected && sm.auc >= 0.55 ? predictWin(entryCtx(state.selected, lastPrice(state.selected))) : null, 설명: '선택종목_예측승률은 모델 점수가 같은 구간에 든 검증 거래의 실제 승률' } : null,
         내스타일: styleProfile(),
         최근비서기록: assist.feed.slice(0, 5).map((x) => x.title),
-        전략규칙: `BB${state.cfg.bbPeriod} 상단 돌파 진입(${state.cfg.winStart}~${state.cfg.winEnd}), 종가 ${state.cfg.exitMa}일선 이탈 매도, 손절 없음`,
+        전략규칙: stratText(),
       };
     }
     function renderChat() {
@@ -4960,7 +5060,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (what === 'list') return { watch: state.watch.map((c) => ({ code: c, name: nameOf(c), price: lastPrice(c) })), loaded: Object.keys(state.data).map((c) => ({ code: c, name: nameOf(c), price: lastPrice(c) })) };
       if (what === 'stock') return jsonSafe(code ? stockFacts(code) : null);
       if (what === 'research') return jsonSafe(research.res ? { 국면: REGIME[research.res.regime].t, 점수: research.res.score } : null);
-      if (what === 'trades') return jsonSafe({ backtest: (state.bt ? state.bt.trades : []).slice(-300).map((t) => ({ code: t.code, ret: t.ret, pnl: t.pnl, in: t.entries[0] && t.entries[0].t, out: t.exits[0] && t.exits[0].t })) });
+      if (what === 'trades') return jsonSafe({ backtest: (state.bt ? state.bt.trades : []).slice(-300).map((t) => ({ code: t.code, ret: t.ret, pnl: t.pnl, in: t.entries[0] && t.entries[0].t, out: t.endT })) });
       return { selected: state.selected, name: state.selected ? nameOf(state.selected) : null, tf: state.tf, price: state.selected ? lastPrice(state.selected) : null, screen: jsonSafe(screenFacts()) };
     }
     window.addEventListener('message', async (e) => {
@@ -5395,7 +5495,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.37', APP_DATE = '2026-11-04';
+    const APP_VERSION = '1.38', APP_DATE = '2026-11-04';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5477,12 +5577,13 @@ onmessage = (e) => { const { body, sets } = e.data;
     // 손절선: 돌파가 실패하면(종가가 돌파한 날 저가 · 횡보 박스 저가 아래) 정리 — 산 뒤의 대응
     const STOP_NAMES = { NONE: '없음', BREAK: '돌파봉 저가', BOX: '횡보 박스 저가(60일)' };
     function stopPrice(seq) {
-      const m = state.cfg.stopMode, s = m === 'BREAK' ? seq.stopLow : m === 'BOX' ? seq.boxLow : null;
+      const m = state.cfg.stopMode, s0 = m === 'BREAK' ? seq.stopLow : m === 'BOX' ? seq.boxLow : null;
+      const s = Math.max(s0 > 0 ? s0 : 0, seq.beStop > 0 ? seq.beStop : 0);   // 절반 익절 뒤에는 본전
       return s > 0 ? s : null;
     }
     function exitOrStop(seq, bars, i, price) {
       const px = price ?? bars[i].c, sp = stopPrice(seq);
-      if (sp && px < sp) return { hit: true, stop: true, note: `손절 — ${won(Math.round(px))} < 손절선 ${won(Math.round(sp))} (${STOP_NAMES[state.cfg.stopMode]})` };
+      if (sp && px < sp) return { hit: true, stop: true, note: `손절 — ${won(Math.round(px))} < 손절선 ${won(Math.round(sp))} (${seq.beStop > 0 && sp === seq.beStop ? '익절 뒤 본전' : STOP_NAMES[state.cfg.stopMode]})` };
       return exitSignal(bars, i, price);
     }
     function exitSignal(bars, i, price) {
@@ -6531,6 +6632,16 @@ onmessage = (e) => { const { body, sets } = e.data;
         if (b && baseBreakout(b, i) && !isSqueeze(b, i) && phInfo(b, i)) add('mid', `전고점 돌파 — 스퀴즈가 아닌 돌파 (시가총액 큰 종목, 전고점 ${won(Math.round(phInfo(b, i).ph))}원을 넘음). 이미 많이 오른 자리일 수 있으니 3년 범위의 위치를 확인`);
         if (b && baseBreakout(b, i) && isSqueeze(b, i)) add(b[i].sqA ? 'mid' : 'info', b[i].sqA ? '매집 돌파 — 하락 흔적·저가권은 안 본 신호 (밴드 수축 + 거래량 누적만). 지금 가격이 3년 범위의 어디쯤인지 확인' : '200일 스퀴즈 돌파 — 장기 추세 시작 신호일 수 있지만 절대적이지 않음');
         if (c.w2 || c.w3) add('info', `승인하면 계획에 따라 눌림 반등 때 2차 ${c.w2}%${c.w3 ? `, 전고점 돌파 때 3차 ${c.w3}%` : ''}를 자동으로 더 삼`);
+        if (b) {   // 2판 확인 항목 — 숫자로 보여 줌
+          const br = breadthAt(b[i].t), cap = capOf(a.code, px);
+          let obvHi = i >= 120 && b[i].obv != null;
+          if (obvHi) for (let k = i - 119; k < i; k++) if (b[k].obv > b[i].obv) { obvHi = false; break; }
+          add(br != null && br * 100 < c.brMin ? 'high' : 'info', `시장 체력: 200일선 위 종목 ${br == null ? '계산 전' : `${Math.round(br * 100)}%`} (기준 ${c.brMin}% 이상 — 40% 밑에서는 과거 돌파가 본전 근처였음)`);
+          add(cap != null && cap < c.sigCap * 1e8 ? 'mid' : 'info', `시가총액 ${cap == null ? '모름' : `${Math.round(cap / 1e8).toLocaleString()}억`} · 매집(OBV 120일 신고가) ${obvHi ? '확인됨' : '아님'}`);
+          const sp = b[i].l;
+          add('info', `손절선(오늘 저가) ${won(Math.round(sp))}원 — 지금가 대비 ${((sp / px - 1) * 100).toFixed(1)}%${c.tpPct > 0 ? ` · 산 뒤 할 일: 평단 +${c.tpPct}%(${won(Math.round(px * (1 + c.tpPct / 100)))}원)에 절반 지정가 매도를 걸어 두면 검증과 같은 방식` : ''}`);
+          add('info', '과거 검증(2017~2026, 같은 조건 1,270건): 승률 약 48% · 거래당 평균 +2.0% — 손절이 절반쯤, 큰 수익은 몇 번에서 나옴');
+        }
         const bt = state.bt && state.bt.stats;
         if (bt) add('info', `지금 전략 백테스트: 승률 ${bt.win.toFixed(0)}% · 거래당 평균 ${pctTxt(bt.avgRet)} · 최대낙폭 -${bt.mdd.toFixed(1)}% — 대부분의 거래는 작은 손실로 끝남`);
       } else {
@@ -6538,8 +6649,13 @@ onmessage = (e) => { const { body, sets } = e.data;
         if (seq) {
           const g = (px / seq.avg - 1) * 100;
           add('info', `보유 ${seq.qty.toLocaleString()}주 · 평단 ${won(Math.round(seq.avg))}원 · 지금 ${pctTxt(g)} (${won(Math.round((px - seq.avg) * seq.qty))}원)`);
-          if (ma) add('info', `종가 기준 ${c.exitMa}일선 ${won(Math.round(ma))}원 아래 — 전략 매도 조건`);
-          add('mid', `결재하지 않으면 ${c.winEnd} 이후에도 계속 보유합니다 — 하락이 이어지면 손실이 커질 수 있음`);
+          if (a.half) {
+            add('info', `절반 익절 — ${Math.floor(seq.qty / 2).toLocaleString()}주를 팔고, 남은 물량은 손절선을 본전(${won(Math.round(seq.avg))}원)으로 올려 ${c.exitMa}일선까지 따라감`);
+            add('info', '과거 검증: 절반 익절을 넣으면 승률이 약 35% → 48%로 오르고 최대낙폭이 줄었지만, 크게 오르는 종목의 수익은 절반만 가져감');
+          } else {
+            if (ma) add('info', `종가 기준 ${c.exitMa}일선 ${won(Math.round(ma))}원 아래 — 전략 매도 조건`);
+            add('mid', `결재하지 않으면 ${c.winEnd} 이후에도 계속 보유합니다 — 하락이 이어지면 손실이 커질 수 있음`);
+          }
         }
       }
       return out;
@@ -6549,13 +6665,14 @@ onmessage = (e) => { const { body, sets } = e.data;
       if (old) return old;
       const price = info.price || lastPrice(code) || 0;
       const a = { id: Math.random().toString(36).slice(2, 9), key: agendaKey(code, side), day: kstNow().ymd, at: Date.now(), code, name: nameOf(code), side,
-        status: 'pending', src: info.src || 'window', kind: info.kind || 'long', signal: String(info.note || '').slice(0, 80), price, qty: info.qty || (side === 'BUY' ? planBuyQty(price) : 0), read: false };
+        status: 'pending', src: info.src || 'window', kind: info.kind || 'long', half: !!info.half, signal: String(info.note || '').slice(0, 80), price, qty: info.qty || (side === 'BUY' ? planBuyQty(price) : 0), read: false };
       a.checks = agendaChecks(a);
       state.agenda.unshift(a);
       if (state.agenda.length > 300) state.agenda.length = 300;
       saveStore(); renderAgenda(true);
       agendaBrief(a);
-      raiseAlert({ lv: 'high', code, text: `결재 안건 [${a.id.slice(0, 4)}] — ${a.name} ${side === 'BUY' ? '매수' : '매도'} (${a.signal}). 리스크 브리핑을 읽고 결재해 주세요.`, say: `${a.name} ${side === 'BUY' ? '매수' : '매도'} 안건이 올라왔어요. 결재해 주세요.` });
+      const sideTxt = side === 'BUY' ? '매수' : a.half ? '절반 익절' : '매도';
+      raiseAlert({ lv: 'high', code, text: `결재 안건 [${a.id.slice(0, 4)}] — ${a.name} ${sideTxt} (${a.signal}). 리스크 브리핑을 읽고 결재해 주세요.`, say: `${a.name} ${sideTxt} 안건이 올라왔어요. 결재해 주세요.` });
       return a;
     }
     async function agendaBrief(a) {
@@ -6620,7 +6737,9 @@ onmessage = (e) => { const { body, sets } = e.data;
           if (typeof r === 'string') { a.status = 'expired'; a.note = r; saveStore(); renderAgenda(true); return `✖ 매수하지 못했어요 — ${r}`; }
         } else {
           if (!paper().positions[a.code]) { a.status = 'expired'; a.note = '보유 없음'; saveStore(); renderAgenda(true); return '✖ 보유 중이 아니에요'; }
-          paperExit(a.code, px, `결재 매도 — ${a.signal}`);
+          if (a.half) {
+            if (!paperSellHalf(a.code, px, `결재 절반 익절 — ${a.signal}`)) { a.status = 'expired'; a.note = '이미 익절함'; saveStore(); renderAgenda(true); return '✖ 이미 절반 익절했어요'; }
+          } else paperExit(a.code, px, `결재 매도 — ${a.signal}`);
         }
       } finally { jWhy = ''; }
       agendaDone(a, px); renderPaper(); renderSymbols(); drawChart();
@@ -7033,7 +7152,9 @@ onmessage = (e) => { const { body, sets } = e.data;
         const d = state.data[code], b = d && d.bars, i = b ? b.length - 1 : -1, px = lastPrice(code) || q.avg;
         const ma = b ? maN(b, i, c.exitMa) : null, sp = stopPrice(q);
         const next = q.stage === 1 && c.w2 > 0 ? `2차 ${c.w2}%: 눌림 뒤 양봉 반등 (BB 중심 위 · 전고점 ${won(Math.round(q.extreme))} 아래)`
-          : q.stage === 2 && c.w3 > 0 ? `3차 ${c.w3}%: 전고점 ${won(Math.round(q.extreme))} 돌파` : '추가 매수 없음 — 매도선·손절선만 지킴';
+          : q.stage === 2 && c.w3 > 0 ? `3차 ${c.w3}%: 전고점 ${won(Math.round(q.extreme))} 돌파`
+          : tpTarget(q) ? `절반 익절: ${won(Math.round(tpTarget(q)))}원(평단 +${c.tpPct}%)에 절반 — 지정가 매도를 걸어 두면 좋음`
+          : q.tpDone ? '절반 익절 끝 — 남은 물량은 본전 손절선·매도선만 지킴' : '추가 매수 없음 — 매도선·손절선만 지킴';
         return { code, q, px, g: (px / q.avg - 1) * 100, days: calDays(q.startT), ma, sp, next,
           maGap: ma ? (px / ma - 1) * 100 : null, spGap: sp ? (px / sp - 1) * 100 : null };
       });
@@ -7042,7 +7163,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       const el = document.getElementById('manageBox');
       if (!el) return;
       const rows = manageRows(), c = state.cfg;
-      const sig = JSON.stringify([rows.map((r) => [r.code, r.q.qty, r.q.stage, Math.round(r.px), r.sp, r.ma && Math.round(r.ma)]), c.exitMa, c.stopMode, c.w2, c.w3]);
+      const sig = JSON.stringify([rows.map((r) => [r.code, r.q.qty, r.q.stage, Math.round(r.px), r.sp, r.ma && Math.round(r.ma), r.next]), c.exitMa, c.stopMode, c.w2, c.w3, c.tpPct]);
       if (el.dataset.sig === sig) return;
       el.dataset.sig = sig;
       el.classList.toggle('hidden', !rows.length);
