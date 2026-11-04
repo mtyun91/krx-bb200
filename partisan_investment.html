@@ -47,6 +47,7 @@
     <div class="ml-auto flex items-center gap-3 text-[11px]">
       <button id="agendaBadge" type="button" class="hidden px-1.5 py-0.5 bg-[#e5383b] text-white text-[11px] font-semibold" title="결재할 안건 — 눌러서 결재함 열기"></button>
       <button id="paperMini" type="button" class="num text-[#444444] hover:underline" title="모의투자 패널 열기"></button>
+      <button id="btnKeys" type="button" class="text-[#999999] hover:text-[#111111]" title="단축키 보기 (?)">⌨</button>
       <span id="clockKst" class="num text-[#666666]"></span>
       <span id="marketState" class="text-[#666666]"></span>
     </div>
@@ -95,7 +96,27 @@
       <div class="flex justify-end gap-1.5"><button type="button" data-g="cancel" class="btn px-3 py-1 text-[12px]">취소</button><button type="button" data-g="go" class="btn-on px-3 py-1 text-[12px]">그래도 주문</button></div>
     </div>
   </div>
-  <div id="demoBanner" class="hidden bg-[#fff4f4] border-b border-[#e5383b] text-[#e5383b] text-[11px] px-4 py-1 shrink-0">⚠ 데모 모드 — 화면 확인용 가짜 시세입니다. 실제 시세가 아니므로 백테스트 결과에 의미가 없습니다.</div>
+  <!-- 단축키 안내 (? 키 또는 위쪽 ⌨) -->
+  <div id="keysPop" class="hidden fixed inset-0 z-[65] bg-black/25 flex items-center justify-center">
+    <div class="bg-white border border-[#111111] shadow-xl w-[min(380px,92vw)] p-3 space-y-2 text-[12px]">
+      <div class="flex items-center justify-between"><span class="text-[13px] font-semibold">단축키</span><button type="button" data-keys-close class="btn px-2 py-0.5 text-[11px]">닫기 (Esc)</button></div>
+      <table class="w-full text-[12px]"><tbody>
+        <tr><td class="num py-0.5 w-24">/</td><td>종목 검색칸으로</td></tr>
+        <tr><td class="num py-0.5">↑ ↓</td><td>목록에서 위·아래 종목</td></tr>
+        <tr><td class="num py-0.5">← →</td><td>차트 앞·뒤로 이동</td></tr>
+        <tr><td class="num py-0.5">+ −</td><td>차트 확대·축소</td></tr>
+        <tr><td class="num py-0.5">End</td><td>차트 최신 봉으로</td></tr>
+        <tr><td class="num py-0.5">D W M</td><td>일봉·주봉·월봉</td></tr>
+        <tr><td class="num py-0.5">S</td><td>지금 종목 관심 추가·빼기</td></tr>
+        <tr><td class="num py-0.5">1 2 3 4</td><td>비서 · 백테스트 · 모의투자 · 설정</td></tr>
+        <tr><td class="num py-0.5">[ ]</td><td>왼쪽 목록 · 오른쪽 패널 접기/펴기</td></tr>
+        <tr><td class="num py-0.5">R</td><td>리서치 센터</td></tr>
+        <tr><td class="num py-0.5">?</td><td>이 안내</td></tr>
+      </tbody></table>
+      <p class="text-[10px] text-[#888888]">글자 입력칸에 있을 때는 동작하지 않아요.</p>
+    </div>
+  </div>
+  <div id="demoBanner"class="hidden bg-[#fff4f4] border-b border-[#e5383b] text-[#e5383b] text-[11px] px-4 py-1 shrink-0">⚠ 데모 모드 — 화면 확인용 가짜 시세입니다. 실제 시세가 아니므로 백테스트 결과에 의미가 없습니다.</div>
 
   <main class="flex-1 flex min-h-0">
     <!-- 왼쪽: 종목 목록 -->
@@ -201,7 +222,7 @@
             <canvas id="equity" class="w-full h-20"></canvas>
           </div>
           <div class="border border-[#e6e6e6]">
-            <div class="px-2 py-0.5 text-[10px] text-[#888888] bg-[#fafafa]">거래 목록 (클릭 → 차트)</div>
+            <div class="flex justify-between px-2 py-0.5 text-[10px] text-[#888888] bg-[#fafafa]"><span>거래 목록 (클릭 → 차트)</span><button id="btnBtCsv" type="button" class="underline text-[#111111]" title="백테스트 거래 전체를 엑셀에서 열 수 있는 파일(CSV)로 저장">엑셀로 저장</button></div>
             <table class="w-full num text-[10px]">
               <thead class="text-[#888888]"><tr><th class="text-left px-2 py-0.5">종목</th><th class="text-left px-1">기간</th><th class="text-right px-1">손익</th><th class="text-left px-2">사유</th></tr></thead>
               <tbody id="tradeBody"></tbody>
@@ -359,7 +380,7 @@
       rank: 'VALUE',
       buyFee: 0.01, sellFee: 0.01, taxPct: 0.20, slipPct: 0.05,
       barCount: 1000, minCount: 800, liveSec: 10, listMin: 5, rtMax: 30,
-      decisionTime: '15:20', pollMin: 5
+      decisionTime: '15:20', pollMin: 5, holidays: ''
     };
     const SETTING_DEFS = [
       { group: '자금 관리', items: [
@@ -439,7 +460,8 @@
       { group: '모의투자', items: [
         { k: 'winStart', label: '매매 시간대 시작 (KST)', type: 'time' },
         { k: 'winEnd', label: '매매 시간대 끝 (KST)', type: 'time' },
-        { k: 'approval', label: '결재제 — 모의 자동매매의 매수·매도를 내 결재 뒤에만 실행 (끄면 완전 자동)', type: 'bool' }] }
+        { k: 'approval', label: '결재제 — 모의 자동매매의 매수·매도를 내 결재 뒤에만 실행 (끄면 완전 자동)', type: 'bool' },
+        { k: 'holidays', label: '휴장일 더하기 (예: 20270101, 20270209 — 기본 공휴일은 이미 들어 있음)', type: 'text' }] }
     ];
     const MA_LIST = [{ p: 5, c: '#f472b6' }, { p: 20, c: '#f59e0b' }, { p: 60, c: '#10b981' }, { p: 120, c: '#8b5cf6' }];
     // 봉 주기 — 전략·백테스트·모의투자는 항상 일봉, 나머지는 차트 보기 전용
@@ -548,9 +570,15 @@
       };
     }
     const hmToMin = (s) => { const [h, m] = String(s).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+    // ---- 휴장일: 한국거래소 공휴일·연말 휴장 (2026~2027) + 설정 '휴장일 더하기' — 휴장일에는 장중 판단·시세 재조회를 하지 않음 ----
+    const KRX_HOLIDAYS = new Set(['20260101', '20260216', '20260217', '20260218', '20260302', '20260501', '20260505', '20260525', '20260603', '20260817', '20260924', '20260925', '20261005', '20261009', '20261225', '20261231',
+      '20270101', '20270208', '20270209', '20270301', '20270505', '20270513', '20270816', '20270914', '20270915', '20270916', '20271004', '20271011', '20271227', '20271231']);
+    const userHolidays = () => String(state.cfg.holidays || '').match(/\d{8}/g) || [];
+    const isHoliday = (ymd) => KRX_HOLIDAYS.has(ymd) || userHolidays().includes(ymd);
+    const isTradingDay = (ymd, dow) => dow >= 1 && dow <= 5 && !isHoliday(ymd);
     function marketOpenNow() {
       const k = kstNow();
-      return k.dow >= 1 && k.dow <= 5 && k.min >= 540 && k.min < 930;
+      return isTradingDay(k.ymd, k.dow) && k.min >= 540 && k.min < 930;
     }
     // KRX 주식 호가 단위 (2023년 이후 코스피·코스닥 공통)
     function tickSize(p) {
@@ -569,24 +597,41 @@
     const fmtDate = (t) => (t ? `${t.slice(2, 4)}.${t.slice(4, 6)}.${t.slice(6, 8)}` : '');
     const nameOf = (code) => (state.data[code] && state.data[code].name) || state.names[code] || (master.map[code] && master.map[code].name) || code;
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    // 알림 글: 여러 개가 겹치지 않게 아래에서 위로 쌓고, 같은 글이 이어서 오면 하나로 (최대 4개 · 눌러서 닫기)
     function toast(msg) {
+      let box = document.getElementById('toastBox');
+      if (!box) { box = document.createElement('div'); box.id = 'toastBox'; box.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center gap-1 pointer-events-none'; document.body.appendChild(box); }
+      const last = box.lastElementChild;
+      if (last && last.dataset.msg === String(msg)) { clearTimeout(last._t); last._t = setTimeout(() => last.remove(), 3200); return; }
       const el = document.createElement('div');
-      el.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 bg-[#111111] text-white text-[12px] px-4 py-2 z-50';
-      el.textContent = msg;
-      document.body.appendChild(el);
-      setTimeout(() => el.remove(), 3200);
+      el.className = 'bg-[#111111] text-white text-[12px] px-4 py-2 max-w-[80vw] shadow-lg pointer-events-auto cursor-pointer';
+      el.textContent = msg; el.dataset.msg = String(msg); el.title = '눌러서 닫기';
+      el.addEventListener('click', () => el.remove());
+      box.appendChild(el);
+      while (box.children.length > 4) box.firstElementChild.remove();
+      el._t = setTimeout(() => el.remove(), Math.min(8000, 3200 + String(msg).length * 30));   // 긴 글은 조금 더 오래
     }
 
     // =========================================================================
     // 3. 중계기 통신 · 시세 저장소(IndexedDB)
     //    HTS처럼 받은 봉은 모두 이 PC 브라우저에 저장 → 화면을 열면 저장분을 바로 그리고, 바뀐 부분만 받아 이어 붙임
     // =========================================================================
+    // 응답 시간 한도: 중계기가 멈춰도 화면이 무한정 기다리지 않게. 실계좌 주문(/trade/)은 결과를 모르는 채 끊으면 위험해서 한도 없음
+    const bridgeTimeout = (path) => (/^\/trade\//.test(path) ? 0 : path === '/health' ? 8000 : /^\/ai\//.test(path) ? 180000 : 90000);
     async function bridge(path, body) {
-      const res = await fetch(state.bridge.url + path, {
-        method: body ? 'POST' : 'GET',
-        headers: { 'Content-Type': 'application/json', 'X-Bridge-Token': state.bridge.token },
-        body: body ? JSON.stringify(body) : undefined
-      });
+      const ms = bridgeTimeout(path), ctrl = ms ? new AbortController() : null, timer = ctrl ? setTimeout(() => ctrl.abort(), ms) : 0;
+      let res;
+      try {
+        res = await fetch(state.bridge.url + path, {
+          method: body ? 'POST' : 'GET',
+          headers: { 'Content-Type': 'application/json', 'X-Bridge-Token': state.bridge.token },
+          body: body ? JSON.stringify(body) : undefined,
+          signal: ctrl ? ctrl.signal : undefined
+        });
+      } catch (err) {
+        if (err && err.name === 'AbortError') throw new Error(`중계기 응답 없음 (${Math.round(ms / 1000)}초)`);
+        throw err;
+      } finally { clearTimeout(timer); }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { const err = new Error(data.error || `HTTP ${res.status}`); err.status = res.status; throw err; }
       return data;
@@ -641,9 +686,9 @@
       const now = Date.now();
       let d = new Date(now + 9 * 3600000);
       const at = (x) => Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate(), 15, 40) - 9 * 3600000;
-      for (let i = 0; i < 8; i++) {
-        const w = d.getUTCDay();
-        if (w >= 1 && w <= 5 && at(d) <= now) return at(d);
+      for (let i = 0; i < 14; i++) {   // 설·추석 연휴가 주말과 붙어도 찾도록 2주
+        const w = d.getUTCDay(), ymd = d.toISOString().slice(0, 10).replace(/-/g, '');
+        if (isTradingDay(ymd, w) && at(d) <= now) return at(d);
         d = new Date(d.getTime() - 86400000);
       }
       return 0;
@@ -1748,7 +1793,7 @@
       const bt = state.bt;
       const note = document.getElementById('btNote');
       const kp = document.getElementById('btKpis');
-      if (!bt || !bt.curve.length) { kp.innerHTML = ''; document.getElementById('tradeBody').innerHTML = ''; drawEquity(); return; }
+      if (!bt || !bt.curve.length) { note.textContent = '시세를 불러오면 현재 종목군 전체로 자동 계산합니다.'; kp.innerHTML = ''; document.getElementById('tradeBody').innerHTML = ''; drawEquity(); return; }
       const s = bt.stats, c = state.cfg;
       note.innerHTML = `${{ WATCH: '관심종목', K200: '코스피200', Q150: '코스닥150', ALL: '전체', INV: '인버스' }[state.universe]} ${bt.codes.length}종목 · ${fmtDate(bt.firstT)} ~ ${fmtDate(bt.lastT)} (${bt.years.toFixed(1)}년) · 자금 ${won(c.capital)}원 · 종목당 ${c.slotAuto ? `평가자산÷${c.maxPos} (복리)` : `${c.slotPct}%`} · 최대 ${c.maxPos}종목 · 왕복 비용 약 ${((costBuy() + costSell()) * 100).toFixed(2)}%` +
         (s.n < 30 ? ' · <span class="text-[#e5383b]">⚠ 거래 30건 미만 — 우연일 수 있음</span>' : '') +
@@ -2225,7 +2270,7 @@
     async function scheduler() {
       const k = kstNow();
       document.getElementById('clockKst').textContent = `KST ${k.hms}`;
-      document.getElementById('marketState').textContent = marketOpenNow() ? '정규장 진행 중' : (k.dow === 0 || k.dow === 6 ? '주말 휴장' : k.min < 540 ? '장 시작 전' : '장 마감');
+      document.getElementById('marketState').textContent = marketOpenNow() ? '정규장 진행 중' : (k.dow === 0 || k.dow === 6 ? '주말 휴장' : isHoliday(k.ymd) ? '공휴일 휴장' : k.min < 540 ? '장 시작 전' : '장 마감');
       if (state.paper && state.paper.orders && state.paper.orders.length) expireOrders();
       refreshResearch();   // 1분에 한 번, 데이터가 바뀌었을 때만 다시 계산
       if (state.bridge.ok) {
@@ -2248,43 +2293,80 @@
     // =========================================================================
     // 11. 설정 패널
     // =========================================================================
-    function renderSettings() {
-      const c = state.cfg;
-      document.getElementById('settingsForm').innerHTML = SETTING_DEFS.map((g, gi) => `
-        <details ${gi < 3 ? 'open' : ''}><summary class="cursor-pointer select-none text-[10px] uppercase tracking-wider text-[#888888] mb-1.5">${g.group}</summary>
-          <div class="space-y-1">${g.items.map((it) => {
+    // ---- 설정 찾기 · 바뀐 값 표시: 위 검색칸에 낱말을 넣으면 그 항목만, '바꾼 것만'을 켜면 기본값과 다른 항목만 보임 (● = 기본값과 다름) ----
+    const setView = { q: '', changed: false };
+    const sameVal = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-9 : a === b);
+    let setDraft = null;   // 화면에 넣었지만 아직 '적용' 안 한 값 (검색으로 가려진 항목 포함)
+    function renderSettings(c = state.cfg) {
+      setDraft = c;
+      const q =setView.q.trim().toLowerCase().replace(/\s+/g, '');
+      const nChanged = Object.keys(DEFAULTS).filter((k) => !sameVal(state.cfg[k], DEFAULTS[k])).length;
+      const groups = SETTING_DEFS.map((g, gi) => {
+        const items = g.items.filter((it) => (!q || `${g.group}${it.label}`.toLowerCase().replace(/\s+/g, '').includes(q)) && (!setView.changed || !sameVal(state.cfg[it.k], DEFAULTS[it.k])));
+        if (!items.length) return '';
+        return `
+        <details ${gi < 3 || q || setView.changed ? 'open' : ''}><summary class="cursor-pointer select-none text-[10px] uppercase tracking-wider text-[#888888] mb-1.5">${g.group}</summary>
+          <div class="space-y-1">${items.map((it) => {
             let input;
             if (it.type === 'bool') input = `<input type="checkbox" data-set="${it.k}" ${c[it.k] ? 'checked' : ''} />`;
             else if (it.type === 'select') input = `<select data-set="${it.k}">${it.opts.map(([v, n]) => `<option value="${v}" ${c[it.k] === v ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
             else if (it.type === 'time') input = `<input type="text" data-set="${it.k}" value="${c[it.k]}" class="w-20 num text-right" pattern="[0-2][0-9]:[0-5][0-9]" />`;
+            else if (it.type === 'text') input = `<input type="text" data-set="${it.k}" value="${esc(c[it.k] || '')}" class="w-40 num text-[10px]" placeholder="없음" />`;
             else input = `<input type="number" data-set="${it.k}" min="${it.min}" max="${it.max}" step="${it.step}" value="${c[it.k]}" class="w-28 num text-right" />`;
-            return `<label class="flex items-center justify-between gap-2 text-[11px] text-[#444444]">${it.label}${input}</label>`;
-          }).join('')}</div></details>`).join('');
+            const diff = !sameVal(state.cfg[it.k], DEFAULTS[it.k]);
+            const defTxt = it.type === 'bool' ? (DEFAULTS[it.k] ? '켬' : '끔') : it.type === 'select' ? ((it.opts.find(([v]) => v === DEFAULTS[it.k]) || [])[1] || DEFAULTS[it.k]) : (DEFAULTS[it.k] === '' ? '없음' : DEFAULTS[it.k]);
+            return `<label class="flex items-center justify-between gap-2 text-[11px] text-[#444444]" title="기본값: ${esc(String(defTxt))}"><span>${diff ? '<span class="text-[#e5383b]" title="기본값과 다름">● </span>' : ''}${it.label}</span>${input}</label>`;
+          }).join('')}</div></details>`;
+      }).join('');
+      document.getElementById('settingsForm').innerHTML = `
+        <div class="flex items-center gap-1.5"><input id="setSearch" type="text" class="flex-1 min-w-0 text-[11px]" placeholder="설정 찾기 — 예: 손절, 스퀴즈, 비용" value="${esc(setView.q)}" autocomplete="off" />
+          <label class="flex items-center gap-1 text-[10px] text-[#666666] whitespace-nowrap" title="기본값과 다르게 바꾼 항목만 보기"><input id="setChanged" type="checkbox" ${setView.changed ? 'checked' : ''} /> 바꾼 것만 (${nChanged})</label></div>
+        ${groups || '<div class="text-[11px] text-[#999999]">맞는 설정이 없어요.</div>'}`;
     }
+    document.getElementById('settingsForm').addEventListener('input', (e) => {
+      if (e.target.id !== 'setSearch') return;
+      setView.q = e.target.value;
+      const keep = readSettings();   // 아직 '적용' 안 한 입력값은 지우지 않음
+      renderSettings(keep);
+      const s = document.getElementById('setSearch'); s.focus(); s.setSelectionRange(s.value.length, s.value.length);
+    });
+    document.getElementById('settingsForm').addEventListener('change', (e) => {
+      if (e.target.id !== 'setChanged') return;
+      setView.changed = e.target.checked;
+      renderSettings(readSettings());
+    });
 
     function readSettings() {
-      const c = { ...state.cfg };
-      document.querySelectorAll('[data-set]').forEach((el) => {
+      const c = { ...(setDraft || state.cfg) };
+      document.querySelectorAll('#settingsForm [data-set]').forEach((el) => {
         const k = el.dataset.set;
         if (el.type === 'checkbox') c[k] = el.checked;
         else if (typeof DEFAULTS[k] === 'number') {
           const v = Number(el.value);
           if (isFinite(v) && el.value !== '') c[k] = Math.min(Number(el.max || Infinity), Math.max(Number(el.min || -Infinity), v));
         } else if (k === 'decisionTime' || k === 'winStart' || k === 'winEnd') { if (/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(el.value)) c[k] = el.value; }
+        else if (k === 'holidays') c[k] = [...new Set(el.value.match(/\d{8}/g) || [])].join(', ');   // 날짜 8자리만 남김
         else c[k] = el.value;
       });
       return c;
     }
+    const setLabelOf = (k) => { for (const g of SETTING_DEFS) { const it = g.items.find((x) => x.k === k); if (it) return it.label.split(/[(—:]/)[0].replace('└', '').trim(); } return k; };
 
     document.getElementById('btnApplySettings').addEventListener('click', () => {
       const prev = state.cfg;
       state.cfg = readSettings();
+      const changed = Object.keys(DEFAULTS).filter((k) => !sameVal(prev[k], state.cfg[k]));
       if (state.cfg.w1 + state.cfg.w2 + state.cfg.w3 > 100) toast('1·2·3차 비중 합이 100%를 넘으면 슬롯 금액 안에서 잘립니다.');
       saveStore(); renderSettings(); recomputeAll(); renderPaper(); renderChartHeader();
-      if (state.cfg.barCount > prev.barCount && Object.keys(state.data).length) toast('일봉 수를 늘렸습니다. "시세 불러오기"를 다시 누르면 더 받아옵니다.');
-      toast('설정을 적용했습니다.');
+      if (state.cfg.barCount > prev.barCount && Object.keys(state.data).length) toast('일봉 수를 늘렸습니다. "업데이트"를 누르면 더 받아옵니다.');
+      toast(changed.length ? `설정 ${changed.length}개를 바꿨어요 — ${changed.slice(0, 4).map(setLabelOf).join(', ')}${changed.length > 4 ? ' 등' : ''}` : '바뀐 설정이 없어요.');
     });
-    document.getElementById('btnDefaultSettings').addEventListener('click', () => { state.cfg = { ...DEFAULTS }; renderSettings(); });
+    // 기본값: 입력칸에만 기본값을 채움 → '적용'을 눌러야 실제로 바뀜 (예전에는 누르자마자 전략 값이 바뀌던 문제 수정)
+    document.getElementById('btnDefaultSettings').addEventListener('click', () => {
+      const keep = { capital: state.cfg.capital, holidays: state.cfg.holidays };   // 모의 자금·휴장일은 그대로
+      renderSettings({ ...DEFAULTS, ...keep });
+      toast('입력칸을 기본값으로 채웠어요. 확인한 뒤 "적용"을 눌러야 바뀝니다.');
+    });
 
     // =========================================================================
     // 12. 이벤트 · 초기화
@@ -2524,8 +2606,30 @@
     inpSearch.addEventListener('blur', () => setTimeout(() => searchList.classList.add('hidden'), 150));
 
     // 키보드 — ↑↓ 목록 종목 이동, ←→ 차트 이동 (입력칸에 있을 때는 제외)
+    // ---- 단축키 (? 로 안내): / 검색 · 1~4 오른쪽 탭 · [ ] 패널 · S 관심 · D W M 주기 · + − 확대 · End 최신 · R 리서치 센터 ----
+    const keysPop = document.getElementById('keysPop');
+    const showKeys = (on) => keysPop.classList.toggle('hidden', !on);
+    document.getElementById('btnKeys').addEventListener('click', () => showKeys(true));
+    keysPop.addEventListener('click', (e) => { if (e.target === keysPop || e.target.closest('[data-keys-close]')) showKeys(false); });
+    const popOpen = () => ['keysPop', 'guardPop', 'centerPop'].some((id) => { const el = document.getElementById(id); return el && !el.classList.contains('hidden'); });
     document.addEventListener('keydown', (e) => {
-      if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName)) return;
+      if (e.key === 'Escape') { showKeys(false); connPop.classList.add('hidden'); }
+      if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName) || (document.activeElement && document.activeElement.isContentEditable)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      if (popOpen()) return;   // 확인 창·리서치 센터가 떠 있으면 뒤 화면을 건드리지 않음
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      const tabs = { 1: 'assist', 2: 'bt', 3: 'paper', 4: 'set' }, tfk = { d: 'D', w: 'W', m: 'M', 'ㅇ': 'D', 'ㅈ': 'W', 'ㅡ': 'M' };
+      if (key === '?' || key === '/' && e.shiftKey) { e.preventDefault(); showKeys(true); return; }
+      if (key === '/') { e.preventDefault(); inpSearch.focus(); inpSearch.select(); return; }
+      if (tabs[key]) { state.ui.right = true; saveStore(); applyPanes(); setTab(tabs[key]); return; }
+      if (key === '[') { state.ui.left = !state.ui.left; saveStore(); applyPanes(); return; }
+      if (key === ']') { state.ui.right = !state.ui.right; saveStore(); applyPanes(); return; }
+      if ((key === 's' || key === 'ㄴ') && state.selected) { toggleWatch(state.selected, !state.watch.includes(state.selected)); toast(state.watch.includes(state.selected) ? `☆ ${nameOf(state.selected)} 관심종목에 넣었어요` : `${nameOf(state.selected)} 관심종목에서 뺐어요`); return; }
+      if (tfk[key]) { if (state.tf !== tfk[key]) setTf(tfk[key]); return; }
+      if (key === '+' || key === '=') { zoom(0.8); return; }
+      if (key === '-' || key === '_') { zoom(1.25); return; }
+      if (key === 'End') { e.preventDefault(); state.view.end = null; drawChart(); return; }
+      if (key === 'r' || key === 'ㄱ') { document.getElementById('btnCenter').click(); return; }
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         const rows = [...document.querySelectorAll('#symbolBody tr[data-code]')].map((r) => r.dataset.code);
         if (!rows.length) return;
@@ -2574,13 +2678,42 @@
         if (sync.on) syncPull(true); else renderSync();
       } catch (err) {
         state.bridge.ok = false;
-        badge.textContent = '연결 실패 — 눌러서 설정';
+        badge.textContent = conn.lost ? '연결 끊김 — 다시 잇는 중' : '연결 실패 — 눌러서 설정';
         badge.className = 'text-[11px] px-2 py-0.5 border border-[#e5383b] text-[#e5383b]';
         if (!quiet) toast(`중계기 연결 실패: ${err.message} — nh_bridge.py 가 실행 중인지, 토큰이 맞는지 확인하세요.`);
       }
       return state.bridge.ok;
     }
     document.getElementById('btnConnect').addEventListener('click', () => connectBridge());
+
+    // ---- 중계기 연결 감시: 20초마다 확인 → 두 번 연속 응답이 없으면 '끊김'으로 표시하고, 다시 켜지면 저절로 이어 붙음 ----
+    const conn = { fail: 0, busy: false, lost: false };
+    async function connWatch() {
+      if (conn.busy || !document.getElementById('inpBridgeToken').value.trim()) return;
+      conn.busy = true;
+      try {
+        if (state.bridge.ok) {
+          try { await bridge('/health'); conn.fail = 0; }
+          catch (err) {
+            if (++conn.fail >= 2) {
+              state.bridge.ok = false; conn.lost = true; rtStop();
+              const badge = document.getElementById('modeBadge');
+              badge.textContent = '연결 끊김 — 다시 잇는 중';
+              badge.className = 'text-[11px] px-2 py-0.5 border border-[#e5383b] text-[#e5383b]';
+              document.getElementById('loadStatus').textContent = `${kstNow().hm} 중계기 응답 없음${/fetch/i.test(err.message) ? ' (꺼져 있거나 주소가 다름)' : ` (${err.message})`} — 20초마다 다시 연결합니다`;
+              toast('⚠ 중계기 연결이 끊겼어요. 다시 켜지면 저절로 이어집니다.');
+              if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) { try { new Notification('파르티잔 인베스트먼트', { body: '중계기 연결이 끊겼어요. 다시 켜지면 저절로 이어집니다.' }); } catch (_) {} }
+            }
+          }
+        } else if (conn.lost || loadToken()) {
+          if (await connectBridge({ quiet: true })) {
+            if (conn.lost) { toast('✔ 중계기에 다시 연결됐어요.'); document.getElementById('loadStatus').textContent = `${kstNow().hm} 다시 연결됨`; }
+            conn.lost = false; conn.fail = 0;
+          }
+        }
+      } finally { conn.busy = false; }
+    }
+    bgEvery(connWatch, 20000);
     document.getElementById('chkRemember').addEventListener('change', (e) => { if (!e.target.checked) saveToken(''); else if (state.bridge.ok) saveToken(state.bridge.token); });
 
     // 저장된 일봉 전부를 네트워크 없이 바로 화면에 올림
@@ -5262,7 +5395,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.35', APP_DATE = '2026-11-01';
+    const APP_VERSION = '1.36', APP_DATE = '2026-11-04';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -5805,6 +5938,37 @@ onmessage = (e) => { const { body, sets } = e.data;
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
       toast('기록 파일을 내려받았어요.');
     }
+    // ---- 엑셀로 저장: 백테스트 거래 · 매매 일지 · 모의 매매 기록을 CSV로 (엑셀에서 한글이 깨지지 않게 BOM 포함) ----
+    function downloadCsv(name, head, rows) {
+      if (!rows.length) { toast('저장할 기록이 없어요.'); return; }
+      const cell = (v) => {   // 숫자는 그대로, 글자가 =·+·-·@로 시작하면 엑셀이 수식으로 읽지 않게 ' 를 붙임
+        if (typeof v === 'number') return String(v);
+        let s = v == null ? '' : String(v);
+        if (/^[=+\-@]/.test(s)) s = `'${s}`;
+        return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const text = '﻿' + [head, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+      a.download = `${name}-${kstNow().ymd}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast(`${rows.length}건을 엑셀 파일로 저장했어요.`);
+    }
+    const ymdDot = (t) => (t ? `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}` : '');
+    const kstTime = (at) => new Date(at + 9 * 3600000).toISOString().slice(0, 16).replace('T', ' ');
+    function exportBtCsv() {
+      const bt = state.bt;
+      if (!bt) { toast('먼저 백테스트를 계산하세요.'); return; }
+      const rows = [...bt.trades, ...bt.open.map((x) => ({ ...x, open: true }))].map((x) => [nameOf(x.code), x.code, ymdDot(x.startT), x.open ? '보유 중' : ymdDot(x.endT),
+        x.ret != null ? +x.ret.toFixed(2) : '', x.pnl != null ? Math.round(x.pnl) : '', x.reason || '']);
+      downloadCsv('백테스트_거래', ['종목', '코드', '매수일', '매도일', '수익률(%)', '손익(원)', '사유'], rows);
+    }
+    function exportJournalCsv() {
+      const rows = state.journal.slice().reverse().map((x) => [kstTime(x.at), nameOf(x.code), x.code, x.side === 'BUY' ? '매수' : '매도', x.qty, x.price, x.src || '', x.ret != null ? x.ret : '', x.days != null ? x.days : '', x.why || '', x.note || '']);
+      downloadCsv('매매_일지', ['시각(KST)', '종목', '코드', '구분', '수량', '가격', '계좌', '수익률(%)', '보유일', '이유', '메모'], rows);
+    }
+    document.getElementById('btnBtCsv').addEventListener('click', exportBtCsv);
     function importRecords(file) {
       const rd = new FileReader();
       rd.onload = () => {
@@ -5958,7 +6122,7 @@ onmessage = (e) => { const { body, sets } = e.data;
       const win = sells.filter((x) => x.ret > 0).length;
       const sum = js.length ? `30일 ${mon.length}건${sells.length ? ` · 매도 ${sells.length}건 중 ${win}건 이익` : ''}` : '주문하면 자동으로 적혀요';
       const fd = (at) => { const d = new Date(at); return `${d.getMonth() + 1}.${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-      return fold('journal', '매매 일지', sum, js.length ? `<button type="button" data-jreview class="btn-on w-full px-2 py-0.5 text-[11px] mb-1" title="최근 30일 일지를 비서가 돌아보고 잘한 점·반복한 실수를 정리">📓 한 달 돌아보기</button>
+      return fold('journal', '매매 일지', sum, js.length ? `<div class="flex gap-1 mb-1"><button type="button" data-jreview class="btn-on flex-1 px-2 py-0.5 text-[11px]" title="최근 30일 일지를 비서가 돌아보고 잘한 점·반복한 실수를 정리">📓 한 달 돌아보기</button><button type="button" data-jcsv class="btn px-2 py-0.5 text-[11px]" title="일지 전체를 엑셀에서 열 수 있는 파일(CSV)로 저장">엑셀로 저장</button></div>
         <div class="max-h-64 overflow-y-auto scroll -mx-2">${js.slice(0, 60).map((x) => `<div class="px-2 py-1 border-t border-[#f5f5f5] text-[11px]">
           <div class="flex gap-1"><span class="${x.side === 'BUY' ? 'up' : 'down'} font-semibold">${x.side === 'BUY' ? '매수' : '매도'}</span><span class="font-semibold">${esc(nameOf(x.code))}</span>
           <span class="num text-[#666666]">${x.qty}주 @ ${won(x.price)}</span>${x.ret != null ? `<b class="num ${x.ret >= 0 ? 'up' : 'down'}">${pctTxt(x.ret)}</b>` : ''}
@@ -5975,6 +6139,7 @@ onmessage = (e) => { const { body, sets } = e.data;
         if (v != null) { x.why = v.trim().slice(0, 200); saveStore(); renderAssist(); }
         return;
       }
+      if (e.target.closest('[data-jcsv]')) { exportJournalCsv(); return; }
       if (e.target.closest('[data-jreview]')) {
         state.ui.right = true; saveStore(); applyPanes(); setTab('assist');
         chatSend('지난 30일 매매 일지를 돌아봐 줘. 잘한 점, 반복한 실수, 다음에 바꿀 점 하나씩. 이유를 안 적은 거래가 많으면 그것도 말해 줘.');
