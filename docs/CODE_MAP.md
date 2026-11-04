@@ -4,7 +4,7 @@
 
 총 7,886줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
 
-화면 버전: v1.38 · 2026-11-04 (pre-commit 훅이 자동으로 올림)
+화면 버전: v1.39 · 2026-11-05 (pre-commit 훅이 자동으로 올림)
 
 ### 구역과 함수 (줄 번호)
 
@@ -658,7 +658,7 @@
 
 ## nh_bridge_core.py
 
-총 2,035줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
+총 2,043줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
 
 ### 주소 (POST JSON, 헤더에 토큰)
 
@@ -672,73 +672,73 @@
 
 ### 함수·클래스 (줄 번호)
 
-- `_load_token` 39
-- `origin_allowed` 72
-- `_throttle` 79
-- `access_token` 88
-- `token_invalidate` 112
-- `nh_post` 126
-- `_num` 151
-- `_period_rows` 162
-- `_bars` 176
-- `nh_chart` 188
-- `nh_daily` 198
-- `nh_components` 216
-- `_krx_finder` 246
-- `krx_master` 255
-- `krx_caps` 306
-- `krx_sectors` 362
-- `_yahoo_chart` 417
-- `market_index` 424
-- `market_quotes` 457
-- `news_search` 482
-- `news_top` 517
-- `_tg_token_ok` 547
-- `_tg_call` 552
-- `telegram_send` 570
-- `telegram_chat` 578
-- `_tg_poll` 594
-- `tg_start` 623
-- `tg_stop` 637
-- `ai_available` 665
-- `_ask_claude` 674
-- `_ask_gemini` 708
-- `gemini_tts` 788
-- `gemini_models` 839
-- `_clean_history` 855
-- `_claude_msgs` 872
-- `_ask` 876
-- `ai_brief` 884
-- `ai_test` 897
-- `ai_ask` 1038
-- `demo_daily` 1064
-- `_hash01` 1096
-- `demo_chart` 1104
-- `Hub` 1159
-- `_tick_size` 1198
-- `_tick_msg` 1205
-- `_book_msg` 1215
-- `Realtime` 1224
-- `DemoRealtime` 1405
-- `_state_path` 1458
-- `state_read` 1472
-- `state_write` 1481
-- `state_backup` 1502
-- `trade_available` 1534
-- `acct_mask` 1538
-- `_day_used` 1542
-- `_day_add` 1551
-- `nh_trade_post` 1568
-- `_msg` 1588
-- `_block` 1595
-- `trade_check_acct` 1600
-- `trade_status` 1622
-- `trade_log` 1631
-- `trade_order` 1637
-- `trade_cancel` 1693
-- `trade_balance` 1709
-- `trade_orders` 1730
-- `Handler` 1749
-- `ExclusiveServer` 1968
-- `hidden_input` 1979
-- `main` 2000
+- `_load_token` 40
+- `origin_allowed` 73
+- `_throttle` 84
+- `access_token` 93
+- `token_invalidate` 117
+- `nh_post` 131
+- `_num` 156
+- `_period_rows` 167
+- `_bars` 181
+- `nh_chart` 193
+- `nh_daily` 203
+- `nh_components` 221
+- `_krx_finder` 251
+- `krx_master` 260
+- `krx_caps` 311
+- `krx_sectors` 367
+- `_yahoo_chart` 422
+- `market_index` 429
+- `market_quotes` 462
+- `news_search` 487
+- `news_top` 522
+- `_tg_token_ok` 552
+- `_tg_call` 557
+- `telegram_send` 575
+- `telegram_chat` 583
+- `_tg_poll` 599
+- `tg_start` 628
+- `tg_stop` 642
+- `ai_available` 670
+- `_ask_claude` 679
+- `_ask_gemini` 713
+- `gemini_tts` 793
+- `gemini_models` 844
+- `_clean_history` 860
+- `_claude_msgs` 877
+- `_ask` 881
+- `ai_brief` 889
+- `ai_test` 902
+- `ai_ask` 1043
+- `demo_daily` 1069
+- `_hash01` 1101
+- `demo_chart` 1109
+- `Hub` 1164
+- `_tick_size` 1203
+- `_tick_msg` 1210
+- `_book_msg` 1220
+- `Realtime` 1229
+- `DemoRealtime` 1410
+- `_state_path` 1463
+- `state_read` 1477
+- `state_write` 1486
+- `state_backup` 1507
+- `trade_available` 1539
+- `acct_mask` 1543
+- `_day_used` 1547
+- `_day_add` 1556
+- `nh_trade_post` 1573
+- `_msg` 1593
+- `_block` 1600
+- `trade_check_acct` 1605
+- `trade_status` 1627
+- `trade_log` 1636
+- `trade_order` 1642
+- `trade_cancel` 1698
+- `trade_balance` 1714
+- `trade_orders` 1735
+- `Handler` 1754
+- `ExclusiveServer` 1973
+- `hidden_input` 1984
+- `main` 2005

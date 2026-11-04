@@ -36,7 +36,7 @@ python nh_bridge.py --ask             # 실제 시세 (앱키·시크릿을 사�
 python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버·한도도 사용자가 입력)
 ```
 
-- 윈도우는 `윈도우에서_실행.bat`, 맥은 `맥에서_실행.command`를 더블클릭하면 화면 서버(8792)·브라우저·중계기(`--ask`)가 한 번에 켜진다 (`.bat --demo` / `.bat --trade`도 됨).
+- 윈도우는 `윈도우에서_실행.bat`, 맥은 `맥에서_실행.command`를 더블클릭하면 화면 서버(8792)·브라우저·중계기(`--ask`)가 한 번에 켜진다 (`.bat --demo` / `.bat --trade`도 됨). 창을 닫아도 계속 돌게 하려면 `윈도우_뒤에서_켜기.bat`, 끄기는 `윈도우_중계기_끄기.bat`.
 - 화면은 `partisan_investment.html`을 브라우저로 연다. "새 버전" 알림 띠는 http로 열었을 때만 동작하므로 보통 `python -m http.server 8792 --bind 127.0.0.1`로 연다.
 - 화면 → 중계기 연결: 연결 창에서 주소(`http://127.0.0.1:8766`)와 실행기가 보여 준 토큰.
 - **사용자가 실제로 쓰는 중계기(8766)는 끄거나 재시작하지 말 것.** 본체 파일만 고치면 실행기가 알아서 다시 띄운다(문법 오류면 기존 본체 유지).
@@ -106,6 +106,11 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 - `structWhy`에 강한 마감 `closeTop`(기본 80 — 종가가 봉의 위쪽 80% 안)과 OBV 신고가 기간 `obvDays`(기본 250, 예전 120 고정) 추가. `stratV` 3 — 2판 이하 설정은 화면을 열 때 한 번 옮김.
 - 검증: `research/v3_report.py`(조건 하나씩, 앞·뒤 기간 모두 나아지면 ★) · `v3_combo.py`. 승률 48% → 53%, PF 1.52 → 1.73. 수치는 `docs/STRATEGY.md` 맨 위.
 - 최대 보유는 사용자 결정으로 5종목 유지.
+
+### 2026-11-05 뒤에서 켜기 · 밖에서 접속 (Claude Code)
+- `nh_bridge.py --background`: 키를 입력받은 뒤 창 없는 프로세스(pythonw, DETACHED)로 자기 자신을 다시 띄우고 끝남. 키는 그 프로세스의 환경변수(메모리)에만 — 저장하지 않는 규칙 그대로. 기록 `logs/bridge.log`(git 제외, 5MB 넘으면 .old), 프로세스 번호 `logs/bridge.pid`. 뒤에서 돌 때(`NH_BG`)는 토큰을 끝 4자리만 출력.
+- `윈도우_뒤에서_켜기.bat`(화면 서버도 창 없이) · `윈도우_중계기_끄기.bat`(pid 묶음 + 8766·8792 포트 주인 종료). PC를 다시 켜면 키를 다시 넣어야 함 — 자동 시작은 키 저장이 필요해서 하지 않음(사용자 결정 사항).
+- `origin_allowed`가 `https://기기.tailnet.ts.net(:포트)` 도 허용 — Tailscale `serve`로 집 PC의 8792·8766을 내 기기에만 HTTPS로 엶. 안내는 `맥북_사용_안내.md` A.
 
 
 ---
@@ -287,7 +292,7 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 총 7,886줄. `<script>` 하나에 전부 들어 있음 (빌드 없음).
 
-화면 버전: v1.38 · 2026-11-04 (pre-commit 훅이 자동으로 올림)
+화면 버전: v1.39 · 2026-11-05 (pre-commit 훅이 자동으로 올림)
 
 ### 구역과 함수 (줄 번호)
 
@@ -941,7 +946,7 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 ## nh_bridge_core.py
 
-총 2,035줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
+총 2,043줄. 표준 라이브러리 HTTP 서버(`Handler`). 실행기 `nh_bridge.py`가 띄움.
 
 ### 주소 (POST JSON, 헤더에 토큰)
 
@@ -955,73 +960,73 @@ python nh_bridge.py --ask --trade     # + 실계좌 주문 (계좌번호·서버
 
 ### 함수·클래스 (줄 번호)
 
-- `_load_token` 39
-- `origin_allowed` 72
-- `_throttle` 79
-- `access_token` 88
-- `token_invalidate` 112
-- `nh_post` 126
-- `_num` 151
-- `_period_rows` 162
-- `_bars` 176
-- `nh_chart` 188
-- `nh_daily` 198
-- `nh_components` 216
-- `_krx_finder` 246
-- `krx_master` 255
-- `krx_caps` 306
-- `krx_sectors` 362
-- `_yahoo_chart` 417
-- `market_index` 424
-- `market_quotes` 457
-- `news_search` 482
-- `news_top` 517
-- `_tg_token_ok` 547
-- `_tg_call` 552
-- `telegram_send` 570
-- `telegram_chat` 578
-- `_tg_poll` 594
-- `tg_start` 623
-- `tg_stop` 637
-- `ai_available` 665
-- `_ask_claude` 674
-- `_ask_gemini` 708
-- `gemini_tts` 788
-- `gemini_models` 839
-- `_clean_history` 855
-- `_claude_msgs` 872
-- `_ask` 876
-- `ai_brief` 884
-- `ai_test` 897
-- `ai_ask` 1038
-- `demo_daily` 1064
-- `_hash01` 1096
-- `demo_chart` 1104
-- `Hub` 1159
-- `_tick_size` 1198
-- `_tick_msg` 1205
-- `_book_msg` 1215
-- `Realtime` 1224
-- `DemoRealtime` 1405
-- `_state_path` 1458
-- `state_read` 1472
-- `state_write` 1481
-- `state_backup` 1502
-- `trade_available` 1534
-- `acct_mask` 1538
-- `_day_used` 1542
-- `_day_add` 1551
-- `nh_trade_post` 1568
-- `_msg` 1588
-- `_block` 1595
-- `trade_check_acct` 1600
-- `trade_status` 1622
-- `trade_log` 1631
-- `trade_order` 1637
-- `trade_cancel` 1693
-- `trade_balance` 1709
-- `trade_orders` 1730
-- `Handler` 1749
-- `ExclusiveServer` 1968
-- `hidden_input` 1979
-- `main` 2000
+- `_load_token` 40
+- `origin_allowed` 73
+- `_throttle` 84
+- `access_token` 93
+- `token_invalidate` 117
+- `nh_post` 131
+- `_num` 156
+- `_period_rows` 167
+- `_bars` 181
+- `nh_chart` 193
+- `nh_daily` 203
+- `nh_components` 221
+- `_krx_finder` 251
+- `krx_master` 260
+- `krx_caps` 311
+- `krx_sectors` 367
+- `_yahoo_chart` 422
+- `market_index` 429
+- `market_quotes` 462
+- `news_search` 487
+- `news_top` 522
+- `_tg_token_ok` 552
+- `_tg_call` 557
+- `telegram_send` 575
+- `telegram_chat` 583
+- `_tg_poll` 599
+- `tg_start` 628
+- `tg_stop` 642
+- `ai_available` 670
+- `_ask_claude` 679
+- `_ask_gemini` 713
+- `gemini_tts` 793
+- `gemini_models` 844
+- `_clean_history` 860
+- `_claude_msgs` 877
+- `_ask` 881
+- `ai_brief` 889
+- `ai_test` 902
+- `ai_ask` 1043
+- `demo_daily` 1069
+- `_hash01` 1101
+- `demo_chart` 1109
+- `Hub` 1164
+- `_tick_size` 1203
+- `_tick_msg` 1210
+- `_book_msg` 1220
+- `Realtime` 1229
+- `DemoRealtime` 1410
+- `_state_path` 1463
+- `state_read` 1477
+- `state_write` 1486
+- `state_backup` 1507
+- `trade_available` 1539
+- `acct_mask` 1543
+- `_day_used` 1547
+- `_day_add` 1556
+- `nh_trade_post` 1573
+- `_msg` 1593
+- `_block` 1600
+- `trade_check_acct` 1605
+- `trade_status` 1627
+- `trade_log` 1636
+- `trade_order` 1642
+- `trade_cancel` 1698
+- `trade_balance` 1714
+- `trade_orders` 1735
+- `Handler` 1754
+- `ExclusiveServer` 1973
+- `hidden_input` 1984
+- `main` 2005

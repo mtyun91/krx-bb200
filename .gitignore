@@ -26,3 +26,6 @@ research/report.txt
 # Gemini 대화창용 자료·적용 결과 (다시 만들 수 있음)
 gemini_pack/
 research/listing.json
+
+# 뒤에서 도는 중계기 기록·프로세스 번호
+logs/

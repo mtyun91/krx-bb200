@@ -18,6 +18,7 @@ import json
 import math
 import os
 import random
+import re
 import secrets
 import sys
 import threading
@@ -70,10 +71,14 @@ _token_lock = threading.Lock()
 
 
 def origin_allowed(origin):
-    # file:// 로 연 HTML은 Origin이 "null"; 그 외에는 localhost 계열만 허용
+    # file:// 로 연 HTML은 Origin이 "null"; 그 외에는 localhost 계열 + 내 Tailscale 기기 주소(https://이름.tailnet.ts.net)만 허용
+    #  ts.net 주소는 같은 Tailscale 계정에 로그인한 내 기기에서만 열리고, 토큰도 따로 확인함
     if origin is None or origin == "null":
         return True
-    return origin.startswith(("http://localhost", "http://127.0.0.1", "https://localhost"))
+    if origin.startswith(("http://localhost", "http://127.0.0.1", "https://localhost")):
+        return True
+    m = re.match(r"^https://[a-z0-9-]+\.[a-z0-9-]+\.ts\.net(:\d+)?$", origin)
+    return bool(m)
 
 
 def _throttle():
@@ -2017,7 +2022,10 @@ def main():
     RT = DemoRealtime() if DEMO else Realtime()
     RT.start()
     print(f"나무 PLUG 중계기 실행 중: http://{HOST}:{PORT}  {'[데모 모드 — 가짜 시세]' if DEMO else '[실제 시세]'}  · 실시간 체결·호가 포함")
-    print(f"중계기 토큰 (화면의 '중계기 연결'에 입력): {TOKEN}")
+    if os.environ.get("NH_BG"):   # 뒤에서 돌 때는 기록 파일(logs/bridge.log)에 토큰을 남기지 않음
+        print(f"중계기 토큰: 끝 4자리 …{TOKEN[-4:]} (전체는 {TOKEN_FILE if not os.environ.get('BRIDGE_TOKEN') else '환경변수'})")
+    else:
+        print(f"중계기 토큰 (화면의 '중계기 연결'에 입력): {TOKEN}")
     print(f"계좌 동기화 파일: {STATE_FILE}")
     if not DEMO:
         print(f"기록 백업 폴더: {BACKUP_DIR} (하루 한 파일 · 60일 보관)")

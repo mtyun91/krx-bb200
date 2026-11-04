@@ -9,6 +9,7 @@
     python nh_bridge.py --ask           (실제 시세 — 앱키·시크릿 입력)
     python nh_bridge.py --ask --trade   (+ 실계좌 주문 — 계좌번호·환경·한도 입력)
     python nh_bridge.py --demo          (가짜 시세)
+    python nh_bridge.py --ask --background   (키를 입력한 뒤 창 없이 뒤에서 돎 — 창을 닫아도 계속, 끄기는 윈도우_중계기_끄기.bat)
 종료: Ctrl+C
 """
 import os
@@ -76,8 +77,49 @@ def ask_trade(env):
     print(f"  → {'실전' if mode == 'live' else '모의투자'} · 1회 {int(env['NH_MAX_ORDER']):,}원 · 하루 {int(env['NH_MAX_DAY']):,}원\n", flush=True)
 
 
+LOG_DIR = os.path.join(HERE, "logs")
+PID_FILE = os.path.join(LOG_DIR, "bridge.pid")
+
+
+def go_background(env, args):
+    """키 입력이 끝난 실행기를 창 없는 새 프로세스로 다시 띄우고 이 창은 끝냄 — 키는 그 프로세스의 메모리(환경변수)에만"""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log_path = os.path.join(LOG_DIR, "bridge.log")
+    try:   # 기록이 5MB를 넘으면 한 번 밀어 둠
+        if os.path.getsize(log_path) > 5_000_000:
+            os.replace(log_path, log_path + ".old")
+    except OSError:
+        pass
+    env = dict(env)
+    env["NH_BG"] = "1"
+    logf = open(log_path, "a", encoding="utf-8")
+    logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} 뒤에서 켜기 =====\n")
+    logf.flush()
+    cmd = [sys.executable, "-u", os.path.abspath(__file__)] + args
+    kw = dict(env=env, stdin=subprocess.DEVNULL, stdout=logf, stderr=subprocess.STDOUT, cwd=HERE, close_fds=True)
+    if os.name == "nt":
+        w = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        if os.path.exists(w):
+            cmd[0] = w
+        kw["creationflags"] = 0x00000008 | 0x00000200 | 0x08000000   # DETACHED_PROCESS · 새 프로세스 그룹 · 창 없음
+    else:
+        kw["start_new_session"] = True
+    p = subprocess.Popen(cmd, **kw)
+    with open(PID_FILE, "w", encoding="utf-8") as f:
+        f.write(str(p.pid))
+    time.sleep(5)
+    if p.poll() is not None:
+        print(f"\n중계기가 켜지자마자 멈췄어요 (코드 {p.returncode}). 기록: {log_path}", flush=True)
+        return 1
+    print("\n중계기를 뒤에서 켰어요. 이제 이 창을 닫아도 계속 돌아요.", flush=True)
+    print(f"  · 기록: {log_path}", flush=True)
+    print("  · 끄기: 윈도우_중계기_끄기.bat 더블클릭 (또는 컴퓨터를 끄면 꺼짐)", flush=True)
+    print("  · 컴퓨터를 다시 켜면 키를 다시 넣어야 해요 (키는 어디에도 저장하지 않음)", flush=True)
+    return 0
+
+
 def main():
-    args = [a for a in sys.argv[1:] if a not in ("--ask", "--trade")]
+    args = [a for a in sys.argv[1:] if a not in ("--ask", "--trade", "--background")]
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     if "--demo" not in args and not (env.get("NH_APPKEY") and env.get("NH_APPSECRET")):
@@ -97,6 +139,8 @@ def main():
             print("  → AI 코멘트 없이 실행", flush=True)
     if "--trade" in sys.argv and "--demo" not in args and not env.get("NH_ACCT_NO"):
         ask_trade(env)
+    if "--background" in sys.argv and not env.get("NH_BG"):
+        sys.exit(go_background(env, args))
 
     child = None
 
