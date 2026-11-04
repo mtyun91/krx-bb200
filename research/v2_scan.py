@@ -81,7 +81,12 @@ for f in glob.glob(os.path.join(D, '*.csv')):
                     chg=c[i] / c[i - 1] - 1, volr=v[i] / vma[i] if vma[i] else np.nan, cmf=cmf[i],
                     obvhi=bool(obv[i] >= obvmax[i] * 0.999 if obvmax[i] > 0 else obv[i] >= obvmax[i]),
                     flat120=abs(c[i - 1] / c[i - 121] - 1), ma60up=bool(m60[i] > m60[i - 20]),
-                    ext=c[i] / up[i] - 1, amt=amt[i] / 1e8)
+                    ext=c[i] / up[i] - 1, amt=amt[i] / 1e8,
+                    # 2026-11-04 추가 후보: 봉 안 종가 위치 · 윗꼬리 · 갭 · 60일 수익률 · 1년 고점 대비 · 밴드 폭(%) · 20일 변동성
+                    cpos=(c[i] - l[i]) / (h[i] - l[i]) if h[i] > l[i] else 1.0, gap=o[i] / c[i - 1] - 1,
+                    r60=c[i] / c[i - 60] - 1, hi250=c[i] / h[i - 250:i].max() - 1, bw=w[p],
+                    vol20=float(np.std(np.diff(np.log(c[i - 20:i + 1])))), obvhi250=bool(obv[i] >= obv[i - 249:i + 1].max()),
+                    m20up=bool(m20[i] > m20[i - 5]), above60=bool(c[i] > m60[i]))
 
     # A) 상단 돌파
     for i in range(760, n - 1):
@@ -95,9 +100,19 @@ for f in glob.glob(os.path.join(D, '*.csv')):
         p10, _ = run_exit(o, h, l, c, m10, i + 1, c[i], stop, n, tp=0.10)
         p15, _ = run_exit(o, h, l, c, m10, i + 1, c[i], stop, n, tp=0.15)
         p10b, hp = run_exit(o, h, l, c, m20, i + 1, c[i], stop, n, tp=0.10)
+        p8b, _ = run_exit(o, h, l, c, m20, i + 1, c[i], stop, n, tp=0.08)
+        p12b, _ = run_exit(o, h, l, c, m20, i + 1, c[i], stop, n, tp=0.12)
+        p15b, _ = run_exit(o, h, l, c, m20, i + 1, c[i], stop, n, tp=0.15)
+        p10n, _ = run_exit(o, h, l, c, m20, i + 1, c[i], stop, n, tp=0.10, be=False)
+        # 시간 손절: 10일 안에 +5%를 한 번도 못 넘으면 10일째 종가에 정리 (그 전에는 절반 익절·20일선 그대로)
+        j10 = min(n - 1, i + 10)
+        if hp is not None and hp > 10 and h[i + 1:j10 + 1].max() < c[i] * 1.05:
+            pt = c[j10] / c[i] * (1 - COST) - 1
+        else:
+            pt = p10b
         # 최대 상승·하락 (20일)
         j2 = min(n, i + 21)
-        R.append({**feats(i), 'r10': r10, 'hold': h10, 'r20': r20, 'h20': h20, 'hp': hp, 'p10': p10, 'p15': p15, 'p10b': p10b,
+        R.append({**feats(i), 'r10': r10, 'hold': h10, 'r20': r20, 'h20': h20, 'hp': hp, 'p10': p10, 'p15': p15, 'p10b': p10b, 'p8b': p8b, 'p12b': p12b, 'p15b': p15b, 'p10n': p10n, 'pt': pt,
                   'mfe20': h[i + 1:j2].max() / c[i] - 1, 'mae20': l[i + 1:j2].min() / c[i] - 1, 'stoppct': stop / c[i] - 1})
 
     # B) 돌파 직전 선취매 — 종가가 상단 아래 0~5% (20일 안 처음), 양봉, 매집(OBV 120일 신고가·CMF≥0.1), 수축(폭 하위 25%·120일 횡보 ±15%)

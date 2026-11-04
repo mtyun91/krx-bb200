@@ -371,7 +371,7 @@
       capital: 10000000, slotPct: 20, maxPos: 5, slotAuto: true, approval: true,
       invOn: false, invEntry: -30, invExit: -10, invLev: 'AUTO', invLevScore: -60, invPct: 30, invMaxDays: 15, invExitMa: 10, inv1: '114800', inv2: '252670',
       entryMode: 'SQ', sqPct: 15, sqDrop: 30, sqRange: 60, sqZone: 50, sqFollow: false, sqFollowDays: 20, waitPct: 10, waitAlertPct: 2, lcWait: false, lcAtr: 2, lcChg: 7, lcDays: 15, ma5Confirm: false, accOn: true, accPct: 25, accDays: 120, accFlat: 15, accCmf: 0.1, midSettleDays: 5, smallPH: true, smallCap: 5000, phOn: true, phCap: 5000, phDays: 120,
-      brOn: true, brMin: 40, sigCap: 2000, obvNeed: true,   // 2026-11-04 검증: 시장 체력 · 시가총액 · 매집(OBV) 확인
+      brOn: true, brMin: 40, sigCap: 2000, obvNeed: true, obvDays: 250, closeTop: 80,   // 2026-11 검증: 시장 체력 · 시가총액 · 매집(OBV) · 강한 마감
       bbPeriod: 200, bbStd: 2.0,
       exitMa: 20, pullbackPct: 1.5, stopMode: 'BREAK', tpPct: 10,
       w1: 100, w2: 0, w3: 0,
@@ -382,7 +382,7 @@
       buyFee: 0.01, sellFee: 0.01, taxPct: 0.20, slipPct: 0.05,
       barCount: 1000, minCount: 800, liveSec: 10, listMin: 5, rtMax: 30,
       decisionTime: '15:20', pollMin: 5, holidays: '',
-      stratV: 2   // 전략 판 번호 (화면 설정 아님) — 예전 판으로 저장된 설정을 한 번 새 전략으로 옮김
+      stratV: 3   // 전략 판 번호 (화면 설정 아님) — 예전 판으로 저장된 설정을 한 번 새 전략으로 옮김
     };
     const SETTING_DEFS = [
       { group: '자금 관리', items: [
@@ -407,7 +407,9 @@
         { k: 'brOn', label: '시장 체력 확인: 200일선 위에 있는 종목이 적은 날(시장이 약한 날)의 돌파는 사지 않음', type: 'bool' },
         { k: 'brMin', label: '└ 200일선 위 종목 비율 % 이상일 때만', min: 0, max: 90, step: 5 },
         { k: 'sigCap', label: '시가총액 몇 억 원 이상만 매수 (0이면 안 봄)', min: 0, max: 100000, step: 500 },
-        { k: 'obvNeed', label: '매집 확인: 돌파한 날 OBV(누적 거래량)가 120일 신고가일 때만 매수', type: 'bool' },
+        { k: 'obvNeed', label: '매집 확인: 돌파한 날 OBV(누적 거래량)가 신고가일 때만 매수', type: 'bool' },
+        { k: 'obvDays', label: '└ OBV 며칠 신고가', min: 60, max: 500, step: 10 },
+        { k: 'closeTop', label: '강한 마감: 돌파한 날 종가가 그날 봉(저가~고가)의 위쪽 몇 % 안 (윗꼬리 짧게 · 0이면 안 봄)', min: 0, max: 100, step: 5 },
         { k: 'sqPct', label: '스퀴즈: 밴드 폭이 최근 3년 중 하위 %', min: 1, max: 50, step: 1 },
         { k: 'sqDrop', label: '스퀴즈: 1년 저점이 2년 고점보다 % 이상 낮음 (하락 흔적)', min: 0, max: 90, step: 5 },
         { k: 'sqRange', label: '스퀴즈: 120일 고점·저점 차이 % 이하 (횡보)', min: 10, max: 300, step: 5 },
@@ -511,14 +513,24 @@
     };
 
     // 컴퓨터끼리 동기화되는 부분 (설정 · 관심종목 · 종목군 · 모의 계좌 · 종목명)
-    let stratMoved = false;
+    let stratMoved = false, stratFrom2 = false;
     function applySynced(d) {
       if (d.cfg && d.cfg.exitMa === undefined) { d.cfg = { ...d.cfg, w1: 50, w2: 50, w3: 0 }; }
       // 2026-11-04 전략 2판: 한 번에 사기 · 매집 경로 · 시장 체력/시가총액/OBV 확인 · 20일선 매도 + 절반 익절 · 전체 시장 (사용자 요청으로 기존 설정을 한 번 옮김)
       if (d.cfg && !(d.cfg.stratV >= 2)) {
         d.cfg = { ...d.cfg, w1: 100, w2: 0, w3: 0, accOn: true, exitMa: 20, tpPct: 10, brOn: true, brMin: 40, sigCap: 2000, obvNeed: true, mktBars: Math.max(Number(d.cfg.mktBars) || 0, 760), stratV: 2 };
         d.universe = 'ALL';
-        if (!stratMoved) { stratMoved = true; setTimeout(() => { saveStore(); toast('새 전략(2판)으로 바꿨어요 — 시장 체력·시가총액·매집 확인 · 한 번에 매수 · 20일선 매도 + 10% 절반 익절 · 전체 시장. 설정 탭에서 바꿀 수 있어요'); }, 2000); }
+        stratFrom2 = true;
+      }
+      // 2026-11-05 전략 3판: 강한 마감(종가가 봉 위쪽 80%) + OBV 250일 신고가 — 승률 48% → 53% (research/v3_report.py)
+      if (d.cfg && !(d.cfg.stratV >= 3)) {
+        d.cfg = { ...d.cfg, obvNeed: true, obvDays: 250, closeTop: 80, stratV: 3 };
+        if (!stratMoved) {
+          stratMoved = true;
+          const msg = stratFrom2 ? '새 전략(3판)으로 바꿨어요 — 시장 체력·시가총액·1년 매집(OBV)·강한 마감 확인 · 한 번에 매수 · 20일선 매도 + 10% 절반 익절 · 전체 시장. 설정 탭에서 바꿀 수 있어요'
+            : '전략 3판으로 바꿨어요 — 돌파한 날 종가가 봉 위쪽 80% 안(윗꼬리 짧게) + OBV 250일 신고가(1년 매집)일 때만 매수. 설정 탭에서 바꿀 수 있어요';
+          setTimeout(() => { saveStore(); toast(msg); }, 2000);
+        }
       }
       if (d.cfg) Object.keys(DEFAULTS).forEach((k) => { if (typeof d.cfg[k] === typeof DEFAULTS[k]) state.cfg[k] = d.cfg[k]; });
       if (Array.isArray(d.watch)) state.watch = d.watch.filter((c) => /^[0-9A-Z]{6}$/.test(c));
@@ -918,12 +930,13 @@
     //  ① 중심선 안착: 돌파 전 midSettleDays일 안에 종가가 BB 중심선 아래였으면 — 중심선 밑에서 짧게 상단까지 뚫은 돌파는 실패가 많음
     //  ② 소형주 전고점: 시가총액 smallCap억 미만이면 직전 120일 안에 상단을 찔렀다가 음봉으로 밀린 봉(전고점)이 있어야 — 첫 시도 돌파는 실패가 많음
     //  ③ 시장 체력 (brOn): 그날 200일선 위 종목 비율이 brMin% 미만이면 — 약한 시장의 돌파는 본전 근처 (research/v2_*.py)
-    //  ④ 시가총액 sigCap억 미만이면  ⑤ 매집 확인 (obvNeed): 그날 OBV가 120일 신고가가 아니면
+    //  ④ 시가총액 sigCap억 미만이면  ⑤ 매집 확인 (obvNeed): 그날 OBV가 obvDays일 신고가가 아니면  ⑥ 강한 마감 (closeTop): 종가가 봉 아래쪽이면
     function structWhy(bars, i) {
       const c = state.cfg, b = bars[i];
       if (c.brOn && c.brMin > 0) { const br = breadthAt(b.t); if (br != null && br * 100 < c.brMin) return `시장 체력 약함 (200일선 위 종목 ${Math.round(br * 100)}% < ${c.brMin}%)`; }
       if (c.sigCap > 0) { const cap = capOf(codeOfBars(bars), b.c); if (cap != null && cap < c.sigCap * 1e8) return `시가총액 ${Math.round(cap / 1e8).toLocaleString()}억 < ${c.sigCap.toLocaleString()}억`; }
-      if (c.obvNeed && b.obv != null && i >= 120) { for (let k = i - 119; k < i; k++) if (bars[k].obv > b.obv) return '매집 확인 안 됨 (OBV가 120일 신고가 아님)'; }
+      if (c.obvNeed && b.obv != null && i >= c.obvDays) { for (let k = i - c.obvDays + 1; k < i; k++) if (bars[k].obv > b.obv) return `매집 확인 안 됨 (OBV가 ${c.obvDays}일 신고가 아님)`; }
+      if (c.closeTop > 0 && b.h > b.l && (b.c - b.l) / (b.h - b.l) < c.closeTop / 100) return `마감이 약함 (종가가 그날 봉의 위쪽 ${Math.round((b.c - b.l) / (b.h - b.l) * 100)}% — 윗꼬리가 김)`;
       for (let k = 1; k <= c.midSettleDays && i - k >= 0; k++) { const x = bars[i - k]; if (x.ready && x.c < x.mid) return `중심선 아래에서 빠르게 올라옴 (${k}일 전 종가가 중심선 아래)`; }
       if (c.smallPH) {
         const cap = capOf(codeOfBars(bars), b.c);
@@ -1113,7 +1126,7 @@
     // AI에게 넘기는 지금 전략 한 줄
     function stratText() {
       const c = state.cfg;
-      return `BB${c.bbPeriod} 상단 종가 돌파 매수(${c.winStart}~${c.winEnd}) — 200일 스퀴즈·전고점·매집 경로, 시장 체력 ${c.brOn ? `200일선 위 종목 ${c.brMin}% 이상` : '안 봄'}, 시가총액 ${c.sigCap ? `${c.sigCap}억 이상` : '안 봄'}, 매집(OBV 120일 신고가) 확인 ${c.obvNeed ? '켬' : '끔'} · 한 번에 ${c.w1}% · 손절 ${STOP_NAMES[c.stopMode]}${c.tpPct > 0 ? ` · 평단 +${c.tpPct}% 절반 익절 뒤 본전 손절` : ''} · 종가 ${c.exitMa}일선 이탈 매도`;
+      return `BB${c.bbPeriod} 상단 종가 돌파 매수(${c.winStart}~${c.winEnd}) — 200일 스퀴즈·전고점·매집 경로, 시장 체력 ${c.brOn ? `200일선 위 종목 ${c.brMin}% 이상` : '안 봄'}, 시가총액 ${c.sigCap ? `${c.sigCap}억 이상` : '안 봄'}, 매집(OBV ${c.obvDays}일 신고가) 확인 ${c.obvNeed ? '켬' : '끔'}, 강한 마감 ${c.closeTop ? `종가가 봉 위쪽 ${c.closeTop}% 안` : '안 봄'} · 한 번에 ${c.w1}% · 손절 ${STOP_NAMES[c.stopMode]}${c.tpPct > 0 ? ` · 평단 +${c.tpPct}% 절반 익절 뒤 본전 손절` : ''} · 종가 ${c.exitMa}일선 이탈 매도`;
     }
     function costBuy() { return (state.cfg.buyFee + state.cfg.slipPct) / 100; }
     function costSell() { return (state.cfg.sellFee + state.cfg.taxPct + state.cfg.slipPct) / 100; }
@@ -5495,7 +5508,7 @@ else if(d.kind==='update')subs.forEach((f)=>{try{f(d.data);}catch(_){}});});})()
       if (r) openMark(r.dataset.mark);
     });
     // 버전 — 커밋할 때마다 자동으로 올라감 (저장소의 pre-commit 훅이 아래 한 줄을 고침)
-    const APP_VERSION = '1.38', APP_DATE = '2026-11-04';
+    const APP_VERSION = '1.39', APP_DATE = '2026-11-05';
     const verTxt = (v, d) => `v${v} · ${d.slice(2).replace(/-/g, '.')}`;
     document.getElementById('appVer').textContent = verTxt(APP_VERSION, APP_DATE);
     // 새 버전 알림 — 이 화면 파일이 서버에서 바뀌면 위쪽에 '새로고침' 띠를 띄움 (자동으로 새로고침하지는 않음: 주문·대화 중일 수 있어서)
@@ -6634,13 +6647,14 @@ onmessage = (e) => { const { body, sets } = e.data;
         if (c.w2 || c.w3) add('info', `승인하면 계획에 따라 눌림 반등 때 2차 ${c.w2}%${c.w3 ? `, 전고점 돌파 때 3차 ${c.w3}%` : ''}를 자동으로 더 삼`);
         if (b) {   // 2판 확인 항목 — 숫자로 보여 줌
           const br = breadthAt(b[i].t), cap = capOf(a.code, px);
-          let obvHi = i >= 120 && b[i].obv != null;
-          if (obvHi) for (let k = i - 119; k < i; k++) if (b[k].obv > b[i].obv) { obvHi = false; break; }
+          let obvHi = i >= c.obvDays && b[i].obv != null;
+          if (obvHi) for (let k = i - c.obvDays + 1; k < i; k++) if (b[k].obv > b[i].obv) { obvHi = false; break; }
+          const cpos = b[i].h > b[i].l ? Math.round((b[i].c - b[i].l) / (b[i].h - b[i].l) * 100) : 100;
           add(br != null && br * 100 < c.brMin ? 'high' : 'info', `시장 체력: 200일선 위 종목 ${br == null ? '계산 전' : `${Math.round(br * 100)}%`} (기준 ${c.brMin}% 이상 — 40% 밑에서는 과거 돌파가 본전 근처였음)`);
-          add(cap != null && cap < c.sigCap * 1e8 ? 'mid' : 'info', `시가총액 ${cap == null ? '모름' : `${Math.round(cap / 1e8).toLocaleString()}억`} · 매집(OBV 120일 신고가) ${obvHi ? '확인됨' : '아님'}`);
+          add(cap != null && cap < c.sigCap * 1e8 ? 'mid' : 'info', `시가총액 ${cap == null ? '모름' : `${Math.round(cap / 1e8).toLocaleString()}억`} · 매집(OBV ${c.obvDays}일 신고가) ${obvHi ? '확인됨' : '아님'} · 마감 위치 봉의 ${cpos}%${c.closeTop && cpos < c.closeTop ? ' (윗꼬리가 김)' : ''}`);
           const sp = b[i].l;
           add('info', `손절선(오늘 저가) ${won(Math.round(sp))}원 — 지금가 대비 ${((sp / px - 1) * 100).toFixed(1)}%${c.tpPct > 0 ? ` · 산 뒤 할 일: 평단 +${c.tpPct}%(${won(Math.round(px * (1 + c.tpPct / 100)))}원)에 절반 지정가 매도를 걸어 두면 검증과 같은 방식` : ''}`);
-          add('info', '과거 검증(2017~2026, 같은 조건 1,270건): 승률 약 48% · 거래당 평균 +2.0% — 손절이 절반쯤, 큰 수익은 몇 번에서 나옴');
+          add('info', '과거 검증(2017~2026, 같은 조건 694건): 승률 약 53% · 거래당 평균 +2.8% — 손절이 절반쯤, 큰 수익은 몇 번에서 나옴');
         }
         const bt = state.bt && state.bt.stats;
         if (bt) add('info', `지금 전략 백테스트: 승률 ${bt.win.toFixed(0)}% · 거래당 평균 ${pctTxt(bt.avgRet)} · 최대낙폭 -${bt.mdd.toFixed(1)}% — 대부분의 거래는 작은 손실로 끝남`);
