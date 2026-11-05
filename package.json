@@ -1,0 +1,13 @@
+{
+  "name": "partisan-context-trading",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Daily structure and intraday execution workspace",
+  "scripts": {
+    "test": "node tests/engine.test.cjs",
+    "test:ui": "node tests/ui.test.cjs",
+    "test:trading": "node tests/trading.test.cjs",
+    "test:legacy": "node tools/test_strategy.cjs"
+  },
+  "devDependencies": {"playwright": "1.62.1"}
+}

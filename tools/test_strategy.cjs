@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const html = fs.readFileSync(path.join(__dirname, '..', 'partisan_investment.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', 'partisan_legacy.html'), 'utf8');
 function fn(name) {
   const start = html.indexOf(`    function ${name}(`);
   assert(start >= 0, name);
@@ -49,4 +49,3 @@ test('grace never disables structural invalidation', `state.cfg.exitGrace=3;cons
 test('post-breakout MA5 support is eligible only inside the configured window', `state.cfg.pullbackDays=3;const b=Array.from({length:8},(_,i)=>({t:String(i),c:100,o:100,l:99,h:102,signal:false}));b[5].signal=true;b[5].l=95;b[6]={c:99,o:100,l:98,h:100};b[7]={c:102,o:100,l:100,h:103};assert.equal(pullbackSignal(b,7),5);assert.equal(isBreakout(b,7),true);state.cfg.pullbackDays=1;assert.equal(pullbackSignal(b,7),null);`);
 test('a rising 5-minute breakout must be fresh and above VWAP', `clock={ymd:'20260105',min:565};executionMinutes.A={at:Date.now(),bars:[{t:'202601050900',h:101,l:99,c:100,v:100},{t:'202601050905',h:102,l:100,c:101,v:100},{t:'202601050910',h:103,l:101,c:102,v:100},{t:'202601050915',h:106,l:102,c:105,v:100}]};assert.equal(minuteEvidence('A',105).pass,true);assert.equal(minuteEvidence('A',99).pass,false);executionMinutes.A.at-=130000;assert.equal(minuteEvidence('A',105).ready,false);clock={ymd:'20261231',min:940};`);
 console.log(count+' strategy regression tests passed');
-

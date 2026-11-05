@@ -29,3 +29,7 @@ research/listing.json
 
 # 뒤에서 도는 중계기 기록·프로세스 번호
 logs/
+
+# 새 화면 검증의 로컬 의존성·산출물
+node_modules/
+work/
