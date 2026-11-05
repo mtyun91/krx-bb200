@@ -4,7 +4,7 @@
 
 ## partisan_investment.html
 
-27줄
+36줄
 
 
 ## app/engine.js
@@ -27,57 +27,61 @@
 
 ## app/app.js
 
-197줄
+240줄
 
 - `now`: 10
 - `notify`: 11
 - `name`: 12
 - `save`: 13
 - `load`: 14
-- `log`: 20
-- `db`: 21
-- `cached`: 22
-- `cache`: 23
-- `bridge`: 25
-- `installData`: 27
-- `loadCode`: 34
-- `loadMinutes`: 38
-- `minuteEvidence`: 39
-- `price`: 40
-- `equity`: 41
-- `activeAnalysis`: 42
-- `currentAnalysis`: 43
-- `entryCandidate`: 44
-- `phaseBadge`: 49
-- `renderWatch`: 50
-- `renderChart`: 53
-- `renderFlow`: 55
-- `renderDecision`: 56
-- `showMinuteSelection`: 71
-- `select`: 72
-- `page`: 73
-- `getFreshQuote`: 74
-- `inspect`: 76
-- `addAgenda`: 77
-- `evaluateCode`: 78
-- `evaluateAll`: 93
-- `renderPortfolio`: 94
-- `openApproval`: 100
-- `updateApproval`: 102
-- `executeApproval`: 103
-- `openAnnotation`: 111
-- `renderLab`: 112
+- `log`: 21
+- `db`: 22
+- `cached`: 23
+- `cache`: 24
+- `bridge`: 26
+- `installData`: 28
+- `loadCode`: 35
+- `loadMinutes`: 39
+- `minuteEvidence`: 40
+- `price`: 41
+- `equity`: 42
+- `activeAnalysis`: 43
+- `currentAnalysis`: 44
+- `entryCandidate`: 45
+- `phaseBadge`: 50
+- `renderWatch`: 51
+- `renderChart`: 54
+- `renderFlow`: 56
+- `renderDecision`: 57
+- `showMinuteSelection`: 72
+- `select`: 73
+- `page`: 74
+- `getFreshQuote`: 75
+- `inspect`: 77
+- `addAgenda`: 78
+- `evaluateCode`: 79
+- `evaluateAll`: 94
+- `renderPortfolio`: 95
+- `openApproval`: 101
+- `updateApproval`: 103
+- `executeApproval`: 104
+- `openAnnotation`: 112
+- `renderLab`: 113
 - `settingsDialog`: 117
 - `refreshWatch`: 119
-- `scanMarket`: 120
-- `setMaster`: 127
-- `runResearch`: 128
-- `download`: 135
-- `sanitizeNote`: 136
-- `importFile`: 137
-- `connectDialog`: 142
-- `clockTick`: 190
-- `init`: 192
+- `setMaster`: 120
+- `runResearch`: 121
+- `download`: 128
+- `sanitizeNote`: 129
+- `importFile`: 130
+- `connectDialog`: 135
+- `loadScreener`: 192
+- `saveScreener`: 193
+- `renderScreener`: 194
+- `cachedUniverse`: 204
+- `scanMarket`: 205
+- `clockTick`: 232
+- `init`: 235
 
 ## app/chart.js
 
@@ -90,6 +94,31 @@
 3줄
 
 
+## app/screener.js
+
+26줄
+
+- `marketKey`: 4
+- `universe`: 5
+- `inspect`: 8
+- `filter`: 19
+
+## app/terminal.js
+
+119줄
+
+- `render`: 8
+- `refresh`: 21
+- `confirm`: 36
+- `updateConfirm`: 42
+- `validate`: 43
+- `review`: 57
+- `submit`: 63
+- `stop`: 94
+- `prepare`: 100
+- `amount`: 103
+- `reset`: 104
+
 ## app/cases.js
 
 8줄
@@ -97,7 +126,7 @@
 
 ## app/style.css
 
-1줄
+9줄
 
 
 ## nh_bridge_core.py

@@ -7,7 +7,11 @@
     "test": "node tests/engine.test.cjs",
     "test:ui": "node tests/ui.test.cjs",
     "test:trading": "node tests/trading.test.cjs",
-    "test:legacy": "node tools/test_strategy.cjs"
+    "test:legacy": "node tools/test_strategy.cjs",
+    "test:screener": "node tests/screener.test.cjs",
+    "test:hts": "node tests/hts.test.cjs"
   },
-  "devDependencies": {"playwright": "1.62.1"}
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
 }

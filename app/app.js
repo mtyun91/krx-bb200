@@ -1,19 +1,20 @@
-/* Browser controller. Quotes are read-only; every simulated fill requires a fresh explicit approval. */
+/* HTS controller. Strategy observation and explicit broker execution use separate ledgers. */
 (function(){'use strict';
-const E=PartisanEngine,CASES=PartisanCases,$=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const E=PartisanEngine,S=PartisanScreener,$=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=x=>Number.isFinite(x)?Math.round(x).toLocaleString('ko-KR'):'—',pct=x=>Number.isFinite(x)?`${x>0?'+':''}${x.toFixed(2)}%`:'—';
 const date=t=>t?`${t.slice(0,4)}.${t.slice(4,6)}.${t.slice(6,8)}`:'—';
 const roles={entry:'진입 선호',hold:'보유 유지',wait:'대기',avoid:'회피',exit:'청산 검토',reference:'참고 구간'};
-const state={mode:'real',settings:{...E.DEFAULTS},watch:CASES.map(x=>x.code),selected:CASES[0].code,notes:[],cash:E.DEFAULTS.capital,positions:{},agendas:[],log:[],data:{},master:CASES.map(x=>({...x})),minutes:{},page:'workspace',filter:'all',view:'daily',index:null,monitor:false,scan:false,connection:{ok:false,url:'http://127.0.0.1:8766',token:''}};
+const state={mode:'real',settings:{...E.DEFAULTS},watch:[],selected:null,notes:[],cash:E.DEFAULTS.capital,positions:{},agendas:[],log:[],data:{},master:[],minutes:{},page:'screener',filter:'all',view:'daily',index:null,monitor:false,scan:false,connection:{ok:false,url:'http://127.0.0.1:8766',token:''}};
 const storageKey=()=>`partisan.v2.${state.mode}`;
 let dbPromise,approval=null,approvalReadyAt=0,rangeDraft=null,selectionRevision=0,scanRevision=0,monitorBusy=false,executing=false,btResult=null;
 function now(){const p=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());return {day:p.slice(0,10).replaceAll('-',''),min:+p.slice(11,13)*60+(+p.slice(14,16)),text:p};}
 function notify(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(notify.timer);notify.timer=setTimeout(()=>$('toast').hidden=true,5500);}
-function name(code){return state.master.find(x=>x.code===code)?.name||state.data[code]?.name||code;}
-function save(){const data={version:2,settings:state.settings,watch:state.watch,selected:state.selected,notes:state.notes,cash:state.cash,positions:state.positions,agendas:state.agendas,log:state.log};try{localStorage.setItem(storageKey(),JSON.stringify(data));}catch(_){notify('브라우저 저장 공간이 부족합니다. 기록을 내보내세요.');}}
+function name(code){if(!code)return '종목을 선택하세요';return state.master.find(x=>x.code===code)?.name||state.data[code]?.name||code;}
+function save(){const data={version:2,htsMigrated:true,settings:state.settings,watch:state.watch,selected:state.selected,notes:state.notes,cash:state.cash,positions:state.positions,agendas:state.agendas,log:state.log};try{localStorage.setItem(storageKey(),JSON.stringify(data));}catch(_){notify('브라우저 저장 공간이 부족합니다. 기록을 내보내세요.');}}
 function load(){
  try{const d=JSON.parse(localStorage.getItem(storageKey())||'null');if(d?.version===2){for(const k of Object.keys(E.DEFAULTS))if(typeof d.settings?.[k]===typeof E.DEFAULTS[k])state.settings[k]=d.settings[k];
- state.watch=Array.isArray(d.watch)?d.watch.filter(c=>/^[0-9A-Z]{6}$/.test(c)):state.watch;state.selected=state.watch.includes(d.selected)?d.selected:state.watch[0]||CASES[0].code;
+ state.watch=Array.isArray(d.watch)?d.watch.filter(c=>/^[0-9A-Z]{6}$/.test(c)):state.watch;
+ if(!d.htsMigrated){const reference=['067310','085660','214430','383220','251270','005930'];if(state.watch.length===6&&reference.every(c=>state.watch.includes(c))&&!d.notes?.length&&!Object.keys(d.positions||{}).length&&!d.log?.length)state.watch=[];}state.selected=state.watch.includes(d.selected)?d.selected:state.watch[0]||null;
  state.notes=Array.isArray(d.notes)?d.notes.slice(0,500):[];state.cash=Number.isFinite(d.cash)&&d.cash>=0?d.cash:state.settings.capital;state.positions=d.positions&&typeof d.positions==='object'?d.positions:{};state.agendas=Array.isArray(d.agendas)?d.agendas.slice(0,100):[];state.log=Array.isArray(d.log)?d.log.slice(0,300):[];
  }}catch(_){notify('저장 기록을 읽지 못했습니다. 원본 저장값은 변경하지 않았습니다.');}
 }
@@ -21,8 +22,8 @@ function log(kind,code,reason,extra={}){state.log.unshift({id:crypto.randomUUID(
 function db(){if(!dbPromise)dbPromise=new Promise((resolve,reject)=>{const r=indexedDB.open('krx-bars',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('bars'))r.result.createObjectStore('bars');};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});return dbPromise;}
 async function cached(code,mode=state.mode){try{const d=await db();return await new Promise(resolve=>{const r=d.transaction('bars').objectStore('bars').get(`${mode}:${code}`);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>resolve(null);});}catch(_){return null;}}
 async function cache(code,data,mode){try{const d=await db();await new Promise((resolve,reject)=>{const tx=d.transaction('bars','readwrite');tx.objectStore('bars').put({bars:E.normalize(data.bars),name:data.name,saved:Date.now(),count:data.bars.length},`${mode}:${code}`);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});}catch(_){notify('시세 캐시 저장 실패 — 현재 화면에서는 계속 볼 수 있습니다.');}}
-const ALLOWED=new Set(['/health','/krx/master','/krx/daily','/krx/chart']);
-async function bridge(path,body){if(!ALLOWED.has(path))throw Error('이 화면은 시세 조회만 허용합니다');const c=state.connection;if(!c.token)throw Error('중계기를 먼저 연결하세요');const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),path==='/health'?8000:90000);
+const ALLOWED=new Set(['/health','/krx/master','/krx/daily','/krx/chart','/trade/status','/trade/balance','/trade/orders','/trade/arm','/trade/order','/trade/cancel']);
+async function bridge(path,body){if(!ALLOWED.has(path))throw Error('허용되지 않은 중계기 요청입니다');const c=state.connection;if(!c.token)throw Error('중계기를 먼저 연결하세요');const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),path==='/health'?8000:90000);
  try{const r=await fetch(c.url+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Bridge-Token':c.token},body:body?JSON.stringify(body):undefined,signal:ctrl.signal});const d=await r.json();if(!r.ok)throw Error(d.error||`시세 오류 ${r.status}`);return d;}catch(e){if(e.name==='AbortError')throw Error('중계기 응답 지연 — 다시 시도하세요');throw e;}finally{clearTimeout(timer);}}
 function installData(code,r,source='cache'){
  const raw=E.normalize(r.bars),q=r.quote;
@@ -31,7 +32,7 @@ function installData(code,r,source='cache'){
   if(E.normalize([live]).length){if(raw.at(-1).t===q.date)raw[raw.length-1]=live;else raw.push(live);}
  }
  const bars=E.indicators(raw);state.data[code]={bars,analysis:E.timeline(bars,state.settings),name:r.name||name(code),quote:r.quote||null,received:source==='bridge'?Date.now():0,source};}
-async function loadCode(code,force=false){const mode=state.mode;
+async function loadCode(code,force=false){if(!code)return null;const mode=state.mode;
  if(!force){const saved=await cached(code,mode);if(saved&&mode===state.mode)installData(code,saved);if(state.data[code])return state.data[code];}
  if(!state.connection.ok)return state.data[code]||null;
  const r=await bridge('/krx/daily',{code,count:3000});if(mode!==state.mode)return null;installData(code,r,'bridge');await cache(code,r,mode);return state.data[code];}
@@ -50,7 +51,7 @@ function phaseBadge(phase){const def=E.PHASES[phase]||E.PHASES.DATA;return `<spa
 function renderWatch(){let codes=state.watch.filter(c=>state.filter==='all'||(state.filter==='ready'?state.data[c]?.analysis.at(-1)?.signal:['FAIL','WEAK'].includes(state.data[c]?.analysis.at(-1)?.phase)));codes.sort((a,b)=>(state.data[b]?.analysis.at(-1)?.context?.quality||0)-(state.data[a]?.analysis.at(-1)?.context?.quality||0));
  $('watchList').innerHTML=codes.map(code=>{const d=state.data[code],b=d?.bars.at(-1),p=d?.bars.at(-2),a=d?.analysis.at(-1);return `<button class="watch-item ${code===state.selected?'active':''}" data-code="${code}"><span class="watch-top"><strong>${esc(name(code))}</strong><span class="price">${money(b?.c)}</span></span><span class="watch-bottomline">${phaseBadge(a?.phase||'DATA')}<span class="${b&&p&&b.c>=p.c?'up':'down'}">${b&&p?pct((b.c/p.c-1)*100):code}</span></span></button>`;}).join('')||'<div class="empty-note">해당 상태의 종목이 없습니다.</div>';}
 const chart=new FlowChart($('chart'),{select:i=>{if(state.view==='minute'){showMinuteSelection(i);return;}state.index=i;renderDecision();},range:(a,b)=>openAnnotation(a,b),hover:(i)=>{const bars=state.view==='minute'?state.minutes[state.selected]?.bars:state.data[state.selected]?.bars;if(i==null||!bars?.[i]){$('chartTooltip').hidden=true;return;}const b=bars[i];$('chartTooltip').hidden=false;$('chartTooltip').textContent=`${date(b.t)}${b.t.length>8?' '+b.t.slice(8,10)+':'+b.t.slice(10,12):''}  시 ${money(b.o)} / 고 ${money(b.h)} / 저 ${money(b.l)} / 종 ${money(b.c)} · 거래량 ${money(b.v)}`;}});
-function renderChart(){const d=state.data[state.selected];$('stockName').textContent=name(state.selected);$('stockCode').textContent=`${state.selected} · BB200 · ${state.mode==='demo'?'가상 시세':'저장/조회 시세'}`;const b=d?.bars.at(-1),p=d?.bars.at(-2);$('stockPrice').textContent=money(b?.c);$('stockChange').textContent=b&&p?`${pct((b.c/p.c-1)*100)} · ${date(b.t)} 기준`:'시세를 연결하거나 저장 자료를 불러오세요';$('stockChange').className=b&&p&&b.c>=p.c?'up':'down';
+function renderChart(){const d=state.data[state.selected];$('stockName').textContent=name(state.selected);$('stockCode').textContent=`${state.selected||'KRX'} · BB200 · ${state.mode==='demo'?'가상 시세':'저장/조회 시세'}`;const b=d?.bars.at(-1),p=d?.bars.at(-2);$('stockPrice').textContent=money(b?.c);$('stockChange').textContent=b&&p?`${pct((b.c/p.c-1)*100)} · ${date(b.t)} 기준`:'시세를 연결하거나 저장 자료를 불러오세요';$('stockChange').className=b&&p&&b.c>=p.c?'up':'down';
  const minute=state.view==='minute',bars=minute?state.minutes[state.selected]?.bars:d?.bars;$('chartEmpty').hidden=!!bars?.length;chart.setData(bars||[],minute?[]:d?.analysis||[],{minute,annotations:minute?[]:state.notes.filter(n=>n.code===state.selected)});$('dailyBtn').classList.toggle('active',!minute);$('minuteBtn').classList.toggle('active',minute);$('zonesToggle').disabled=minute;renderFlow();renderDecision();}
 function renderFlow(){const d=state.data[state.selected];if(!d){$('flowStrip').innerHTML='<div class="empty-note">시세를 불러오면 구간별 해석이 표시됩니다.</div>';return;}const segs=E.segments(d.analysis).filter(s=>s.end-s.start>=2&&s.phase!=='DATA').slice(-5);$('flowStrip').innerHTML=segs.map(s=>{const def=E.PHASES[s.phase];return `<button class="flow-card" style="--phase:${def.color}" data-focus="${d.bars[s.start].t}|${d.bars[s.end].t}"><strong>${def.name}</strong><small>${date(d.bars[s.start].t)} — ${date(d.bars[s.end].t)}</small><p>${def.action}</p></button>`;}).join('');}
 function renderDecision(){const v=activeAnalysis();if(!v){$('analysisDate').textContent='시세 대기';$('decisionBody').innerHTML='<div class="state-card"><div class="eyebrow">CONTEXT FIRST</div><h2>한 봉보다, 앞뒤의 흐름</h2><p>이전 상승 시도, 가격 유지, 거래량 흐름을 함께 확인합니다. 시세가 없으면 판단을 만들어내지 않습니다.</p></div><section class="decision-section"><h3>분석 순서</h3><ul class="evidence"><li>앞선 고점 뒤 가격은 유지됐는가</li><li>작은 봉이 지지를 만드는가, 힘없이 흘러내리는가</li><li>5일선 이탈 뒤 회복 근거가 생기는가</li><li>구조가 깨지면 얼마를 잃을 수 있는가</li></ul></section>';return;}
@@ -65,12 +66,12 @@ function renderDecision(){const v=activeAnalysis();if(!v){$('analysisDate').text
  <section class="decision-section"><h3>이렇게 판단한 이유</h3><ul class="evidence">${a.reasons.slice(0,5).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></section>
  <section class="decision-section"><h3>5일선 이탈, 어떻게 볼까요?</h3><p class="small-note">${esc(a.ma5Meaning||'자료 확인 중')}</p><div class="metric-row"><span>5일선 거리</span><strong>${pct(a.ma5Distance)}</strong></div><p class="fineprint">매수 제외선이나 단독 손절선이 아닙니다. 작은 봉·저점 회복·매도 거래량을 함께 봅니다.</p></section>
  <section class="decision-section"><h3>판단이 달라지는 가격</h3><div class="metric-row"><span>이전 저항</span><strong>${money(a.resistance)}원</strong></div><div class="metric-row"><span>구조 지지</span><strong>${money(management?.stop||a.support)}원</strong></div><div class="metric-row"><span>현재가 → 지지 하락폭</span><strong>${pct(distanceRisk)}</strong></div><div class="metric-row"><span>손절 거리 지수</span><strong>${distanceRisk==null?'—':Math.max(0,Math.min(100,Math.round(distanceRisk*10)))+' / 100'}</strong></div><div class="risk-track"><i style="width:${Math.max(0,Math.min(100,(distanceRisk||0)*10))}%"></i></div><p class="fineprint">지수 = 지지까지 하락폭(%) × 10, 최대 100. 낮을수록 거리가 짧다는 뜻이며 승률이 아닙니다. 거리가 넓으면 수량을 줄입니다. 지지 가격은 손실 보장선이 아니며 갭·체결 지연으로 초과할 수 있습니다.</p></section>
- <section class="decision-section"><h3>다음 행동</h3><p class="small-note">${esc(management?.reason||a.action)}</p>${!historical?`<div class="metric-row"><span>계획 수량</span><strong>${money(sizing?.qty||0)}주</strong></div><div class="metric-row"><span>비용 포함 계획 손실</span><strong>${money(sizing?.risk||0)}원</strong></div><button class="button full" id="inspectMinutes">5분봉 흐름 확인</button><p class="small-note" style="margin-top:9px">${esc(minuteEvidence(state.selected,price(state.selected)).reason)}</p><button class="button primary full" style="margin-top:12px" id="createAgenda">${pos?'보유 대응 점검':'현재 후보 점검 · 안건 만들기'}</button>`:'<p class="fineprint">실행 판단은 최신 화면으로 돌아가 확인하세요.</p>'}</section>
+ <section class="decision-section"><h3>다음 행동</h3><p class="small-note">${esc(management?.reason||a.action)}</p>${!historical?`<div class="metric-row"><span>계획 수량</span><strong>${money(sizing?.qty||0)}주</strong></div><div class="metric-row"><span>비용 포함 계획 손실</span><strong>${money(sizing?.risk||0)}원</strong></div><button class="button full" id="inspectMinutes">5분봉 흐름 확인</button><p class="small-note" style="margin-top:9px">${esc(minuteEvidence(state.selected,price(state.selected)).reason)}</p><button class="button full" style="margin-top:12px" id="prepareBroker">증권사 주문창으로</button><button class="button primary full" style="margin-top:8px" id="createAgenda">${pos?'보유 대응 점검':'전략 점검 · 모의 안건'}</button>`:'<p class="fineprint">실행 판단은 최신 화면으로 돌아가 확인하세요.</p>'}</section>
  ${peers.length?`<section class="decision-section"><h3>내가 남긴 유사 흐름</h3>${peers.map(n=>`<p class="small-note">${roles[n.role]||'참고'} · ${esc(name(n.code))}<br>${esc(n.note)}</p>`).join('')}<p class="fineprint">선호·회피 기록과의 형태 비교입니다. 승률이나 자동 매수 정답이 아닙니다.</p></section>`:''}`;
 }
 function showMinuteSelection(i){const bars=state.minutes[state.selected]?.bars;if(i==null||!bars?.[i])return;const b=bars[i];$('chartHint').textContent=`${date(b.t)} ${b.t.slice(8,10)}:${b.t.slice(10,12)} · 분봉은 실행 확인용입니다. 오른쪽 구조 판단은 일봉 기준입니다.`;}
 async function select(code,focus){if(!/^[0-9A-Z]{6}$/.test(code))return;const revision=++selectionRevision;state.selected=code;state.index=null;state.view='daily';if(!state.watch.includes(code))state.watch.push(code);save();renderWatch();renderChart();try{await loadCode(code);if(revision!==selectionRevision)return;renderWatch();renderChart();if(focus)chart.focus(focus.from,focus.to);}catch(e){notify(e.message);}}
-function page(which){state.page=which;for(const k of ['workspace','portfolio','lab'])$(k+'Page').hidden=k!==which;document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===which));if(which==='portfolio')renderPortfolio();if(which==='lab')renderLab();if(which==='workspace')chart.schedule();}
+function page(which){state.page=which;for(const k of ['screener','workspace','terminal','portfolio','lab'])$(k+'Page').hidden=k!==which;document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===which));if(which==='screener')renderScreener();if(which==='terminal')terminal.refresh();if(which==='portfolio')renderPortfolio();if(which==='lab')renderLab();if(which==='workspace')chart.schedule();}
 function getFreshQuote(code){const d=state.data[code],q=d?.quote,k=now();const t=String(q?.time||'').padStart(6,'0'),min=+t.slice(0,2)*60+(+t.slice(2,4));
  if(!state.connection.ok||!q||q.date!==k.day||Date.now()-d.received>90000||Math.abs(k.min-min)>2||k.min<540||k.min>=930||!(q.price>0))return null;return q;}
 async function inspect(code){await loadCode(code,true);await loadMinutes(code);renderWatch();if(code===state.selected)renderChart();return minuteEvidence(code,price(code));}
@@ -90,7 +91,7 @@ async function evaluateCode(code,refresh=true){if(refresh)await loadCode(code,tr
  const sized=E.sizeOrder({equity:equity(),cash:state.cash,price:quote.price,stop:candidate.a.support,positions:Object.values(state.positions),settings:state.settings});if(!sized.qty)return;
  addAgenda(code,'BUY',candidate.provisional?'장중 준비된 돌파 · 분봉 회복 확인 (종가 실패 가능)':'확정 일봉 신호와 실행 조건 확인',{...sized,signalT:candidate.b.t,reasons:[...candidate.a.reasons,...E.similarity(candidate.a.context,state.notes).filter(n=>n.distance<.35).map(n=>`내 기록의 유사 흐름 (${roles[n.role]||'참고'}): ${n.note}`)],minute:m.reason});
 }
-async function evaluateAll(){if(monitorBusy)return;if(!state.connection.ok){notify('최신 시세 연결이 필요합니다. 과거 시세로 체결하지 않습니다.');return;}monitorBusy=true;try{for(const code of [...new Set([...Object.keys(state.positions),...state.watch])])await evaluateCode(code);renderPortfolio();renderWatch();renderDecision();notify('대응 점검 완료 · 실행할 안건은 결재함에서 확인하세요.');}catch(e){notify(e.message);}finally{monitorBusy=false;}}
+async function evaluateAll(){if(monitorBusy||state.scan)return;if(!state.connection.ok){notify('최신 시세 연결이 필요합니다. 과거 시세로 체결하지 않습니다.');return;}monitorBusy=true;try{for(const code of [...new Set([...Object.keys(state.positions),...state.watch])])await evaluateCode(code);renderPortfolio();renderWatch();renderDecision();notify('대응 점검 완료 · 실행할 안건은 결재함에서 확인하세요.');}catch(e){notify(e.message);}finally{monitorBusy=false;}}
 function renderPortfolio(){const eq=equity(),positions=Object.values(state.positions),risk=positions.reduce((s,q)=>s+Math.max(0,(q.entryPrice*(1+(state.settings.feePct+state.settings.slipPct)/100)-q.stop*(1-(state.settings.feePct+state.settings.taxPct+state.settings.slipPct)/100))*q.qty),0),pending=state.agendas.filter(a=>a.status==='pending');$('agendaCount').textContent=pending.length;
  $('portfolioStats').innerHTML=[['평가자산',money(eq)+'원'],['사용 가능 현금',money(state.cash)+'원'],['보유 종목',positions.length+' / '+state.settings.maxPositions],['구조 지지까지 손실',money(risk)+'원']].map(([label,value])=>`<div class="stat"><span>${label}</span><strong>${value}</strong></div>`).join('');
  $('agendaList').innerHTML=pending.map(a=>`<article class="record"><div class="record-head"><strong>${esc(name(a.code))}</strong><span class="badge">${a.side==='BUY'?'진입 검토':'청산 검토'}</span></div><p>${esc(a.reason)}</p><small>${esc(a.at)} · 결재 시 시세·수량·위험을 다시 확인합니다</small><div class="record-actions"><button class="button" data-reject="${a.id}">보류</button><button class="button primary" data-approve="${a.id}">근거 읽고 결재</button></div></article>`).join('')||'<div class="empty-note">지금 결재할 안건이 없습니다.<br>조건이 부족하면 기다리는 것도 대응입니다.</div>';
@@ -110,21 +111,13 @@ async function executeApproval(){if(executing)return;const a=approval;if(!a||a.s
  }catch(e){if(/1%|신호가 변경|이전 날짜/.test(e.message)){a.status='expired';save();$('approvalDialog').close();approval=null;renderPortfolio();}notify(e.message);updateApproval();}finally{executing=false;}}
 function openAnnotation(a,b){if(state.view!=='daily'){notify('일봉 구간에서 흐름을 기록하세요. 분봉은 실행 확인용으로 분리합니다.');return;}const d=state.data[state.selected];if(!d?.bars[a]||!d.bars[b])return;rangeDraft={code:state.selected,from:d.bars[a].t,to:d.bars[b].t,features:{...(d.analysis[a]?.context||{})},engine:E.VERSION};$('annotationRange').textContent=`${name(state.selected)} · ${date(rangeDraft.from)} — ${date(rangeDraft.to)} · 대략적인 흐름 기록`;$('annotationNote').value='';$('annotationRole').value='reference';$('annotationDialog').showModal();}
 function renderLab(){
- $('casesGrid').innerHTML=CASES.map(c=>{const d=state.data[c.code],inRange=d?.bars.filter(b=>b.t>=c.from&&b.t<=c.to).length||0;return `<button class="case-card" data-case="${c.code}"><span class="badge">${c.type}</span><strong>${esc(c.name)}</strong><p>${esc(c.summary)}</p><p style="margin-top:9px">${esc(c.intent)}</p><small class="muted">${inRange?`참고 범위 시세 ${inRange}봉 · 차트에서 보기`:'시세 미확인 · 판정 결과 없음'}</small></button>`;}).join('');
  $('annotationsList').innerHTML=state.notes.length?state.notes.map(n=>`<article class="record"><div class="record-head"><button class="text-button" data-note-open="${esc(n.id)}">${esc(name(n.code))}</button><span class="badge">${roles[n.role]||'참고'}</span></div><small>${date(n.from)} — ${date(n.to)}</small><p>${esc(n.note)}</p><div class="record-actions"><button class="text-button" data-note-delete="${esc(n.id)}">기록 삭제</button></div></article>`).join(''):'<div class="empty-note">일봉에서 Shift+드래그로 구간을 표시하세요.<br>진입·보유·대기·회피·청산을 따로 기록할 수 있습니다.</div>';
  if(btResult){const s=btResult.stats;$('backtestResult').innerHTML=`<div class="stats-grid" style="grid-template-columns:1fr 1fr"><div class="stat"><span>총 수익률</span><strong class="${s.ret>=0?'up':'down'}">${pct(s.ret)}</strong></div><div class="stat"><span>최대낙폭</span><strong>${pct(-s.mdd)}</strong></div><div class="stat"><span>완료 거래</span><strong>${s.trades}건</strong></div><div class="stat"><span>승률</span><strong>${pct(s.win)}</strong></div></div><p class="small-note">미청산 ${btResult.open.length}종목 · 평가자산 ${money(s.equity)}원</p><p class="fineprint">${btResult.limitations.map(esc).join('<br>')}<br>거래가 적거나 없다는 이유로 규칙을 자동 완화하지 않습니다. 여섯 참고 사례로 만든 가설은 독립 검증이 아닙니다.</p>`;}
 }
 function settingsDialog(){const fields=[['capital','모의 시작 자금 (원)',100000,1e10,100000],['riskPct','종목 계획 손실 (%)',.1,5,.1],['totalRiskPct','전체 계획 손실 (%)',.1,20,.1],['maxPositionPct','종목 최대 비중 (%)',1,50,1],['maxPositions','최대 보유 종목',1,20,1],['minValue','평균 거래대금 (억원)',0,10000,1],['feePct','편도 수수료 (%)',0,1,.001],['taxPct','매도 세금 (%)',0,1,.01],['slipPct','편도 체결 손실 (%)',0,2,.01],['confirmation','회복 실패 확인 봉',2,5,1]];
  $('settingsFields').innerHTML=fields.map(([key,label,min,max,step])=>`<label>${label}<input name="${key}" type="number" value="${state.settings[key]}" min="${min}" max="${max}" step="${step}" required></label>`).join('');$('minuteRequired').checked=state.settings.minuteRequired;$('settingsDialog').showModal();}
 async function refreshWatch(){if(!state.connection.ok){notify('먼저 시세를 연결하세요. 저장 자료 분석은 계속 사용할 수 있습니다.');return;}if(state.scan)return;state.scan=true;const revision=++scanRevision;$('stopScanBtn').hidden=false;try{for(let i=0;i<state.watch.length&&revision===scanRevision;i++){$('scanProgress').textContent=`관찰 시세 갱신 ${i+1}/${state.watch.length}`;await loadCode(state.watch[i],true);renderWatch();}renderChart();renderLab();}catch(e){notify(e.message);}finally{state.scan=false;$('stopScanBtn').hidden=true;$('scanProgress').textContent='관찰 종목 갱신 완료 · 거래 조건은 결재 시 다시 확인합니다.';}}
-async function scanMarket(){if(!state.connection.ok){notify('전체 시장 검색에는 중계기 연결이 필요합니다');return;}if(state.scan)return;state.scan=true;const revision=++scanRevision;$('stopScanBtn').hidden=false;let found=0,failed=0;try{
- const master=await bridge('/krx/master',{});setMaster(master);const universe=state.master.filter(x=>!/(ETF|ETN|스팩|리츠|우B?$|KODEX|TIGER|ACE |SOL |PLUS |RISE |HANARO|KOSEF)/i.test(x.name));
- for(let i=0;i<universe.length&&revision===scanRevision;i++){const c=universe[i];$('scanProgress').textContent=`검색 ${i+1}/${universe.length} · 후보 ${found} · 오류 ${failed}`;try{const r=await bridge('/krx/daily',{code:c.code,count:700});const bars=E.indicators(r.bars),a=E.analyze(bars,bars.length-1,state.settings);
- if(a.signal||(a.phase==='WAIT'&&a.context?.quality>=65)){found++;if(!state.watch.includes(c.code))state.watch.push(c.code);installData(c.code,r,'bridge');renderWatch();save();}
- }catch(_){failed++;}await new Promise(r=>setTimeout(r,80));}
- notify(`검색 ${revision===scanRevision?'완료':'중단'} · 준비 상태 후보 ${found}개 · 오류 ${failed}개`);
- }catch(e){notify(e.message);}finally{state.scan=false;$('stopScanBtn').hidden=true;renderWatch();}}
-function setMaster(r){const input=Array.isArray(r.items)?r.items:[];const mapped=input.map(x=>Array.isArray(x)?{code:String(x[0]),name:String(x[1]),market:String(x[2]||'')}:x).filter(x=>/^[0-9A-Z]{6}$/.test(x.code)&&typeof x.name==='string');state.master=[...new Map([...CASES,...mapped].map(x=>[x.code,x])).values()];}
+function setMaster(r){const input=Array.isArray(r.items)?r.items:[];const mapped=input.map(x=>Array.isArray(x)?{code:String(x[0]),name:String(x[1]),market:String(x[2]||'')}:x).filter(x=>/^[0-9A-Z]{6}$/.test(x.code)&&typeof x.name==='string');state.master=[...new Map(mapped.map(x=>[x.code,x])).values()];}
 async function runResearch(series){
  if(location.protocol==='file:')return E.backtest(series,state.settings);
  return new Promise((resolve,reject)=>{const worker=new Worker('app/worker.js'),timer=setTimeout(()=>{worker.terminate();reject(Error('검증 시간이 길어 중단했습니다. 종목을 나눠서 검증하세요'));},120000);
@@ -138,11 +131,11 @@ async function importFile(file){if(file.size>30*1024*1024)throw Error('가져오
  if(d.code&&Array.isArray(d.bars)){if(!/^[0-9A-Z]{6}$/.test(d.code))throw Error('6자리 종목코드가 필요합니다');installData(d.code,d,'import');if(!state.watch.includes(d.code))state.watch.push(d.code);count++;await cache(d.code,d,state.mode);}
  if(d.series&&typeof d.series==='object'){for(const [code,value]of Object.entries(d.series).slice(0,100)){if(!/^[0-9A-Z]{6}$/.test(code))continue;const r=Array.isArray(value)?{bars:value,name:code}:value;if(!Array.isArray(r.bars))continue;installData(code,r,'import');if(!state.watch.includes(code))state.watch.push(code);await cache(code,r,state.mode);count++;}}
  const list=d.notes||d.data?.marks||d.marks;if(Array.isArray(list)){for(const item of list.slice(0,500)){const n=sanitizeNote(item);if(n&&!state.notes.some(x=>x.code===n.code&&x.from===n.from&&x.to===n.to&&x.note===n.note)){state.notes.unshift(n);notes++;}}state.notes=state.notes.slice(0,500);}
- if(!count&&!notes)throw Error('시세 또는 구간 기록을 찾지 못했습니다. 계좌 잔고는 가져오기로 덮어쓰지 않습니다');save();renderWatch();renderChart();renderLab();notify(`시세 ${count}종목 · 구간 ${notes}개 가져옴`);}
+ if(!count&&!notes)throw Error('시세 또는 구간 기록을 찾지 못했습니다. 계좌 잔고는 가져오기로 덮어쓰지 않습니다');if(!state.selected&&state.watch.length)state.selected=state.watch[0];save();renderWatch();renderChart();renderLab();notify(`시세 ${count}종목 · 구간 ${notes}개 가져옴`);}
 function connectDialog(){$('connectionError').textContent='';$('bridgeUrl').value=state.connection.url;$('connectDialog').showModal();}
-$('connectForm').addEventListener('submit',async e=>{e.preventDefault();const button=e.submitter;button.disabled=true;try{const url=new URL($('bridgeUrl').value.trim());if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)throw Error('올바른 중계기 주소를 입력하세요');state.connection.url=url.origin;state.connection.token=$('bridgeToken').value.trim();const health=await bridge('/health');const mode=health.demo?'demo':'real';state.connection.ok=true;
- if(state.mode!==mode){save();state.mode=mode;state.data={};state.minutes={};state.notes=[];state.positions={};state.agendas=[];state.log=[];state.settings={...E.DEFAULTS};state.cash=E.DEFAULTS.capital;state.watch=CASES.map(c=>c.code);state.monitor=false;load();}
- $('bridgeToken').value='';$('connectDialog').close();$('connectionStatus').textContent=health.demo?'● 가상 시세 연결':'● 시세 연결됨';$('connectionStatus').className='connection live';try{setMaster(await bridge('/krx/master',{}));}catch(_){notify('종목 목록을 받지 못했습니다. 코드로 검색할 수 있습니다.');}await refreshWatch();renderPortfolio();notify(health.demo?'가상 시세 모드입니다. 실제 종목 성과로 해석하지 마세요.':'시세가 연결되었습니다. 새 화면은 실계좌 주문을 전송하지 않습니다.');
+$('connectForm').addEventListener('submit',async e=>{e.preventDefault();const button=e.submitter;if(terminal.isBusy()){notify('주문 확인 작업이 끝난 뒤 연결을 변경하세요.');return;}button.disabled=true;try{scanRevision++;terminal.reset();const url=new URL($('bridgeUrl').value.trim());if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)throw Error('올바른 중계기 주소를 입력하세요');state.connection.url=url.origin;state.connection.token=$('bridgeToken').value.trim();const health=await bridge('/health');const mode=health.demo?'demo':'real';state.connection.ok=true;
+ if(state.mode!==mode){save();state.mode=mode;state.data={};state.minutes={};state.notes=[];state.positions={};state.agendas=[];state.log=[];state.settings={...E.DEFAULTS};state.cash=E.DEFAULTS.capital;state.watch=[];state.selected=null;state.monitor=false;load();}
+ $('bridgeToken').value='';$('connectDialog').close();$('connectionStatus').textContent=health.demo?'● 가상 시세 연결':'● 시세 연결됨';$('connectionStatus').className='connection live';try{setMaster(await bridge('/krx/master',{}));}catch(_){notify('종목 목록을 받지 못했습니다. 코드로 검색할 수 있습니다.');}loadScreener();renderScreener();await refreshWatch();renderPortfolio();notify(health.demo?'가상 시세 모드입니다. 실제 종목 성과로 해석하지 마세요.':'시세 연결 완료 · 조건검색을 실행하거나 주문 · 잔고에서 계좌를 확인하세요.');
  }catch(err){state.connection.ok=false;state.connection.token='';state.monitor=false;$('monitorBtn').textContent='자동 관찰 시작';$('connectionStatus').textContent='● 연결 안 됨';$('connectionStatus').className='connection';$('connectionError').textContent=err.message;}finally{button.disabled=false;}});
 $('settingsForm').addEventListener('submit',e=>{e.preventDefault();if(!$('settingsForm').reportValidity())return;const old=state.settings.capital;for(const input of $('settingsFields').querySelectorAll('input'))state.settings[input.name]=Number(input.value);state.settings.minuteRequired=$('minuteRequired').checked;
  if(old!==state.settings.capital){if(Object.keys(state.positions).length||state.log.some(x=>/^모의 /.test(x.kind))){state.settings.capital=old;notify('거래가 있는 계좌의 시작 자금은 변경하지 않았습니다.');}else state.cash=state.settings.capital;}
@@ -155,13 +148,14 @@ $('zonesToggle').addEventListener('change',()=>{chart.zones=$('zonesToggle').che
 $('fileInput').addEventListener('change',async()=>{try{if($('fileInput').files[0])await importFile($('fileInput').files[0]);}catch(e){notify(e.message);}finally{$('fileInput').value='';}});
 document.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;try{
  if(b.hasAttribute('data-close')){b.closest('dialog').close();return;}
+ if(b.dataset.screenOpen){page('workspace');await select(b.dataset.screenOpen);return;}
+ if(b.dataset.screenWatch){const code=b.dataset.screenWatch;if(!state.watch.includes(code))state.watch.push(code);save();renderWatch();renderScreener();return;}
  if(b.dataset.page){page(b.dataset.page);return;}
  if(b.dataset.filter){state.filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));renderWatch();return;}
  if(b.dataset.searchCode){$('searchResults').hidden=true;$('search').value='';await select(b.dataset.searchCode);return;}
  if(b.dataset.code){await select(b.dataset.code);return;}
  if(b.dataset.open){page('workspace');await select(b.dataset.open);return;}
- if(b.dataset.case){const c=CASES.find(x=>x.code===b.dataset.case);page('workspace');await select(c.code,c);notify('참고 범위를 열었습니다. 표시 시작·끝은 매매 정답이 아닙니다.');return;}
- if(b.dataset.focus){const [from,to]=b.dataset.focus.split('|');chart.focus(from,to);return;}
+  if(b.dataset.focus){const [from,to]=b.dataset.focus.split('|');chart.focus(from,to);return;}
  if(b.dataset.noteOpen){const n=state.notes.find(x=>x.id===b.dataset.noteOpen);if(n){page('workspace');await select(n.code,n);}return;}
  if(b.dataset.noteDelete){state.notes=state.notes.filter(n=>n.id!==b.dataset.noteDelete);save();renderLab();renderDecision();return;}
  if(b.dataset.approve){await openApproval(b.dataset.approve);return;}
@@ -171,8 +165,15 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button');i
  case 'settingsBtn':settingsDialog();break;
  case 'refreshBtn':await refreshWatch();break;
  case 'scanBtn':for(const d of Object.values(state.data))d.analysis=E.timeline(d.bars,state.settings);renderWatch();renderChart();notify('저장 시세로 흐름 분석을 갱신했습니다.');break;
- case 'marketScanBtn':await scanMarket();break;
- case 'stopScanBtn':scanRevision++;break;
+ case 'marketScanBtn':page('screener');break;
+ case 'screenRun':await scanMarket(false);break;
+ case 'screenCached':await scanMarket(true);break;
+ case 'screenStop':case 'stopScanBtn':scanRevision++;break;
+ case 'screenSettings':settingsDialog();break;
+ case 'screenPrev':screen.page=Math.max(0,screen.page-1);renderScreener();break;
+ case 'screenNext':screen.page++;renderScreener();break;
+ case 'prepareBroker':terminal.prepare(state.selected,price(state.selected));page('terminal');break;
+
  case 'latestBtn':state.index=null;chart.latest();renderDecision();break;
  case 'zoomIn':chart.zoom(-.2);break;case 'zoomOut':chart.zoom(.2);break;
  case 'dailyBtn':state.view='daily';state.index=null;renderChart();break;
@@ -181,17 +182,59 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button');i
  case 'createAgenda':if(state.index!=null){notify('최신 화면에서 실행 판단을 확인하세요');break;}await evaluateCode(state.selected);renderPortfolio();page('portfolio');break;
  case 'evaluateBtn':await evaluateAll();break;
  case 'monitorBtn':if(!state.connection.ok){connectDialog();break;}state.monitor=!state.monitor;b.textContent=state.monitor?'자동 관찰 중지':'자동 관찰 시작';notify(state.monitor?'화면이 열려 있는 동안 60초마다 관찰합니다. 모든 체결은 결재가 필요합니다.':'자동 관찰을 중지했습니다.');break;
- case 'loadCasesBtn':if(!state.connection.ok){connectDialog();break;}b.disabled=true;try{for(const c of CASES){await loadCode(c.code,true);renderLab();}renderWatch();renderChart();}finally{b.disabled=false;}break;
  case 'importBtn':$('fileInput').click();break;
  case 'exportBtn':download(`파르티잔_기록_${now().day}.json`,{app:'partisan',version:2,mode:state.mode,settings:state.settings,notes:state.notes,portfolio:{cash:state.cash,positions:state.positions,log:state.log}});break;
  case 'backtestBtn':b.disabled=true;$('backtestResult').textContent='일봉을 순서대로 재생하고 있습니다…';try{await new Promise(r=>setTimeout(r,30));const series=Object.fromEntries(state.watch.filter(c=>state.data[c]).map(c=>[c,state.data[c].bars]));if(!Object.keys(series).length)throw Error('검증할 일봉이 없습니다');btResult=await runResearch(series);renderLab();}finally{b.disabled=false;}break;
  }
  }catch(err){notify(err.message);}});
-function clockTick(){const k=now();$('clock').textContent=`KST ${k.text} · ${state.mode==='demo'?'가상 시세':'모의 운용'}`;}
+const screen={rows:[],done:0,total:0,errors:0,page:0,at:'',source:'',running:false,canceled:false,settings:''};
+const screenKey=()=>`partisan.screener.${state.mode}`;
+function loadScreener(){Object.assign(screen,{rows:[],done:0,total:0,errors:0,page:0,at:'',source:'',running:false,canceled:false,settings:''});try{const d=JSON.parse(localStorage.getItem(screenKey())||'null');if(d?.version===1&&Array.isArray(d.rows))Object.assign(screen,{...d,running:false,page:0});}catch(_){} }
+function saveScreener(){try{localStorage.setItem(screenKey(),JSON.stringify({...screen,version:1,running:false}));}catch(_){notify('검색 결과 저장 공간이 부족합니다. 현재 화면에서는 계속 볼 수 있습니다.');}}
+function renderScreener(){
+ const rows=S.filter(screen.rows,{query:$('screenQuery').value,market:$('screenMarket').value,kind:$('screenKind').value,sort:$('screenSort').value}),pages=Math.max(1,Math.ceil(rows.length/50));screen.page=Math.min(screen.page,pages-1);
+ $('screenCoverage').textContent=`${screen.done.toLocaleString()} / ${screen.total.toLocaleString()}`;$('screenMatches').textContent=screen.rows.length;$('screenErrors').textContent=screen.errors;
+ $('screenBar').max=Math.max(1,screen.total);$('screenBar').value=screen.done;$('screenStop').hidden=!screen.running;$('screenRun').disabled=state.scan;$('screenCached').disabled=state.scan;
+ const changed=screen.settings&&screen.settings!==JSON.stringify(state.settings);
+ $('screenStatus').textContent=screen.running?`전체 시장 분석 중 · ${screen.done}/${screen.total} · ${screen.current||''}`:screen.at?`${screen.source} · ${screen.canceled?'중단된 검색 — 일부 결과':screen.errors?'조회 실패 종목을 제외한 결과':'검색 완료'} · ${screen.at}${changed?' · 설정 변경됨: 다시 검색하세요':''}`:'시세를 연결한 후 전체 종목 검색을 실행하세요.';
+ $('screenRows').innerHTML=rows.slice(screen.page*50,(screen.page+1)*50).map(r=>`<tr><td><button class="symbol-link" data-screen-open="${esc(r.code)}"><b>${esc(r.name)}</b><small>${esc(r.code)} · ${esc(r.market)}</small></button></td><td><span class="signal-pill ${r.kind==='recovery'?'recovery':''}">${r.kind==='recovery'?'회복 · 재진입':'준비된 돌파'}</span></td><td><b>${money(r.price)}</b><small class="${r.change>=0?'up':'down'}">${pct(r.change)}</small></td><td><div class="score-cell"><b>${Math.round(r.quality)}</b><span><i style="width:${Math.max(0,Math.min(100,r.quality))}%"></i></span></div></td><td>${r.risk==null?'—':r.risk.toFixed(2)+'%'}<small>지지 ${money(r.support)}</small></td><td>${Number(r.value).toFixed(1)}억</td><td>${date(r.date)}<small>${r.provisional?'장중 미확정':r.date<now().day?'과거 기준 · 최신 확인 필요':'일봉 기준'}</small></td><td><div class="result-actions"><button class="button" data-screen-open="${esc(r.code)}">차트 분석</button><button class="icon-button" data-screen-watch="${esc(r.code)}" aria-label="${esc(r.name)} 관심종목 추가" ${state.watch.includes(r.code)?'disabled':''}>${state.watch.includes(r.code)?'✓':'＋'}</button></div></td></tr>`).join('');
+ $('screenEmpty').hidden=!!rows.length;if(!rows.length){$('screenEmpty').querySelector('h2').textContent=screen.running?'시장을 살펴보고 있습니다.':screen.at?'일치하는 진입 검토 종목이 없습니다.':'조건을 만족하는 종목부터.';$('screenEmpty').querySelector('p').textContent=screen.at?'검색 조건을 바꾸거나 최신 시세로 다시 검색하세요. 조건이 없으면 임의로 종목을 추천하지 않습니다.':'전체 종목 검색 결과가 여기에 표시됩니다. 참고용 종목은 자동으로 추가되지 않습니다.';}
+ $('screenCount').textContent=`일치 ${rows.length}종목 · 전체 후보 ${screen.rows.length}종목`;$('screenPageNo').textContent=`${screen.page+1} / ${pages}`;$('screenPrev').disabled=screen.page===0;$('screenNext').disabled=screen.page>=pages-1;
+}
+async function cachedUniverse(){const database=await db();return new Promise((resolve,reject)=>{const request=database.transaction('bars').objectStore('bars').getAllKeys();request.onsuccess=()=>resolve(request.result.filter(k=>String(k).startsWith(state.mode+':')).map(k=>String(k).split(':')[1]).filter(c=>/^[0-9A-Z]{6}$/.test(c)));request.onerror=()=>reject(request.error);});}
+async function scanMarket(useCache=false){
+ if(state.scan)return;if(!useCache&&!state.connection.ok){connectDialog();return;}
+ state.scan=true;const revision=++scanRevision,mode=state.mode,settings={...state.settings},k=now();
+ Object.assign(screen,{rows:[],done:0,total:0,errors:0,page:0,at:'',source:useCache?'저장 시세':'전체 시장',running:true,canceled:false,settings:JSON.stringify(settings)});renderScreener();
+ try{
+  let universe;
+  if(useCache){const codes=await cachedUniverse();universe=S.universe(codes.map(code=>state.master.find(x=>x.code===code)||{code,name:name(code),market:''}));}
+  else{setMaster(await bridge('/krx/master',{}));universe=S.universe(state.master);}
+  screen.total=universe.length;
+  for(const item of universe){
+   if(revision!==scanRevision||mode!==state.mode)break;screen.current=item.name;renderScreener();
+   try{
+    const response=useCache?await cached(item.code,mode):await bridge('/krx/daily',{code:item.code,count:700});
+    if(revision!==scanRevision||mode!==state.mode)break;
+    if(!response?.bars?.length)throw Error('일봉 없음');
+    const row=S.inspect(E,item,response,settings,k.day,k.min);
+    if(row){screen.rows.push(row);if(!useCache)await cache(item.code,{...response,name:item.name},mode);}
+   }catch(_){if(revision!==scanRevision||mode!==state.mode)break;screen.errors++;}
+   screen.done++;renderScreener();if(!useCache)await new Promise(r=>setTimeout(r,80));
+  }
+  screen.canceled=revision!==scanRevision;
+ }catch(e){screen.canceled=true;notify(e.message);}
+ finally{state.scan=false;screen.running=false;screen.at=now().text;if(mode===state.mode){saveScreener();renderScreener();}else{loadScreener();renderScreener();}}
+}
+for(const id of ['screenQuery','screenMarket','screenKind','screenSort'])$(id).addEventListener(id==='screenQuery'?'input':'change',()=>{screen.page=0;renderScreener();});
+const terminal=PartisanTerminal({request:bridge,escape:esc,money,notify,name,time:()=>now().text,identity:()=>state.connection.url,connected:()=>state.connection.ok,quote:code=>loadCode(code,true),fresh:getFreshQuote,stopObserver:()=>{state.monitor=false;scanRevision++;$('monitorBtn').textContent='자동 관찰 시작';clockTick();}});
+
+function clockTick(){$('observerStatus').textContent=state.monitor?'전략 감시 중 · 실계좌 자동 주문 미연결':'전략 감시 대기 · 실계좌 자동 주문 미연결';const k=now();$('clock').textContent=`KST ${k.text} · ${state.mode==='demo'?'데모 시세':'KRX'}`;}
+setInterval(()=>{if(state.page==='terminal'&&!document.hidden&&state.connection.ok&&!terminal.isBusy())terminal.refresh();},30000);
 setInterval(clockTick,1000);setInterval(()=>{const k=now();if(state.monitor&&k.min>=540&&k.min<930)evaluateAll();},60000);
 async function init(){load();try{const m=JSON.parse(localStorage.getItem('krx.bb200.master')||'null');if(m)setMaster(m);}catch(_){}
- $('caseChips').innerHTML=CASES.map(c=>`<button class="case-chip" data-case="${c.code}">${c.name}</button>`).join('');clockTick();renderWatch();renderChart();renderPortfolio();renderLab();
+ loadScreener();renderScreener();page('screener');clockTick();renderWatch();renderChart();renderPortfolio();renderLab();
  for(const code of state.watch){const r=await cached(code);if(r)installData(code,r);}renderWatch();renderChart();renderLab();}
 init().catch(e=>notify(e.message));
-// Explicitly no legacy-state writes, background order execution or /trade endpoint access.
+// Strategy monitoring never calls the broker order endpoint. Terminal confirmation owns execution.
 })();

@@ -2,20 +2,22 @@
 
 ## 1. 현재 구조
 
-사용자가 2026-11-05에 전체 UI·전략 재작성과 불필요 기능 정리를 요청했다. 현재 기본 화면은 `partisan_investment.html`이다. 예전 단일 파일은 `partisan_legacy.html`에 그대로 보존했다. 이전 안내와 성과 표는 `docs/LEGACY_GUIDE.md`, `docs/STRATEGY.md`의 과거 기록이다. **그 성과를 새 엔진 성과로 인용하지 않는다.**
+사용자가 2026-11-05에 전체 UI·전략 재작성과 불필요 기능 정리를 요청했다. 현재 기본 화면은 `partisan_investment.html`이다. 이후 전체 시장 조건검색과 애플 스타일 HTS, 기존 증권사 주문 기능의 새 화면 연결 요청을 반영했다. 예전 단일 파일은 `partisan_legacy.html`에 그대로 보존했다. 이전 안내와 성과 표는 `docs/LEGACY_GUIDE.md`, `docs/STRATEGY.md`의 과거 기록이다. **그 성과를 새 엔진 성과로 인용하지 않는다.**
 
 - `partisan_investment.html`: 새 화면 뼈대, 외부 의존성 없는 클래식 스크립트 로딩.
 - `app/engine.js`: 순수 함수 기반 지표·구조 분석·회복/재진입·보유 관리·위험 수량·백테스트. 브라우저/Node 공용.
 - `app/chart.js`: Canvas 차트, 인과적인 구간 설명, 봉 선택, 드래그 구간 기록.
-- `app/app.js`: 시세 조회, 독립 모의 장부, 결재, IndexedDB, UI 이벤트.
-- `app/cases.js`: 사용자의 여섯 사례 설명과 **대략적인 참고 범위**. 매매 정답/성과 검증 세트가 아니다.
+- `app/app.js`: 시세 조회, 전체 시장 검색 제어, 독립 모의 장부, 결재, IndexedDB, UI 이벤트.
+- `app/screener.js`: 엄격한 진입 신호 후보 추출, 시장·이름·유형 필터와 정렬.
+- `app/terminal.js`: 기존 중계기를 통한 계좌·주문 조회, 매번 확인하는 지정가 주문/취소, 주문 허용/정지. 실계좌 자동 주문은 아직 연결하지 않았다.
+- `app/cases.js`: 보존된 여섯 참고 설명. 현재 UI에서 로드하지 않는다. 기본 관심종목은 비어 있다.
 - `app/worker.js`: 백테스트 전용 Worker.
 - `app/style.css`: 반응형 화면. 빌드·CDN 없음.
 - `nh_bridge.py`, `nh_bridge_core.py`: 기존 중계기. 이번 재작성에서 변경하지 않았다.
 
 ## 2. 실행·검증
 
-기존 실행 파일로 실행하고 `partisan_investment.html`을 연다. Node는 앱 실행에 필요 없다. 새 화면은 `/health`, `/krx/master`, `/krx/daily`, `/krx/chart`만 호출하며 `/trade/*`와 `/state/put`은 호출하지 않는다.
+기존 실행 파일로 실행하고 `partisan_investment.html`을 연다. Node는 앱 실행에 필요 없다. 시세와 조건검색은 `/health`, `/krx/master`, `/krx/daily`, `/krx/chart`를 호출한다. 주문 · 잔고 화면은 기존 `/trade/status`, `/trade/balance`, `/trade/orders`, `/trade/arm`, `/trade/order`, `/trade/cancel`을 연결한다. `/state/put`은 호출하지 않는다. 전략 감시가 실주문을 보내지는 않는다.
 
 - 새 엔진: `node tests/engine.test.cjs`
 - 이전 엔진 보존 확인: `node tools/test_strategy.cjs`
@@ -23,6 +25,8 @@
 - 가상 중계기 결재 흐름: `npm run test:trading`
 - 브라우저 테스트는 모든 중계기 응답을 가로채 가짜 응답으로 시험한다. 실제 중계기·계좌를 시험에 쓰지 않는다.
 - 테스트 스크린샷은 `work/test-output/`에 저장한다. `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_BROWSERS_PATH` 환경변수로 기존 설치를 사용할 수 있다.
+- 조건검색: `npm run test:screener`
+- HTS 통합: `npm run test:hts` (모든 증권사 응답을 가로채며 실제 요청 없음)
 - 함수 지도: `python tools/make_handoff.py`
 
 ## 3. 전략·기록의 의미
@@ -34,7 +38,7 @@
 ## 4. 지켜야 할 규칙
 
 1. 증권 앱키·시크릿·계좌번호는 사용자가 기존 실행기에만 입력한다. AI가 읽거나 기록하지 않는다.
-2. AI가 실제 주문을 넣지 않는다. 새 화면에는 실계좌 주문 기능이 없다. 기존 버전의 실계좌 주문은 `realSubmit`의 사용자 확인·지연·중계기 한도·비상정지 흐름을 유지한다.
+2. AI가 실제 주문을 넣지 않는다. 새 주문 화면은 사용자가 직접 사용할 기능이며 개발 검증은 가상 응답만 사용한다. 실주문은 `app/terminal.js`의 확인·지연·최신 시세·한도·비상정지 흐름을 유지한다. 응답 미확인은 자동 재전송하지 않고 재접속 후에도 잠금을 유지한다. 실계좌 무인 자동 주문은 아직 구현되지 않았다.
 3. 새 모의매매도 매수·매도 모두 매번 사용자 결재를 거친다. 읽음 확인·이유·1.5초 지연·최신 시세 재검사를 생략하지 않는다. 자동 관찰은 자동 체결이 아니다.
 4. 토큰은 새 화면 메모리에만 둔다. 저장·내보내기·로그·git에 토큰이나 키를 넣지 않는다.
 5. 기존 `krx_state.json`, 기존 localStorage 계좌·설정, 기존 서버 동기화는 건드리지 않는다. 새 저장소 `partisan.v2.real` / `partisan.v2.demo`를 분리한다. 일봉 캐시 `krx-bars`는 재사용한다.
@@ -47,3 +51,5 @@
 ## 5. 구현 원칙
 
 불필요 기능을 다시 얹지 않는다. 새 조건은 공통 엔진·시각화·모의 운용·백테스트의 적용 범위를 명시한다. 기본 규칙을 바꾸기 전에는 가설과 독립 검증을 분리하고 테스트한다. UI는 입력 중인 값을 주기 렌더링으로 지우지 않는다. 실제 시장 데이터가 없는 테스트는 반드시 가상 자료 검증이라고 보고한다.
+
+현재 HTS 안내: `docs/HTS.md`. 과거 문서의 “새 화면 실주문 없음”은 HTS 개편 이전 설명이다.

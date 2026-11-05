@@ -8,8 +8,8 @@ const root=path.resolve(__dirname,'..');const artifacts=path.join(root,'work','t
  const page=await browser.newPage({viewport:{width:1600,height:1100}}),errors=[],requests=[];
  page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',r=>{requests.push(r.request().url());const u=new URL(r.request().url());if(u.port===String(server.address().port))return r.continue();return r.abort();});
  await page.goto(`http://127.0.0.1:${server.address().port}/partisan_investment.html`,{waitUntil:'networkidle'});
- await page.getByRole('heading',{name:'가격보다 먼저, 흐름을 보세요.'}).waitFor();assert.deepEqual(errors,[]);
- const series=Object.fromEntries(['067310','085660','214430','383220','251270','005930'].map(code=>[code,{name:'가상 검증 자료',bars:fixtures()}]));
+ await page.getByRole('heading',{name:'다음 기회를 찾는 곳.'}).waitFor();assert.equal(await page.locator('#watchList .watch-item').count(),0);await page.locator('[data-page=workspace]').click();await page.getByRole('heading',{name:'가격보다 먼저, 흐름을 보세요.'}).waitFor();assert.deepEqual(errors,[]);
+ const series=Object.fromEntries(['111111','222222','333333'].map((code,i)=>[code,{name:['가상 알파','가상 베타','가상 감마'][i],bars:fixtures()}]));
  await page.locator('#fileInput').setInputFiles({name:'fixtures.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({series}))});await page.waitForFunction(()=>document.querySelector('#chartEmpty').hidden);
  await page.locator('#connectionStatus').evaluate(el=>el.textContent='● 가상 데이터로 화면 검증 중');
  await page.screenshot({path:artifacts+'/v2-desktop.png',fullPage:true});
@@ -24,7 +24,7 @@ const root=path.resolve(__dirname,'..');const artifacts=path.join(root,'work','t
  await page.reload({waitUntil:'networkidle'});await page.locator('#settingsBtn').click();assert.equal(await page.locator('input[name=riskPct]').inputValue(),'0.7');await page.locator('#settingsDialog [data-close]').click();
  await page.locator('#connectBtn').click();await page.locator('#bridgeToken').fill('DO-NOT-PERSIST-TEST-TOKEN');await page.locator('#connectDialog [data-close]').click();const stored=await page.evaluate(()=>JSON.stringify({...localStorage}));assert(!stored.includes('DO-NOT-PERSIST-TEST-TOKEN'));
  assert(!requests.some(u=>new URL(u).pathname.startsWith('/trade/')));assert.deepEqual(errors,[]);
- await page.setViewportSize({width:390,height:844});await page.screenshot({path:artifacts+'/v2-mobile.png',fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ await page.locator('[data-page=workspace]').click();await page.setViewportSize({width:390,height:844});await page.screenshot({path:artifacts+'/v2-mobile.png',fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
  console.log('UI PASS: empty state, import/cache, chart range, annotation persistence, worker backtest, portfolio, settings, token isolation, mobile overflow');
  }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

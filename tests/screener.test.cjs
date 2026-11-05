@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');
+const S=require('../app/screener.js'),E=require('../app/engine.js');
+const {fixtures}=require('./engine.test.cjs');
+const bars=fixtures(701),day=bars.at(-1).t,item={code:'111111',name:'가상 알파',market:'KOSPI'};
+const row=S.inspect(E,item,{bars},E.DEFAULTS,day,600);assert(row);assert.equal(row.kind,'breakout');assert.equal(row.provisional,true);assert(row.value>0);
+assert.equal(S.inspect({...E,analyze:()=>({signal:false,phase:'WAIT',context:{quality:99}})},item,{bars},E.DEFAULTS,day,600),null,'WAIT must not be promoted to entry review');
+assert.equal(S.inspect(E,item,{bars},E.DEFAULTS,'20000101',600),null,'future data excluded');
+assert.equal(S.inspect(E,item,{bars},E.DEFAULTS,day,950).provisional,false);
+assert.equal(S.universe([item,{code:'222222',name:'가상 ETF',market:'KOSPI'},{code:'333333',name:'가상스팩',market:'KOSDAQ'},{code:'x',name:'오류'}]).length,1);
+const rows=[row,{...row,code:'444444',name:'가상 베타',market:'KOSDAQ',kind:'recovery',risk:1,quality:20}];
+assert.equal(S.filter(rows,{query:'베타',market:'KOSDAQ',kind:'recovery'})[0].code,'444444');assert.equal(S.filter(rows,{query:'없음'}).length,0);assert.equal(S.filter(rows,{sort:'risk'})[0].code,'444444');
+assert.equal(S.filter([{...row,market:'코스피'}],{market:'KOSPI'}).length,1);assert.equal(S.filter([{...row,market:'코스닥'}],{market:'KOSDAQ'}).length,1);assert.equal(S.universe([{...item,market:'ETF'}]).length,0);
+console.log('SCREENER PASS: strict signals, no future bars, provisional labels, universe exclusion, filters and risk sort');
