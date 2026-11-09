@@ -14,23 +14,28 @@
 <div class="app" id="app">
   <header class="top">
     <div class="brand">
-      <span class="logo" aria-hidden="true">♨</span>
+      <canvas id="coLogo" class="logo-c" data-logo="0" style="width:36px;height:36px" aria-hidden="true"></canvas>
       <div class="brand-text">
         <strong id="coName">모락상회</strong>
-        <span class="date" id="date">1년차 3월 1일</span>
+        <span class="date" id="date">2027.3.1 (월)</span>
       </div>
+    </div>
+    <div class="clockbox" aria-live="off">
+      <b id="clock">오전 6:00</b>
+      <span id="weather">☀️ 7°</span>
+      <span id="nightSkip" class="chip blue" hidden>🌙 밤 빨리 감기</span>
     </div>
     <div class="kpis">
       <div class="kpi"><span class="lbl">현금</span><b id="kCash">0</b></div>
       <div class="kpi"><span class="lbl" id="kValLbl">기업가치</span><b id="kVal">0</b></div>
       <div class="kpi hide-sm"><span class="lbl">매장</span><b id="kStores">0</b></div>
-      <div class="kpi hide-sm"><span class="lbl">인구</span><b id="kPop">0</b></div>
+      <div class="kpi hide-sm"><span class="lbl">직원</span><b id="kStaff">0</b></div>
     </div>
     <div class="speed" role="group" aria-label="게임 속도">
-      <button id="sp0" data-speed="0" title="일시정지 (Space)">❚❚</button>
-      <button id="sp1" data-speed="1" title="보통 (1)">▶</button>
-      <button id="sp2" data-speed="2" title="빠르게 (2)">▶▶</button>
-      <button id="sp3" data-speed="4" title="아주 빠르게 (3)">▶▶▶</button>
+      <button data-speed="0" title="일시정지 (Space)">❚❚</button>
+      <button data-speed="1" title="보통: 하루 1분 (1)">▶</button>
+      <button data-speed="2" title="빠르게: 3배 (2)">▶▶</button>
+      <button data-speed="3" title="아주 빠르게: 10배 (3)">▶▶▶</button>
     </div>
   </header>
 
@@ -40,6 +45,7 @@
     <section class="quest" id="quest" aria-label="목표"></section>
     <section class="inspector" id="inspector" hidden></section>
     <div class="map-ctl">
+      <button id="btnHood" title="동네 이름">🏘️</button>
       <button id="btnLogi" title="물류망 보기">🚚</button>
       <button id="btnFit" title="전체 보기">⤢</button>
       <button id="btnPanel" class="only-sm" title="경영 패널">📊</button>
@@ -56,18 +62,33 @@
   <footer class="ticker" id="ticker"></footer>
 </div>
 
+<div class="smodal" id="storeModal" hidden>
+  <div class="smodal-card" role="dialog" aria-label="매장 안">
+    <div class="sv-head"><h2 id="svTitle"></h2><button class="x" id="svClose" aria-label="매장에서 나가기">✕</button></div>
+    <div class="sv-grid">
+      <div class="sv-scene"><canvas id="svScene" aria-label="매장 내부 모습"></canvas></div>
+      <div class="sv-side">
+        <div class="sv-tabs" id="svTabs"></div>
+        <div class="sv-body" id="svBody"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="modal" hidden>
   <div class="modal-card">
     <p class="eyebrow">작은 가게에서 프랜차이즈 제국까지</p>
     <h1>모락모락 타운</h1>
-    <p class="lead">호숫가 작은 도시에 첫 가게를 열고, 직원을 들이고, 창고와 주방으로 물류망을 짜고, 가맹점을 모집해 주식시장에 상장해 보세요. 경쟁사 세 곳도 같은 손님을 노리고 있어요.</p>
+    <p class="lead">호숫가 작은 도시에서 첫 가게를 계약하고, 성향이 맞는 직원을 뽑고, 공간을 꾸미고, 뜨는 동네를 찾아 가맹점을 늘려 코스닥에 상장해 보세요. 하루는 24시간, 아침 출근길과 점심 피크와 저녁 손님이 모두 달라요.</p>
     <ol class="howto">
-      <li><b>왼쪽 도구</b>에서 업종을 고르면 지도에 장사가 잘될 자리가 초록빛으로 보여요.</li>
-      <li><b>매장을 누르면</b> 가격·직원·홍보·확장을 조정할 수 있어요.</li>
-      <li><b>오른쪽 패널</b>에서 물류, 브랜드·가맹, 주식시장을 운영해요.</li>
+      <li><b>빈 땅을 누르면</b> 그 자리의 손님층과 시간대별 유동인구를 볼 수 있어요.</li>
+      <li><b>매장을 두 번 누르면</b> 안으로 들어가 직원·인테리어·건물을 돌볼 수 있어요.</li>
+      <li><b>오른쪽 패널</b>에서 상권, 물류, 가맹, 이벤트, 주식을 운영해요.</li>
     </ol>
     <label for="nameInput">회사 이름</label>
     <input id="nameInput" maxlength="12" value="모락상회" autocomplete="off">
+    <label style="margin-top:10px">회사 로고</label>
+    <div id="logoPick" class="logo-pick"></div>
     <div class="modal-actions">
       <button class="primary" id="btnNew">새로 시작하기</button>
       <button id="btnContinue" hidden>이어하기</button>
