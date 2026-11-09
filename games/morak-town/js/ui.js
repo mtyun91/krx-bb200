@@ -13,7 +13,7 @@
   let openForm = null;                  // 개설 설정 { x, y, cat, size, style, tier }
   let storeView = null;                 // { id, tab }
   let hoverStaff = null, coCat = 'cafe';
-  let newDiff = 'normal', newEvents = true;
+  let newDiff = 'normal', newEvents = true, newSponsor = false;
   let newLogo = 'circle', newColor = '#f2b950', lotAll = false, pickerOpen = false, lastQuests = 0, lastNews = 0;
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -49,11 +49,11 @@
     { id: 'storepick', ic: '🏪', nm: '매장 열기' }, 'sep',
     ...['hq', 'warehouse', 'kitchen', 'roastery'].map(k => ({ id: 'fac:' + k, ic: Sim.FAC[k].icon, nm: Sim.FAC[k].name, co: Sim.FAC[k].cost })), 'sep',
     ...['factory', 'rental', 'smartfarm'].map(k => ({ id: 'fac:' + k, ic: Sim.FAC[k].icon, nm: Sim.FAC[k].name, co: Sim.FAC[k].cost || null, varCost: k === 'rental' })), 'sep',
-    ...Object.keys(Sim.PUBLIC).map(k => ({ id: 'pub:' + k, ic: Sim.PUBLIC[k].icon, nm: Sim.PUBLIC[k].name, co: Sim.PUBLIC[k].cost })),
+    ...Object.keys(Sim.PUBLIC).map(k => ({ id: 'pub:' + k, ic: Sim.PUBLIC[k].icon, nm: Sim.PUBLIC[k].name, co: Sim.PUBLIC[k].cost, sponsor: Sim.PUBLIC[k].sponsor })),
   ];
   function renderTools() {
     const cur = tool.startsWith('store:') ? tool.split(':')[1] : null;
-    $('tools').innerHTML = TOOLS.map(t => t === 'sep' ? '<div class="sep"></div>' : t.id === 'storepick' ?
+    $('tools').innerHTML = TOOLS.filter(t => t === 'sep' || !t.sponsor || (S && S.opts && S.opts.sponsor)).map(t => t === 'sep' ? '<div class="sep"></div>' : t.id === 'storepick' ?
       `<button class="tool ${cur || pickerOpen ? 'on' : ''}" data-tool="storepick" title="업종을 골라 매장 열기"><span class="ic">${cur ? Sim.CATS[cur].icon : '🏪'}</span><span class="nm">${cur ? Sim.CATS[cur].name : '매장 열기'}</span><span class="co">${Sim.CAT_KEYS.length}개 업종</span></button>` :
       `<button class="tool ${tool === t.id ? 'on' : ''}" data-tool="${t.id}" title="${esc(t.nm)}${t.co ? ' · ' + won(t.co) : ''}">
         <span class="ic">${t.ic}</span><span class="nm">${esc(t.nm)}</span>${t.co ? `<span class="co">${short(t.co)}</span>` : t.varCost ? '<span class="co">땅값 따라</span>' : ''}</button>`).join('');
@@ -211,7 +211,7 @@
     if (lf.age > 0.4) chips.push(`<span class="chip bad">🏚️ 노후 −${Math.round(lf.age * 35)}%</span>`);
     if (lf.hype > 1.03) chips.push(`<span class="chip bad">🔥 화제성 +${Math.round((lf.hype - 1) * 100)}%</span>`);
     h += `<p class="hint" style="margin-top:0">${esc(H.desc)}</p>
-      <div class="rows"><span>가구 소득</span><span>월 ${hd.income.toFixed(0)}만원</span><span>삶의 질</span><span>${hd.qol} / 100</span></div>
+      <div class="rows"><span>가구 소득</span><span>월 ${hd.income.toFixed(0)}만원</span><span>삶의 질</span><span>${hd.qol} / 100</span><span>출퇴근 혼잡도</span><span>${Math.round(Sim.congestion(S, t.h, 18) * 100)}${Sim.congestion(S, t.h, 18) > 0.8 ? ' <span class="down">배달 지연 주의</span>' : ''}</span><span>주차 여유</span><span>${(() => { const v = Sim.parkingScore(S, { x: t.x, y: t.y, size: 1 }); return v < 0.4 ? '부족' : v < 0.7 ? '보통' : '넉넉'; })()}</span></div>
       <h4>임대료가 이렇게 정해졌어요</h4><div class="chips">${chips.join('') || '<span class="chip">특별한 요인 없음</span>'}</div>
       <h4>주변 유동인구 구성</h4>${segBars(est.flow)}
       <h4>시간대별 유동인구</h4>${chart({ bars: { data: flow, color: '#bcd8ee' }, labels: flow.map((_, i) => i % 6 === 0 ? i + '시' : ''), noMax: true }, 'xs', true)}
@@ -324,7 +324,7 @@
         <button class="step" data-act="hours" data-arg="close:-1">−</button><span class="val sm">${st.close}시 마감</span><button class="step" data-act="hours" data-arg="close:1">+</button></div>
       <div class="ctl"><span class="lbl">홍보</span><div class="seg">${Sim.MKT_NAME.map((n, i) => `<button class="${st.mkt === i ? 'on' : ''}" data-act="mkt" data-arg="${i}" title="하루 ${won(Sim.MKT[i])}">${n}</button>`).join('')}</div></div>
       ${C.dlv > 0 ? `<div class="ctl"><span class="lbl">배달앱</span><div class="seg" style="max-width:170px"><button class="${st.delivery ? 'on' : ''}" data-act="dlv" data-arg="1">입점</button><button class="${!st.delivery ? 'on' : ''}" data-act="dlv" data-arg="0">안 함</button></div><span class="chip">업종 배달 비중 ${Math.round(C.dlv * 100)}%</span></div>
-      <p class="hint" style="margin-top:0">배달 주문은 좌석 없이 주방만 쓰지만 주문마다 수수료 9.8%와 배달비 3,000원이 들어요. 어제 배달 ${st.dayDlv || 0}건 · 수수료 ${won(st.dayDlvFee || 0)}</p>` : ''}
+      <p class="hint" style="margin-top:0">배달 주문은 좌석 없이 주방만 쓰지만 주문마다 수수료 9.8%와 배달비 3,000원이 들어요. 어제 배달 ${st.dayDlv || 0}건 · 수수료 ${won(st.dayDlvFee || 0)}${st.dlvMin != null ? ` · 평균 도착 ${Math.round(st.dlvMin)}분${st.dlvLate > 0.05 ? ` <span class="down">(지연 ${Math.round(st.dlvLate * 100)}%: 환불·평점 하락)</span>` : ''}` : ''}</p>` : ''}
       <h4>${C.icon} ${C.name}의 특징</h4><ul class="traits">${(C.traits || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
       <h4>매장 이벤트</h4><div class="evgrid">${Object.entries(Sim.STORE_EVENTS).map(([k, E]) => { const on = st.ev.find(e => e.kind === k && e.until > S.hour); return `<button class="evbtn ${on ? 'on' : ''}" data-act="sevent" data-arg="${k}" ${on ? 'disabled' : ''}><b>${E.name}</b><span>${E.desc}</span><small>${on ? `진행 중 · ${Math.ceil((on.until - S.hour) / 24)}일 남음` : E.cost ? won(E.cost) : '무료'}</small></button>`; }).join('')}</div>
       <div class="rows">
@@ -332,6 +332,7 @@
         <span>관리비·공과금</span><span>월 ${won(Sim.utilMonth(st))}</span>
         <span>인건비 (4대보험 포함)</span><span>하루 ${won(Sim.laborDay(S, st))}</span>
         <span>1인분 원가</span><span>${won(Sim.unitCost(S, comp, st))} (${pct(Sim.unitCost(S, comp, st) / (Sim.ticket(st) / 1.1))})</span>
+        <span>주차 여유</span><span>${(st._park || 0) < 0.4 ? '<span class="down">부족</span> (가족·부유층 손님 감소)' : (st._park || 0) < 0.7 ? '보통' : '<span class="up">넉넉</span>'}</span>
         <span>식자재 공급</span><span>${st.supply === 'kitchen' ? '중앙주방 배송' : st.supply === 'warehouse' ? '물류센터 배송' : '도매상 직송 (+8%)'}</span>
       </div>
       <div class="btn-row">${st.size < 3 ? `<button class="btn" data-act="upgrade">옆 칸까지 확장 → ${Sim.SIZES[st.size + 1].name} <small>${short(Sim.upgradeCost(S, st))}</small></button>` : ''}
@@ -833,11 +834,11 @@
     });
     $('nameInput').addEventListener('input', renderLogoPick);
     $('diffPick').addEventListener('click', e => { const b = e.target.closest('[data-diff]'); if (b) { newDiff = b.dataset.diff; renderDiff(); } });
-    $('evPick').addEventListener('click', e => { const b = e.target.closest('[data-ev]'); if (b) { newEvents = b.dataset.ev === '1'; renderDiff(); } });
+    $('evPick').addEventListener('click', e => { const b = e.target.closest('[data-ev]'); if (!b) return; if (b.dataset.ev === 'sp') newSponsor = !newSponsor; else newEvents = b.dataset.ev === '1'; renderDiff(); });
     $('compInput').addEventListener('input', () => { $('compVal').textContent = $('compInput').value + '개'; });
     $('btnNew').addEventListener('click', () => {
       const name = ($('nameInput').value || '').trim() || '모락상회';
-      S = Sim.newGame({ seed: (Date.now() % 2147483647) | 0, name, color: newColor, logo: newLogo, difficulty: newDiff, events: newEvents, competitors: +$('compInput').value });
+      S = Sim.newGame({ seed: (Date.now() % 2147483647) | 0, name, color: newColor, logo: newLogo, difficulty: newDiff, events: newEvents, competitors: +$('compInput').value, sponsor: newSponsor });
       start();
       toast('빈 땅을 눌러 상권을 살펴보거나, 왼쪽에서 ☕ 카페를 골라 첫 가게를 열어 보세요!');
     });
@@ -858,7 +859,7 @@
   function renderDiff() {
     $('diffPick').innerHTML = Object.entries(Sim.DIFFICULTY).map(([k, D]) => `<button class="${newDiff === k ? 'on' : ''}" data-diff="${k}" title="${D.desc}">${D.name}</button>`).join('');
     $('diffDesc').textContent = Sim.DIFFICULTY[newDiff].desc + ` 시작 자금 ${won(Sim.DIFFICULTY[newDiff].cash)}.`;
-    $('evPick').innerHTML = `<button class="${newEvents ? 'on' : ''}" data-ev="1">사건 있음</button><button class="${!newEvents ? 'on' : ''}" data-ev="0">평화롭게</button>`;
+    $('evPick').innerHTML = `<button class="${newEvents ? 'on' : ''}" data-ev="1">사건 있음</button><button class="${!newEvents ? 'on' : ''}" data-ev="0">평화롭게</button><button class="${newSponsor ? 'on' : ''}" data-ev="sp" title="버스정류장·공영주차장을 직접 후원해 지을 수 있어요">교통 후원 ${newSponsor ? '켬' : '끔'}</button>`;
   }
   function openModal() {
     modalOpen = true; speedIdx = 0;

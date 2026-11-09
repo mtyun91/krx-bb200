@@ -89,9 +89,11 @@
     if (season === 'winter') poly(ctx, [[cx - 3 * sc, cy - 23 * sc], [cx + 3 * sc, cy - 23 * sc], [cx, cy - 29 * sc]], '#7d9a6a', 0);
   }
   // 사람 (도시용, 작은 선화)
-  function walker(ctx, x, y, shirt, hair, bob, umbrella) {
+  function walker(ctx, x, y, shirt, hair, bob, umbrella, step) {
     ctx.fillStyle = 'rgba(94,31,43,0.14)'; ctx.beginPath(); ctx.ellipse(x, y + 0.5, 2.6, 1.1, 0, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(x - 1, y); ctx.lineTo(x - 1, y - 4 - bob * 0.3); ctx.moveTo(x + 1, y); ctx.lineTo(x + 1, y - 4 + bob * 0.3); ink(ctx, 1);
+    const sw = step == null ? 0 : Math.sin(step) * 1.6;
+    ctx.beginPath(); ctx.moveTo(x - 0.8 + sw, y); ctx.lineTo(x - 0.8, y - 4 - bob * 0.3); ctx.moveTo(x + 0.8 - sw, y); ctx.lineTo(x + 0.8, y - 4 + bob * 0.3); ink(ctx, 1);
+    ctx.beginPath(); ctx.moveTo(x - 2, y - 8 - bob); ctx.lineTo(x - 2.6 - sw * 0.6, y - 5 - bob); ctx.moveTo(x + 2, y - 8 - bob); ctx.lineTo(x + 2.6 + sw * 0.6, y - 5 - bob); ctx.strokeStyle = INK; ctx.lineWidth = 0.9; ctx.stroke();
     ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x - 2, y - 9 - bob, 4, 5.5, 1.5); else ctx.rect(x - 2, y - 9 - bob, 4, 5.5);
     ctx.fillStyle = shirt; ctx.fill(); ink(ctx, 0.9);
     ctx.beginPath(); ctx.arc(x, y - 11 - bob, 1.9, 0, 7); ctx.fillStyle = '#f4d2bd'; ctx.fill(); ink(ctx, 0.8);
@@ -253,33 +255,112 @@
     while (cache.size > 18) cache.delete(cache.keys().next().value);
     return ch;
   };
+  function isRoadT(t) { return t && (t.t === 'road' || t.t === 'bridge'); }
+  function isCross(S, t) { const r = (dx, dy) => isRoadT(Sim.tile(S, t.x + dx, t.y + dy)); return (r(1, 0) || r(-1, 0)) && (r(0, 1) || r(0, -1)); }
+  R.roadTile = function (ctx, t, season, edges) {
+    const S = this.S, p = iso(t.x, t.y), cx = p.x, cy = p.y, winter = season === 'winter';
+    const ave = t.road === 'ave', alley = t.road === 'alley', bridge = t.t === 'bridge';
+    if (bridge) diamond(ctx, cx, cy, 1, '#86c3d3');
+    const asphalt = winter ? '#e8e0e2' : ave ? '#b9a1a6' : '#c9b4b6';
+    diamond(ctx, cx, cy, 1, alley ? (winter ? '#f3ecec' : '#ead9d4') : asphalt);
+    const nb = (dx, dy) => isRoadT(Sim.tile(S, t.x + dx, t.y + dy));
+    const cross = isCross(S, t);
+    const along = nb(1, 0) || nb(-1, 0) ? (nb(0, 1) || nb(0, -1) ? null : 'x') : 'y';
+    ctx.save(); diamondPath(ctx, cx, cy, 1); ctx.clip();
+    if (alley) {
+      ctx.strokeStyle = 'rgba(94,31,43,0.14)'; ctx.lineWidth = 0.7;
+      for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(cx + i * 8 - 30, cy + i * 4 + 15); ctx.lineTo(cx + i * 8 + 30, cy + i * 4 - 15); ctx.stroke(); }
+    } else if (!cross) {
+      // 차선: 대로는 흰 점선 + 반대 방향 대로와 맞닿은 쪽 노란 중앙선, 이면도로는 가운데 점선
+      ctx.strokeStyle = '#f6efe9'; ctx.lineWidth = 1.4; ctx.setLineDash([5, 6]); ctx.beginPath();
+      if (along === 'x') { ctx.moveTo(cx - HW * 0.55, cy - HH * 0.55); ctx.lineTo(cx + HW * 0.55, cy + HH * 0.55); } else { ctx.moveTo(cx + HW * 0.55, cy - HH * 0.55); ctx.lineTo(cx - HW * 0.55, cy + HH * 0.55); }
+      ctx.stroke(); ctx.setLineDash([]);
+      if (ave) {
+        const n2 = along === 'x' ? Sim.tile(S, t.x, t.y + 1) : Sim.tile(S, t.x + 1, t.y), n3 = along === 'x' ? Sim.tile(S, t.x, t.y - 1) : Sim.tile(S, t.x - 1, t.y);
+        const e = n2 && n2.road === 'ave' ? (along === 'x' ? edges[2] : edges[1]) : n3 && n3.road === 'ave' ? (along === 'x' ? edges[0] : edges[3]) : null;
+        if (e) { ctx.strokeStyle = '#e3a63c'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(e[2][0], e[2][1]); ctx.lineTo(e[3][0], e[3][1]); ctx.stroke(); }
+      }
+    }
+    ctx.restore();
+    // 횡단보도: 교차로에 들어오는 길마다 얼룩말 무늬
+    if (cross && !alley) {
+      for (const [dx, dy, a, b] of edges) {
+        const n = Sim.tile(S, t.x + dx, t.y + dy); if (!isRoadT(n) || isCross(S, n) || n.road === 'alley') continue;
+        const c = { x: cx, y: cy };
+        for (let i = 0; i < 5; i++) {
+          const u = 0.14 + i * 0.18;
+          const px = a[0] + (b[0] - a[0]) * u, py = a[1] + (b[1] - a[1]) * u;
+          const qx = px + (c.x - px) * 0.3, qy = py + (c.y - py) * 0.3;
+          ctx.beginPath(); ctx.moveTo(px + (c.x - px) * 0.04, py + (c.y - py) * 0.04); ctx.lineTo(qx, qy); ctx.strokeStyle = '#fbf6f2'; ctx.lineWidth = 3.2; ctx.stroke();
+        }
+      }
+    }
+    // 인도: 땅과 맞닿은 변을 따라 보도블록 띠 + 연석
+    for (const [dx, dy, a, b] of edges) {
+      const n = Sim.tile(S, t.x + dx, t.y + dy);
+      if (!n || isRoadT(n)) continue;
+      if (n.t === 'water') { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 2.4); if (bridge) { ctx.save(); ctx.translate(0, -5); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 1.2); ctx.restore(); for (let i = 0; i <= 4; i++) { const u = i / 4, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 5); ink(ctx, 1); } } continue; }
+      if (alley) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 1.2); continue; }
+      const k = 0.26;
+      const a2 = [a[0] + (cx - a[0]) * k, a[1] + (cy - a[1]) * k], b2 = [b[0] + (cx - b[0]) * k, b[1] + (cy - b[1]) * k];
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(b2[0], b2[1]); ctx.lineTo(a2[0], a2[1]); ctx.closePath();
+      ctx.fillStyle = winter ? '#f7f1f0' : '#f1e2dc'; ctx.fill();
+      ctx.strokeStyle = 'rgba(94,31,43,0.18)'; ctx.lineWidth = 0.6;
+      for (let i = 1; i < 5; i++) { const u = i / 5; ctx.beginPath(); ctx.moveTo(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u); ctx.lineTo(a2[0] + (b2[0] - a2[0]) * u, a2[1] + (b2[1] - a2[1]) * u); ctx.stroke(); }
+      ctx.beginPath(); ctx.moveTo(a2[0], a2[1]); ctx.lineTo(b2[0], b2[1]); ink(ctx, 1.3);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 0.9);
+      // 낮은 거리 소품
+      const h = hash(t.x * 3 + dx, t.y * 5 + dy, 11);
+      const mx = (a[0] + b[0]) / 2 * 0.86 + cx * 0.14, my = (a[1] + b[1]) / 2 * 0.86 + cy * 0.14;
+      if (h < 0.13) this.planter(ctx, mx, my, season);
+      else if (h < 0.19) { ctx.beginPath(); ctx.rect(mx - 2, my - 6, 4, 6); ctx.fillStyle = '#8fb38a'; ctx.fill(); ink(ctx, 0.8); }
+      else if (h < 0.25) this.bikes(ctx, mx, my);
+      else if (h < 0.28) { ctx.beginPath(); ctx.rect(mx - 1.5, my - 5, 3, 5); ctx.fillStyle = '#e46b5f'; ctx.fill(); ink(ctx, 0.8); }
+      else if (h < 0.31) { ctx.beginPath(); ctx.rect(mx - 3, my - 10, 6, 10); ctx.fillStyle = '#9ea7de'; ctx.fill(); ink(ctx, 0.9); ctx.beginPath(); ctx.rect(mx - 2, my - 8, 4, 3); ctx.fillStyle = '#fff8ee'; ctx.fill(); }
+      else if (h < 0.34) { ctx.beginPath(); ctx.ellipse(mx, my - 1, 4, 2, 0, 0, 7); ctx.fillStyle = '#a99bd9'; ctx.fill(); ink(ctx, 0.7); }
+    }
+  };
+  R.planter = function (ctx, x, y, season) {
+    poly(ctx, [[x - 6, y - 1], [x, y + 2], [x + 6, y - 1], [x + 6, y - 5], [x, y - 2], [x - 6, y - 5]], '#d9785f', 0.9);
+    const fl = season === 'winter' ? ['#fbf7f7'] : season === 'autumn' ? ['#e39a4a', '#c94f6d'] : ['#e58ba3', '#f2d36b', '#fff8ee'];
+    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(x - 4 + i * 2, y - 5 - (i % 2), 1.6, 0, 7); ctx.fillStyle = i % 2 ? '#8fb38a' : fl[i % fl.length]; ctx.fill(); }
+  };
+  R.bikes = function (ctx, x, y) {
+    for (let i = 0; i < 2; i++) { const bx = x - 3 + i * 5, by = y + i * 2; ctx.beginPath(); ctx.arc(bx - 2.5, by, 2, 0, 7); ctx.arc(bx + 2.5, by + 1, 2, 0, 7); ink(ctx, 0.8); ctx.beginPath(); ctx.moveTo(bx - 2.5, by); ctx.lineTo(bx, by - 3); ctx.lineTo(bx + 2.5, by + 1); ctx.strokeStyle = ['#e46b5f', '#6f8fb5'][i]; ctx.lineWidth = 1; ctx.stroke(); }
+  };
+  R.streetTree = function (ctx, x, y, season, k) {
+    ctx.fillStyle = 'rgba(94,31,43,0.12)'; ctx.beginPath(); ctx.ellipse(x + 2, y + 1, 7, 3, 0, 0, 7); ctx.fill();
+    poly(ctx, [[x - 4, y], [x, y + 2], [x + 4, y], [x, y - 2]], '#c9a27e', 0.7);
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 14); ink(ctx, 2); ctx.strokeStyle = '#8a5a3c'; ctx.lineWidth = 1; ctx.stroke();
+    const c = TREE[season];
+    ctx.beginPath(); ctx.arc(x, y - 20, 7.5, 0, 7); ctx.moveTo(x + 10, y - 16); ctx.arc(x + 4, y - 16, 6, 0, 7); ctx.moveTo(x + 2, y - 16); ctx.arc(x - 4, y - 16, 6, 0, 7);
+    ink(ctx, 2.4); ctx.fillStyle = c[k % 2]; ctx.fill();
+  };
+  R.trafficLight = function (ctx, x, y, green) {
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 22); ink(ctx, 1.4);
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x - 2.5, y - 30, 5, 10, 2); else ctx.rect(x - 2.5, y - 30, 5, 10); ctx.fillStyle = '#3b2228'; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y - 27.3, 1.6, 0, 7); ctx.fillStyle = green ? '#5a4448' : '#ff6b6b'; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y - 22.7, 1.6, 0, 7); ctx.fillStyle = green ? '#7ee08a' : '#5a4448'; ctx.fill();
+  };
+  R.terrace = function (ctx, x, y, col, open, seed) {
+    for (let i = 0; i < 2; i++) {
+      const tx = x - 7 + i * 13, ty = y + (i ? 3 : -1);
+      ctx.beginPath(); ctx.ellipse(tx, ty - 5, 4.5, 2.2, 0, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.8);
+      ctx.beginPath(); ctx.moveTo(tx, ty - 5); ctx.lineTo(tx, ty); ctx.moveTo(tx, ty - 5); ctx.lineTo(tx, ty - 17); ink(ctx, 0.9);
+      ctx.beginPath(); ctx.moveTo(tx - 9, ty - 15); ctx.quadraticCurveTo(tx, ty - 22, tx + 9, ty - 15); ctx.closePath(); ctx.fillStyle = i ? '#fff8ee' : col; ctx.fill(); ink(ctx, 0.9);
+      if (open && hash(seed, i) < 0.75) { walkerSit(ctx, tx - 5, ty, SHIRTS[(seed + i) % SHIRTS.length], HAIR[(seed + i * 3) % HAIR.length]); if (hash(seed, i, 3) < 0.5) walkerSit(ctx, tx + 5, ty + 1, SHIRTS[(seed + i + 4) % SHIRTS.length], HAIR[(seed + i) % HAIR.length]); }
+    }
+  };
+  function walkerSit(ctx, x, y, shirt, hair) {
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x - 2, y - 7, 4, 4.5, 1.5); else ctx.rect(x - 2, y - 7, 4, 4.5); ctx.fillStyle = shirt; ctx.fill(); ink(ctx, 0.8);
+    ctx.beginPath(); ctx.arc(x, y - 9, 1.8, 0, 7); ctx.fillStyle = '#f4d2bd'; ctx.fill(); ink(ctx, 0.7);
+    ctx.beginPath(); ctx.arc(x, y - 9.6, 1.8, Math.PI, 0); ctx.fillStyle = hair; ctx.fill();
+  }
   R.groundTile = function (ctx, t, season) {
     const S = this.S, p = iso(t.x, t.y), cx = p.x, cy = p.y, winter = season === 'winter';
     const edges = [[0, -1, [cx - HW, cy], [cx, cy - HH]], [1, 0, [cx, cy - HH], [cx + HW, cy]], [0, 1, [cx + HW, cy], [cx, cy + HH]], [-1, 0, [cx, cy + HH], [cx - HW, cy]]];
     if (t.t === 'road' || t.t === 'bridge') {
-      const ave = t.road === 'ave', alley = t.road === 'alley';
-      if (t.t === 'bridge') diamond(ctx, cx, cy, 1, '#86c3d3');
-      diamond(ctx, cx, cy, 1, winter ? '#f1eaea' : ave ? '#cdb2b2' : alley ? '#e6d4d0' : ROAD);
-      const nb = (dx, dy) => roadAt(S, t.x + dx, t.y + dy);
-      const vertical = nb(0, -1) && nb(0, 1) && !(nb(-1, 0) && nb(1, 0));
-      const horizontal = nb(-1, 0) && nb(1, 0) && !(nb(0, -1) && nb(0, 1));
-      ctx.save(); diamondPath(ctx, cx, cy, 1); ctx.clip();
-      if (!alley && (vertical || horizontal)) {
-        ctx.strokeStyle = ROAD_W; ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]); ctx.beginPath();
-        if (horizontal) { ctx.moveTo(cx - HW * 0.5, cy - HH * 0.5); ctx.lineTo(cx + HW * 0.5, cy + HH * 0.5); } else { ctx.moveTo(cx + HW * 0.5, cy - HH * 0.5); ctx.lineTo(cx - HW * 0.5, cy + HH * 0.5); }
-        ctx.stroke(); ctx.setLineDash([]);
-        // 대로 중앙선 (노란 두 줄)
-        if (ave) {
-          const n2 = Sim.tile(S, t.x + (vertical ? 1 : 0), t.y + (vertical ? 0 : 1)), n3 = Sim.tile(S, t.x + (vertical ? -1 : 0), t.y + (vertical ? 0 : -1));
-          const e = n2 && n2.road === 'ave' ? (vertical ? edges[1] : edges[2]) : n3 && n3.road === 'ave' ? (vertical ? edges[3] : edges[0]) : null;
-          if (e) { ctx.strokeStyle = '#e3a63c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(e[2][0], e[2][1]); ctx.lineTo(e[3][0], e[3][1]); ctx.stroke(); }
-        }
-      } else if (!alley && !vertical && !horizontal) {
-        ctx.fillStyle = 'rgba(255,250,248,0.85)';
-        for (let i = -2; i <= 2; i++) { ctx.save(); ctx.translate(cx + i * 5.4 - 12, cy + i * 2.7 - 4); ctx.transform(1, 0.5, 0, 1, 0, 0); ctx.fillRect(-1.4, -4, 2.8, 7); ctx.restore(); }
-      }
-      ctx.restore();
-      for (const [dx, dy, a, b] of edges) { const n = Sim.tile(S, t.x + dx, t.y + dy); if (n && !(n.t === 'road' || n.t === 'bridge')) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, t.t === 'bridge' ? 2.2 : 1.4); } }
+      this.roadTile(ctx, t, season, edges);
     } else if (t.t === 'water') {
       diamond(ctx, cx, cy, 1, '#86c3d3');
       ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.2; ctx.beginPath(); const wx = cx - 8 + hash(t.x, t.y, 2) * 10, wy = cy - 2 + hash(t.x, t.y, 3) * 4; ctx.moveTo(wx, wy); ctx.quadraticCurveTo(wx + 3, wy - 2, wx + 7, wy); ctx.stroke();
@@ -698,8 +779,14 @@
     if (this.floaters.length > 40) this.floaters.splice(0, this.floaters.length - 40);
   };
   const ACTIVITY = [0.1, 0.05, 0.03, 0.03, 0.03, 0.08, 0.2, 0.5, 0.8, 0.7, 0.7, 0.85, 1, 0.95, 0.8, 0.8, 0.85, 0.9, 1, 0.9, 0.7, 0.5, 0.35, 0.2];
-  function stepMover(S, w, dt, sp) {
+  function stepMover(S, w, dt, sp, phase) {
     w.f += dt / 1000 * w.sp * sp;
+    if (w.f >= 1 && w.car && w.tx !== undefined) {
+      // 다음 칸이 교차로이고 내 방향 신호가 빨간불이면 정지선에서 대기
+      const cur = Sim.tile(S, w.tx, w.ty), nx = Sim.tile(S, w.tx + (w.dx || 0), w.ty + (w.dy || 0));
+      if (cur && nx && !isCross(S, cur) && isCross(S, nx) && nx.road === 'ave' && ((w.dx ? 0 : 1) !== phase)) { w.f = 1; w.wait = true; return; }
+      w.wait = false;
+    }
     if (w.f >= 1) {
       w.x = w.tx; w.y = w.ty; w.f = 0;
       const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => { const t = Sim.tile(S, w.x + dx, w.y + dy); return t && (t.t === 'road' || t.t === 'bridge') && (!w.car || t.road !== 'alley'); });
@@ -722,14 +809,15 @@
     const roadsIn = () => { for (let i = 0; i < 40; i++) { const x = view.x0 + Math.floor(Math.random() * (view.x1 - view.x0)), y = view.y0 + Math.floor(Math.random() * (view.y1 - view.y0)); const t = Sim.tile(S, x, y); if (t && (t.t === 'road' || t.t === 'bridge')) return t; } return null; };
     const outside = m => m.x < view.x0 - 2 || m.x > view.x1 + 2 || m.y < view.y0 - 2 || m.y > view.y1 + 2;
     this.walkers = this.walkers.filter(m => !outside(m)); this.cars = this.cars.filter(m => !outside(m));
-    while (this.walkers.length < want) { const t = roadsIn(); if (!t) break; this.walkers.push({ x: t.x, y: t.y, tx: t.x, ty: t.y, f: 1, side: Math.random() < 0.5 ? -1 : 1, c: SHIRTS[Math.floor(Math.random() * SHIRTS.length)], hair: HAIR[Math.floor(Math.random() * HAIR.length)], sp: 0.5 + Math.random() * 0.4, umb: Math.random() < 0.8, dog: Math.random() < 0.06 }); }
+    while (this.walkers.length < want) { const t = roadsIn(); if (!t) break; this.walkers.push({ x: t.x, y: t.y, tx: t.x, ty: t.y, f: 1, side: Math.random() < 0.5 ? -1 : 1, c: SHIRTS[Math.floor(Math.random() * SHIRTS.length)], hair: HAIR[Math.floor(Math.random() * HAIR.length)], c2: SHIRTS[Math.floor(Math.random() * SHIRTS.length)], hair2: HAIR[Math.floor(Math.random() * HAIR.length)], pair: Math.random() < 0.18, sp: 0.5 + Math.random() * 0.4, umb: Math.random() < 0.8, dog: Math.random() < 0.06 }); }
     if (this.walkers.length > want) this.walkers.length = want;
     while (this.cars.length < wantCars) { const t = roadsIn(); if (!t || t.road === 'alley') break; this.cars.push({ car: true, x: t.x, y: t.y, tx: t.x, ty: t.y, f: 1, c: CARS[Math.floor(Math.random() * CARS.length)], sp: 1.4 + Math.random() * 0.8, taxi: Math.random() < 0.15 }); }
     if (this.cars.length > wantCars) this.cars.length = wantCars;
     if (!speed) return;
     const sp = Math.min(2, Math.max(0.6, speed));
     for (const w of this.walkers) stepMover(S, w, dt, sp);
-    for (const c of this.cars) stepMover(S, c, dt, sp);
+    const phase = Math.floor(this.hourF * 20) % 2;
+    for (const c of this.cars) stepMover(S, c, dt, sp, phase);
     for (const tr of this.trucks) { tr.f += dt / 1000 * 3 * Math.min(3, speed); while (tr.f >= 1) { tr.f -= 1; tr.i++; } }
     this.trucks = this.trucks.filter(tr => tr.i < tr.p.length - 1);
     for (const f of this.floaters) f.t += dt;
@@ -868,12 +956,32 @@
       const p = iso(x, y); if (!inView(p.x, p.y)) continue;
       if (t.tree) items.push({ d: x + y, tree: t });
       else if (t.t === 'mount' && hash(x, y, 5) < 0.75) items.push({ d: x + y, pine: t });
-      if (!lod && t.t === 'road' && t.road === 'ave' && (x + y) % 6 === 0) { const nT = Sim.tile(S, x - 1, y), nL = Sim.tile(S, x, y + 1); if ((nT && nT.t === 'land') || (nL && nL.t === 'land')) items.push({ d: x + y + 0.4, lamp: t }); }
+      if (!lod && t.t === 'road' && t.road !== 'alley') {
+        const landE = [[0, -1], [1, 0], [0, 1], [-1, 0]].filter(([dx, dy]) => { const n = Sim.tile(S, x + dx, y + dy); return n && n.t === 'land'; });
+        if (landE.length === 1 && !isCross(S, t)) {
+          const [dx, dy] = landE[0];
+          const sp = iso(x + dx * 0.36, y + dy * 0.36);
+          if ((t.road === 'ave' && (x + y) % 2 === 0) || (t.road === 'st' && hash(x, y, 13) < 0.3)) items.push({ d: x + y + 0.35, stree: sp, k: x + y });
+          else if ((x * 7 + y * 3) % 9 === 0) items.push({ d: x + y + 0.4, lamp: { sp } });
+        }
+        if (t.road === 'ave' && isCross(S, t)) { const nX = Sim.tile(S, x - 1, y), nY = Sim.tile(S, x, y - 1); if ((isRoadT(nX) && !isCross(S, nX)) || (isRoadT(nY) && !isCross(S, nY))) items.push({ d: x + y + 0.45, tlight: t }); }
+      }
     }
     // 지도 밖으로 비어져 나온 큰 건물(왼쪽·위쪽 앵커)도 포함
     for (let y = Math.max(0, view.y0 - 4); y < view.y0; y++) for (let x = view.x0; x <= view.x1; x++) { const t = S.tiles[y * Sim.W + x]; if (t.b && (t.b.d || 1) > 1) items.push({ d: x + (t.b.w || 1) - 1 + y + (t.b.d || 1) - 1, t }); }
     for (let y = view.y0; y <= view.y1; y++) for (let x = Math.max(0, view.x0 - 4); x < view.x0; x++) { const t = S.tiles[y * Sim.W + x]; if (t.b && (t.b.w || 1) > 1) items.push({ d: x + (t.b.w || 1) - 1 + y + (t.b.d || 1) - 1, t }); }
     for (const s2 of S.stations) items.push({ d: s2.x + s2.y + 1.5, station: s2 });
+    if (!lod) for (const st of S.stores) {
+      if (st.x < view.x0 - 2 || st.x > view.x1 + 2 || st.y < view.y0 - 2 || st.y > view.y1 + 2) continue;
+      if (!['cafe', 'dessert', 'brunch', 'bakery', 'pub', 'bubbletea', 'pizza'].includes(st.cat)) continue;
+      const w = st.w || 1, d = st.d || 1;
+      for (const [rx, ry, ox, oy] of [[st.x + w - 1, st.y + d, 0, -0.32], [st.x + w, st.y + d - 1, -0.32, 0]]) {
+        const r = Sim.tile(S, rx, ry); if (!r || r.t !== 'road' || r.road === 'alley' || isCross(S, r)) continue;
+        const sp = iso(rx + ox, ry + oy);
+        const open = this.hourF >= st.open && this.hourF < st.close && Sim.seasonOf(S) !== 'winter';
+        items.push({ d: rx + ry + 0.3, terr: sp, col: S.companies[st.owner].color, open, seed: st.id }); break;
+      }
+    }
     const ovp = this.overlay && this.overlay.type === 'potential' && this.overlay.data;
     if (ovp) { const max = Math.max(1, ...ovp.map(o => o.cust)); for (const o of ovp) items.push({ d: o.x + o.y - 0.01, o, k: o.cust / max }); }
     if (!lod) {
@@ -906,7 +1014,10 @@
         drawTree(ctx, p.x - 8 + (k % 3) * 6, p.y - 2 + (k % 2) * 4, season, k);
         if (k > 5) drawTree(ctx, p.x + 12, p.y + 4, season, k + 1);
       } else if (it.pine) { const p = iso(it.pine.x, it.pine.y); const k = hash(it.pine.x, it.pine.y, 8); drawPine(ctx, p.x - 6 + k * 12, p.y + 2 - k * 4, season, 0.8 + k * 0.5); if (k > 0.5 && !lod) drawPine(ctx, p.x + 8, p.y + 6, season, 0.7); }
-      else if (it.lamp) { const p = iso(it.lamp.x, it.lamp.y); this.drawLamp(ctx, p.x - 22, p.y - 4, night); }
+      else if (it.lamp) { const p = it.lamp.sp || iso(it.lamp.x, it.lamp.y); this.drawLamp(ctx, p.x, p.y, night); }
+      else if (it.stree) this.streetTree(ctx, it.stree.x, it.stree.y, season, it.k);
+      else if (it.tlight) { const p = iso(it.tlight.x - 0.4, it.tlight.y - 0.4); const ph = Math.floor(this.hourF * 20) % 2; this.trafficLight(ctx, p.x, p.y, ph === 0); }
+      else if (it.terr) this.terrace(ctx, it.terr.x, it.terr.y, it.col, it.open, it.seed);
       else if (it.station) this.drawStation(ctx, it.station);
       else if (it.o) {
         const p = iso(it.o.x, it.o.y), k = it.k;
@@ -914,15 +1025,20 @@
         if (k >= 0.2) { ctx.setLineDash([3, 3]); ink(ctx, 1); ctx.setLineDash([]); }
       } else if (it.w) {
         const w = it.w; const fx = w.x + (w.tx - w.x) * w.f, fy = w.y + (w.ty - w.y) * w.f;
-        const p = iso(fx, fy); const ox = w.side * 11, oy = w.side * 3;
-        const bob = REDUCED || paused ? 0 : Math.abs(Math.sin(this.t / 140 + fx * 3)) * 1.2;
-        walker(ctx, p.x + ox, p.y + oy, w.c, w.hair, bob, rain && w.umb);
-        if (w.dog) { const dx = p.x + ox + 5, dy = p.y + oy + 1; ctx.beginPath(); ctx.ellipse(dx, dy - 2, 3, 1.8, 0, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.8); ctx.beginPath(); ctx.arc(dx + 3, dy - 3.5, 1.4, 0, 7); ctx.fill(); ink(ctx, 0.7); }
+        const ddx = w.dx || 0, ddy = w.dy || 0;
+        const tw = Sim.tile(S, Math.round(fx), Math.round(fy));
+        const sOff = tw && tw.road === 'alley' ? 0.15 : 0.37;
+        const p = ddx ? iso(fx, fy + w.side * sOff) : iso(fx + w.side * sOff, fy);
+        const bob = REDUCED || paused || w.wait ? 0 : Math.abs(Math.sin(this.t / 140 + fx * 3)) * 1.2;
+        walker(ctx, p.x, p.y, w.c, w.hair, bob, rain && w.umb, paused || w.wait ? 0 : this.t / 110 + w.sp * 10);
+        if (w.pair) walker(ctx, p.x + 5, p.y + 1.5, w.c2, w.hair2, bob, rain && w.umb, paused ? 0 : this.t / 110 + 1.5);
+        const ox = 0, oy = 0;
+        if (w.dog && !w.pair) { const dx = p.x + ox + 5, dy = p.y + oy + 1; ctx.beginPath(); ctx.ellipse(dx, dy - 2, 3, 1.8, 0, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.8); ctx.beginPath(); ctx.arc(dx + 3, dy - 3.5, 1.4, 0, 7); ctx.fill(); ink(ctx, 0.7); }
       } else if (it.car) {
         const c = it.car; const fx = c.x + (c.tx - c.x) * c.f, fy = c.y + (c.ty - c.y) * c.f;
-        const p = iso(fx, fy); const lane = (c.dx || 0) + (c.dy || 0) > 0 ? 1 : -1;
-        const off = c.dx ? [lane * -4, lane * 6] : [lane * 9, lane * 3];
-        drawCar(ctx, p.x + off[0] * 0.6, p.y + off[1] * 0.4, c.dx || 1, c.dy || 0, c.c, c.taxi);
+        const ddx = c.dx || 1, ddy = c.dy || 0, lane = 0.2;
+        const p = iso(fx - ddy * lane, fy + ddx * lane);
+        drawCar(ctx, p.x, p.y, c.dx || 1, c.dy || 0, c.c, c.taxi);
         if (night > 0.3) this._glows.push({ x: p.x, y: p.y, r: 12, a: 0.45 });
       } else if (it.tr) {
         const tr = it.tr; const a = tr.p[tr.i], b = tr.p[tr.i + 1];

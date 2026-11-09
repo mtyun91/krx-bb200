@@ -199,6 +199,7 @@
     factory:   { cls: 'ind', name: '낡은 공장',     seg: 'off',  prof: 'worker',  inc: 0.85, fp: [[2, 1], [2, 2]], floors: [1, 2], popPer: 6 },
     park:      { cls: 'pub', name: '공원',          seg: 'tour', prof: 'tourist', inc: 1.0,  fp: [[1, 1]], floors: [0, 0], popPer: 0, fixedPop: 60 },
     rpark:     { cls: 'pub', name: '한강공원',      seg: 'tour', prof: 'tourist', inc: 1.0,  fp: [[1, 1]], floors: [0, 0], popPer: 0, fixedPop: 25 },
+    parking:   { cls: 'pub', name: '공영주차장',    seg: 'res',  prof: 'family',  inc: 1.0,  fp: [[1, 1]], floors: [0, 0], popPer: 0, fixedPop: 0 },
     bus:       { cls: 'pub', name: '버스정류장',    seg: 'off',  prof: 'worker',  inc: 1.0,  fp: [[1, 1]], floors: [0, 0], popPer: 0, fixedPop: 140 },
   };
   const CLS_NAME = { res: '주택', com: '상가', off: '오피스', edu: '교육', ind: '산업', pub: '공공', lm: '랜드마크' };
@@ -295,7 +296,8 @@
   };
   const PUBLIC = {
     park: { name: '공원',       icon: '🌳', cost: 5e8, desc: '관광객이 찾아오고 2칸 안 매장 매력 +10%, 주변 개발 촉진' },
-    bus:  { name: '버스정류장', icon: '🚏', cost: 6e7, desc: '출퇴근 인구 유입, 주변 건물 성장 촉진' },
+    bus:  { name: '버스정류장', icon: '🚏', cost: 6e7, desc: '출퇴근 인구 유입, 주변 건물 성장 촉진', sponsor: true },
+    parking: { name: '공영주차장', icon: '🅿️', cost: 15e8, desc: '반경 4칸 매장의 주차 여유 +40%. 차로 오는 가족·부유층 손님이 늘어요', sponsor: true },
   };
 
   // ---------- 이벤트 ----------
@@ -472,22 +474,23 @@
     const bank = new Set();
     for (const t of S.tiles) if (t.t !== 'water' && t.t !== 'mount' && t.road !== 'ave' && n8(t, isRiver)) { bank.add(t); t.bank = true; }
     for (const t of S.tiles) if (!bank.has(t) && t.t === 'land' && n8(t, n => n && bank.has(n))) setRoad(t, 'st');
-    // 이면도로·골목: 구역마다 간격이 달라요
-    const STEP = [4, 3, 5, 3, 4, 3, 4, 5, 5, 6, 6, 7, 6];
-    for (const t of S.tiles) {
-      if (t.t !== 'land') continue;
-      const st = STEP[t.h];
-      const gx = (t.x + (t.h * 3) % st) % st === 0, gy = (t.y + (t.h * 2) % st) % st === 0;
-      if (!(gx || gy)) continue;
-      // 오래된 동네는 골목이 군데군데 끊겨 있어요
-      if ((t.h === 1 || t.h === 3 || t.h === 5) && hashI(t.x * 7 + (gx ? 0 : 1), t.y * 13) < 0.25) continue;
-      t.t = 'road'; t.road = st <= 3 ? 'alley' : 'st';
+    // 이면도로·골목: 대로로 둘러싸인 큰 블록(슈퍼블록)마다 같은 간격으로 반듯하게 나눔
+    const BLOCK = { old: 3, uni: 4, res: 4, ind: 4, tour: 5, rich: 5, off: 5 };
+    const cuts = (lo, hi, b) => { const L = hi - lo + 1, n = Math.max(0, Math.round((L + 1) / (b + 1)) - 1), out = []; for (let i = 1; i <= n; i++) out.push(lo - 1 + Math.round(i * (L + 1) / (n + 1))); return out; };
+    const spans = (aves, max) => { const out = []; let lo = 0; for (const a of aves) { if (a - 1 >= lo) out.push([lo, a - 1]); lo = a + 2; } if (lo <= max) out.push([lo, max]); return out; };
+    for (const [x0, x1] of spans(AVE_X, W - 1)) for (const [y0, y1] of spans(AVE_Y, H - 1)) {
+      const hc = regionOf(Math.round((x0 + x1) / 2), Math.round((y0 + y1) / 2));
+      const kind = HOODS[hc].kind, b = hc === 11 ? 6 : (BLOCK[kind] || 4);
+      const vx = cuts(x0, x1, b), vy = cuts(y0, y1, Math.max(3, b - (kind === 'old' ? 0 : 1)));
+      vx.forEach((x, i) => { for (let y = y0; y <= y1; y++) { const t = T(x, y); if (t && t.t === 'land') { t.t = 'road'; t.road = kind === 'old' && i % 2 ? 'alley' : 'st'; } } });
+      vy.forEach((y, i) => { for (let x = x0; x <= x1; x++) { const t = T(x, y); if (t && t.t === 'land') { t.t = 'road'; t.road = kind === 'old' && i % 2 ? 'alley' : (t.road === 'alley' ? 'st' : 'st'); } } });
     }
     // 랜드마크 자리는 비워서 배치
     for (const k in LANDMARKS) {
       const L = LANDMARKS[k];
       for (let j = 0; j < L.d; j++) for (let i = 0; i < L.w; i++) { const t = T(L.x + i, L.y + j); if (t.t === 'road' && t.road !== 'ave') { t.t = 'land'; t.road = null; } if (L.mount) t.t = 'land'; }
     }
+    fixRoads(S);
     for (const k in LANDMARKS) { const L = LANDMARKS[k]; if (fits(S, L.x, L.y, L.w, L.d)) occupy(S, L.x, L.y, L.w, L.d, { k: 'lm', kind: k, lv: 1 }); }
     // 한강공원
     for (const t of S.tiles) if (t.bank && isLot(t)) occupy(S, t.x, t.y, 1, 1, { k: 'rpark', lv: 1, v: Math.floor(rnd(S) * 3) });
@@ -503,6 +506,39 @@
     for (const [x, y] of [[33, 33], [9, 22], [47, 44], [62, 46], [18, 60], [35, 70]]) { const t = T(x, y); if (isLot(t)) occupy(S, x, y, 1, 1, { k: 'park', lv: 1, v: 0 }); }
     S.hoodCenters = HOODS.map((_, i) => { const ts = S.tiles.filter(t => t.h === i && t.t !== 'water'); return { x: Math.round(ts.reduce((a, t) => a + t.x, 0) / ts.length), y: Math.round(ts.reduce((a, t) => a + t.y, 0) / ts.length) }; });
     precomputeFixed(S);
+  }
+  // 도로망 정리: 대각선으로만 이어진 곳 메우기, 짧은 막다른 길 제거, 끊긴 조각 제거
+  function fixRoads(S) {
+    const T = (x, y) => tile(S, x, y);
+    const isR = t => t && (t.t === 'road' || t.t === 'bridge');
+    const free = t => t && t.t === 'land' && !t.b && t.ref == null && !Object.values(LANDMARKS).some(L => t.x >= L.x && t.x < L.x + L.w && t.y >= L.y && t.y < L.y + L.d);
+    for (const t of S.tiles) {
+      if (!isR(t)) continue;
+      for (const [dx, dy] of [[1, 1], [1, -1]]) {
+        const d = T(t.x + dx, t.y + dy); if (!isR(d)) continue;
+        const a = T(t.x + dx, t.y), b = T(t.x, t.y + dy);
+        if (isR(a) || isR(b)) continue;
+        const f = free(a) ? a : free(b) ? b : null; if (f) { f.t = 'road'; f.road = 'st'; }
+      }
+    }
+    for (let pass = 0; pass < 3; pass++) for (const t of S.tiles) {
+      if (!isR(t) || t.road === 'ave' || t.t === 'bridge') continue;
+      const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => isR(T(t.x + dx, t.y + dy))).length;
+      if (n <= 1) {
+        let len = 0, cx = t.x, cy = t.y, px = -1, py = -1;
+        while (len < 4) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => T(cx + dx, cy + dy)).filter(q => isR(q) && !(q.x === px && q.y === py)); if (nb.length !== 1) break; px = cx; py = cy; cx = nb[0].x; cy = nb[0].y; len++; }
+        if (len < 3) { t.t = 'land'; t.road = null; }
+      }
+    }
+    const start = S.tiles.find(t => t.road === 'ave');
+    const seen = new Set([start]), q = [start];
+    while (q.length) { const c = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = T(c.x + dx, c.y + dy); if (isR(n) && !seen.has(n)) { seen.add(n); q.push(n); } } }
+    for (const t of S.tiles) if (isR(t) && !seen.has(t)) { if (t.t === 'bridge') t.t = 'water'; else t.t = 'land'; t.road = null; }
+  }
+  function roadComponents(S) {
+    const isR = t => t && (t.t === 'road' || t.t === 'bridge'); const seen = new Set(); let n = 0;
+    for (const t of S.tiles) { if (!isR(t) || seen.has(t)) continue; n++; const q = [t]; seen.add(t); while (q.length) { const c = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const m = tile(S, c.x + dx, c.y + dy); if (isR(m) && !seen.has(m)) { seen.add(m); q.push(m); } } } }
+    return n;
   }
   function hashI(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 
@@ -574,6 +610,44 @@
   function population(S) { return Math.round(sources(S).reduce((a, s) => a + s.pop, 0)); }
 
   // ---------- 삶의 질 ----------
+  // ---------- 교통·주차 ----------
+  // 구역별 혼잡도(0~1.5): 인구 × 시간대 활동 ÷ 도로 용량
+  const TRAFFIC_HOURS = [0.1, 0.05, 0.03, 0.03, 0.05, 0.15, 0.4, 0.9, 1.0, 0.6, 0.45, 0.55, 0.7, 0.6, 0.5, 0.5, 0.6, 0.85, 1.0, 0.8, 0.55, 0.4, 0.3, 0.2];
+  function computeTraffic(S) {
+    const pop = S.hoods.map(() => 0), cap = S.hoods.map(() => 0), lots = S.hoods.map(() => 0);
+    for (const sc of sources(S)) pop[sc.h] += sc.pop;
+    for (const t of S.tiles) { if (t.t === 'road' || t.t === 'bridge') cap[t.h] += t.road === 'ave' ? 3 : t.road === 'st' ? 1.2 : 0.3; if (t.b && t.b.k === 'parking') lots[t.h]++; }
+    S.traffic = S.hoods.map((hd, i) => ({ base: clamp(pop[i] / Math.max(1, cap[i]) / 28, 0.1, 1.5), lots: lots[i] }));
+  }
+  function congestion(S, h, hour) {
+    if (!S.traffic) computeTraffic(S);
+    const w = S.weather && (S.weather.kind === 'rain' || S.weather.kind === 'snow') ? 1.25 : 1;
+    const d = S.day; const wk = d && (d.weekend || d.holiday) ? 0.7 : 1;
+    return clamp(S.traffic[h].base * TRAFFIC_HOURS[hour % 24] * w * wk, 0, 1.6);
+  }
+  const PARK_BASE = { off: 0.35, old: 0.25, uni: 0.3, res: 0.55, ind: 0.6, tour: 0.5, rich: 0.75 };
+  function parkingScore(S, st) {
+    const t = tile(S, st.x, st.y); let v = PARK_BASE[HOODS[t.h].kind] || 0.5;
+    if (st.owned) v += 0.15;
+    if ((st.size || 1) >= 3) v += 0.1;
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const n = tile(S, st.x + dx, st.y + dy); if (n && n.b && n.b.k === 'parking' && Math.abs(dx) + Math.abs(dy) <= 4) v += 0.4; }
+    return clamp(v, 0.1, 1);
+  }
+  // 정책 AI: 분기마다 가장 막히는 구역을 골라 주차장이나 버스정류장을 짓는다
+  function policyQuarter(S) {
+    computeTraffic(S);
+    const ranked = S.hoods.map((hd, i) => ({ i, c: S.traffic[i].base, lots: S.traffic[i].lots })).sort((a, b) => b.c - a.c);
+    const top = ranked[0];
+    if (!top || top.c < 0.55) { log(S, '🏛️ 시청 교통 점검: 큰 혼잡 없이 도로가 원활해요.', 'info'); return; }
+    const kind = top.lots < 2 && rnd(S) < 0.6 ? 'parking' : 'bus';
+    const lots = S.tiles.filter(t => t.h === top.i && isLot(t));
+    if (!lots.length) { log(S, `🏛️ 시청: ${HOODS[top.i].name} 혼잡도 ${Math.round(top.c * 100)} — 땅이 없어 출퇴근 시차제를 권고했어요.`, 'info'); S.traffic[top.i].base *= 0.95; return; }
+    const t = pick(S, lots);
+    occupy(S, t.x, t.y, 1, 1, { k: kind, lv: 1, v: 0 });
+    computeLand(S); computeTraffic(S);
+    log(S, `🏛️ 시청 정책: ${HOODS[top.i].name} 출퇴근 혼잡도 ${Math.round(top.c * 100)} → ${kind === 'parking' ? '공영주차장을 새로 지어요' : '버스정류장을 새로 놓아요'}.`, 'good');
+  }
+
   function computeQol(S) {
     const cnt = S.hoods.map(() => ({ parks: 0, lms: 0, sts: 0, nature: 0 }));
     for (const t of S.tiles) {
@@ -648,7 +722,7 @@
       stations: STATION_SITES.map(x => Object.assign({}, x)), hqCands: [], nextHype: null,
       ingr: {}, trends: {}, econ: { mult: 1, until: 0 }, minWage: BASE_MIN_WAGE, nextMinWage: null,
       founder: { cash: 0 }, quests: {}, distress: 0, gameOver: false, autoHire: true, mapVer: 1,
-      opts: { difficulty: opts.difficulty || 'normal', events: opts.events !== false, competitors: Math.max(0, Math.min(50, opts.competitors == null ? 8 : opts.competitors)) },
+      opts: { difficulty: opts.difficulty || 'normal', events: opts.events !== false, competitors: Math.max(0, Math.min(50, opts.competitors == null ? 8 : opts.competitors)), sponsor: !!opts.sponsor },
       macro: { base: 2.5, hist: [2.5] },
       weather: null, cands: [], stats: { pop: [] }, day: null,
     };
@@ -963,10 +1037,12 @@
     const inc = S.hoods[tile(S, st.x, st.y) ? tile(S, st.x, st.y).h : 4].income;
     const sens = SEG[seg].sens * (1 - 0.07 * (st.interior.tier - 1)) * clamp(Math.sqrt(400 / inc), 0.7, 1.35);
     const strat = 1 + 0.015 * deptPower(S, comp, 'research') + 0.015 * deptPower(S, comp, 'rnd');
+    const pk = st._park == null ? 0.5 : st._park;
+    const parkM = seg === 'res' ? 0.75 + 0.35 * pk : seg === 'tour' ? 0.85 + 0.2 * pk : 0.97 + 0.05 * pk;
     const pf = clamp(Math.exp(-sens * 1.8 * (st.price / 100 - 1)), 0.05, 3);
     const rf = 0.55 + 0.15 * st.rating;
     const star = 1 + ((st._star == null ? 50 : st._star) - 50) / 100 * 0.3;
-    return quality(S, st) * (st._mi ? st._mi.appeal[seg] : 1) * (1 + comp.brand[st.cat] / 110) * pf * rf * (1 + 0.06 * st.mkt) * interiorAppeal(st, seg) * archAppeal(st, seg) * star * eventMult(S, st, seg) * strat;
+    return quality(S, st) * (st._mi ? st._mi.appeal[seg] : 1) * (1 + comp.brand[st.cat] / 110) * pf * rf * (1 + 0.06 * st.mkt) * interiorAppeal(st, seg) * archAppeal(st, seg) * star * eventMult(S, st, seg) * strat * parkM;
   }
 
   // ---------- 하루 상황 ----------
@@ -1081,6 +1157,7 @@
       st.segDem = { res: 0, off: 0, uni: 0, tour: 0 };
       st._attr = {}; for (const seg of SEG_KEYS) st._attr[seg] = attraction(S, st, seg);
       st._pb = parkNear(S, st.x, st.y, 2) ? 1.1 : 1;
+      st._park = parkingScore(S, st);
     }
     const segM = {}; for (const seg of SEG_KEYS) segM[seg] = segDayMult(S, d, seg);
     for (const cat of CAT_KEYS) {
@@ -1446,7 +1523,17 @@
       const rev = gross / VAT;
       const cogs = served * unitCost(S, comp, st);
       const card = servedDine * tk * CARD_FEE;
-      const dlvFee = servedD * (tk * 0.098 + 3000);
+      let dlvFee = servedD * (tk * 0.098 + 3000);
+      if (servedD > 0) {
+        const cg = congestion(S, tile(S, st.x, st.y).h, h);
+        const wx = S.weather.kind === 'rain' ? 8 : S.weather.kind === 'snow' ? 14 : 0;
+        const mins = 14 + 22 * cg + wx + Math.max(0, servedD - 12) * 0.4;
+        const late = clamp((mins - 30) / 20, 0, 1);
+        st.dlvMin = (st.dlvMin == null ? mins : st.dlvMin * 0.9 + mins * 0.1);
+        st.dlvLate = (st.dlvLate == null ? late : st.dlvLate * 0.9 + late * 0.1);
+        dlvFee += servedD * late * 0.15 * tk;          // 늦은 주문 환불·쿠폰
+        if (late > 0.2) st.rating = Math.max(1, st.rating - 0.002 * late * servedD);
+      }
       let wage = 0;
       for (const s of st.staff) if (onDuty(st, s, h)) {
         wage += s.wage * BURDEN;
@@ -1652,6 +1739,8 @@
     computeLand(S); computeQol(S);
     monthlyEvents(S, d);
     hqMonthly(S);
+    if ([3, 6, 9, 12].includes(d.month)) policyQuarter(S);
+    computeTraffic(S);
     aiMonth(S);
     assignSupply(S);
     S.stats.pop.push(population(S)); if (S.stats.pop.length > 48) S.stats.pop.shift();
@@ -2108,9 +2197,9 @@
   }
 
   const api = {
-    W, H, ROAD_EVERY, REACH, HOOD, ARCHETYPES, DIFFICULTY, loanRate, LANDMARKS, DEPTS, DEPT_KEYS, landFactors, deptPower, hqHire, hqAct, hqSalaryAsk, rentalIncome, facCost, facValue, computeQol, hourParts, CATS, CAT_KEYS, SIZES, INGR, SEG, SEG_KEYS, HOODS, TIERS, STYLES, STYLE_KEYS, ARCH, ARCH_KEYS,
+    W, H, ROAD_EVERY, REACH, HOOD, congestion, parkingScore, computeTraffic, TRAFFIC_HOURS, ARCHETYPES, DIFFICULTY, loanRate, LANDMARKS, DEPTS, DEPT_KEYS, landFactors, deptPower, hqHire, hqAct, hqSalaryAsk, rentalIncome, facCost, facValue, computeQol, hourParts, CATS, CAT_KEYS, SIZES, INGR, SEG, SEG_KEYS, HOODS, TIERS, STYLES, STYLE_KEYS, ARCH, ARCH_KEYS,
     FAC, PUBLIC, MKT, MKT_NAME, STORE_EVENTS, CO_EVENTS, LOGO_SHAPES, ROLES, SHIFTS, WEATHER, QUESTS, BURDEN, PROFILE, SEG_HOURS,
-    newGame, step, tile, isLot, anchorOf, hood, hoodAt, nearSources, BTYPES, CLS_NAME, PROFILE_NAME, PROFILE_MULT, LINES, buildingPop, findFit, sources, population, dateOf, seasonOf, dayOf,
+    roadComponents, newGame, step, tile, isLot, anchorOf, hood, hoodAt, nearSources, BTYPES, CLS_NAME, PROFILE_NAME, PROFILE_MULT, LINES, buildingPop, findFit, sources, population, dateOf, seasonOf, dayOf,
     openCost, interiorCost, utilMonth, propertyPrice, archCost, researchCost, upgradeCost, interiorBook, spaceScore, keyMoney,
     seatCapOf, staffBound, unitCost, ticket, quality, menuInfo, menuItems, refreshMenu, setMenu, defaultMenu, inSeason, interiorAppeal, hourCap, wantAt, dayDemand, teamStats, laborDay, chemistry, compat, effStat, shiftWindow, onDuty, askWage,
     openStore, closeStore, setInterior, setArch, upgradeStore, buyProperty, setHours, runStoreEvent, runCoEvent,
