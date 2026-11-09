@@ -46,7 +46,8 @@
   const TOOLS = [
     { id: 'select', ic: '👆', nm: '살펴보기' }, 'sep',
     { id: 'storepick', ic: '🏪', nm: '매장 열기' }, 'sep',
-    ...Object.keys(Sim.FAC).map(k => ({ id: 'fac:' + k, ic: Sim.FAC[k].icon, nm: Sim.FAC[k].name, co: Sim.FAC[k].cost })), 'sep',
+    ...['hq', 'warehouse', 'kitchen', 'roastery'].map(k => ({ id: 'fac:' + k, ic: Sim.FAC[k].icon, nm: Sim.FAC[k].name, co: Sim.FAC[k].cost })), 'sep',
+    ...['factory', 'rental', 'smartfarm'].map(k => ({ id: 'fac:' + k, ic: Sim.FAC[k].icon, nm: Sim.FAC[k].name, co: Sim.FAC[k].cost || null, varCost: k === 'rental' })), 'sep',
     ...Object.keys(Sim.PUBLIC).map(k => ({ id: 'pub:' + k, ic: Sim.PUBLIC[k].icon, nm: Sim.PUBLIC[k].name, co: Sim.PUBLIC[k].cost })),
   ];
   function renderTools() {
@@ -54,13 +55,13 @@
     $('tools').innerHTML = TOOLS.map(t => t === 'sep' ? '<div class="sep"></div>' : t.id === 'storepick' ?
       `<button class="tool ${cur || pickerOpen ? 'on' : ''}" data-tool="storepick" title="업종을 골라 매장 열기"><span class="ic">${cur ? Sim.CATS[cur].icon : '🏪'}</span><span class="nm">${cur ? Sim.CATS[cur].name : '매장 열기'}</span><span class="co">${Sim.CAT_KEYS.length}개 업종</span></button>` :
       `<button class="tool ${tool === t.id ? 'on' : ''}" data-tool="${t.id}" title="${esc(t.nm)}${t.co ? ' · ' + won(t.co) : ''}">
-        <span class="ic">${t.ic}</span><span class="nm">${esc(t.nm)}</span>${t.co ? `<span class="co">${short(t.co)}</span>` : t.id.startsWith('store') ? '<span class="co">1억대~</span>' : ''}</button>`).join('');
+        <span class="ic">${t.ic}</span><span class="nm">${esc(t.nm)}</span>${t.co ? `<span class="co">${short(t.co)}</span>` : t.varCost ? '<span class="co">땅값 따라</span>' : ''}</button>`).join('');
   }
   function renderPicker() {
     const el = $('catPicker');
     el.hidden = !pickerOpen;
     if (!pickerOpen) return;
-    el.innerHTML = `<div class="cp-head"><b>어떤 가게를 열까요?</b><button class="x" data-pick="close" aria-label="닫기">✕</button></div><div class="cp-grid">${Sim.CAT_KEYS.map(k => { const C = Sim.CATS[k]; return `<button class="cp ${tool === 'store:' + k ? 'on' : ''}" data-pick="${k}"><span class="ic">${C.icon}</span><b>${C.name}</b><small>객단가 ${short(C.ticket)} · ${C.hours[0]}~${C.hours[1]}시</small></button>`; }).join('')}</div>`;
+    el.innerHTML = `<div class="cp-head"><b>어떤 가게를 열까요?</b><button class="x" data-pick="close" aria-label="닫기">✕</button></div><div class="cp-grid">${Sim.CAT_KEYS.map(k => { const C = Sim.CATS[k]; return `<button class="cp ${tool === 'store:' + k ? 'on' : ''}" data-pick="${k}"><span class="ic">${C.icon}</span><b>${C.name}</b><small>객단가 ${short(C.ticket)} · ${C.hours[0]}~${C.hours[1]}시</small><small class="tr">${esc((C.traits || [''])[0])}</small></button>`; }).join('')}</div>`;
   }
   function setTool(id) {
     if (id === 'storepick') { pickerOpen = !pickerOpen; renderPicker(); renderTools(); return; }
@@ -85,10 +86,16 @@
     const [kind, k] = tool.split(':');
     if (kind === 'store') { openForm = { x, y, cat: k, size: 2, style: 'nordic', tier: 2, menu: Sim.defaultMenu(k, 2), sig: null }; selected = { x, y }; R.sel = selected; renderInspector(); return; }
     let r;
-    if (kind === 'fac') { r = Sim.buildFacility(S, 0, x, y, k); if (r.ok) { toast(`${Sim.FAC[k].icon} ${Sim.FAC[k].name}을 지었어요.`, 'good'); R.pop(x, y); Snd.play('build'); } }
+    if (kind === 'fac') { if (k === 'rental' && !confirmRental(x, y)) return; r = Sim.buildFacility(S, 0, x, y, k); if (r.ok) { toast(`${Sim.FAC[k].icon} ${Sim.FAC[k].name}을 지었어요.`, 'good'); R.pop(x, y); Snd.play('build'); } }
     else if (kind === 'pub') { r = Sim.buildPublic(S, x, y, k); if (r.ok) { R.pop(x, y); Snd.play('build'); } }
     if (r && !r.ok) toast(r.msg || '지을 수 없어요.', 'bad');
     if (r && r.ok) { refreshOverlay(); dirty = true; }
+  }
+  let rentalArm = null;
+  function confirmRental(x, y) {
+    const key = x + ',' + y, cost = Sim.facCost(S, 'rental', x, y);
+    if (rentalArm === key) { rentalArm = null; return true; }
+    rentalArm = key; toast(`임대 빌딩 건축비 ${won(cost)} (땅값 + 공사비). 한 번 더 누르면 지어요.`); return false;
   }
   function confirmOpen() {
     const f = openForm; if (!f) return;
@@ -181,7 +188,18 @@
     const flow = Sim.hourlyFlow(S, t.x, t.y);
     const est = Sim.lotEstimate(S, t.x, t.y, 'cafe', 0);
     let h = head(t.tree ? '🌳' : '🟩', '빈 땅 · 상권 분석', `${H.name} · 평당 월세 ${won(t.rent)}${hot}`);
-    h += `<p class="hint" style="margin-top:0">${esc(H.desc)}</p><h4>주변 유동인구 구성</h4>${segBars(est.flow)}
+    const lf = Sim.landFactors(S, t), hd = S.hoods[t.h];
+    const chips = [];
+    if (lf.st > 0) chips.push(`<span class="chip blue">🚇 역세권 +${Math.round(lf.st * 100)}%</span>`);
+    if (lf.lm > 0) chips.push(`<span class="chip warn">🏛️ 랜드마크 +${Math.round(lf.lm * 100)}%</span>`);
+    if (lf.view >= 0.2) chips.push('<span class="chip blue">🌊 호수 조망 +20%</span>'); else if (lf.view > 0) chips.push('<span class="chip good">⛰️ 산 조망 +8%</span>');
+    if (lf.park) chips.push('<span class="chip good">🌳 공원 +6%</span>');
+    if (lf.age > 0.4) chips.push(`<span class="chip bad">🏚️ 노후 −${Math.round(lf.age * 35)}%</span>`);
+    if (lf.hype > 1.03) chips.push(`<span class="chip bad">🔥 화제성 +${Math.round((lf.hype - 1) * 100)}%</span>`);
+    h += `<p class="hint" style="margin-top:0">${esc(H.desc)}</p>
+      <div class="rows"><span>가구 소득</span><span>월 ${hd.income.toFixed(0)}만원</span><span>삶의 질</span><span>${hd.qol} / 100</span></div>
+      <h4>임대료가 이렇게 정해졌어요</h4><div class="chips">${chips.join('') || '<span class="chip">특별한 요인 없음</span>'}</div>
+      <h4>주변 유동인구 구성</h4>${segBars(est.flow)}
       <h4>시간대별 유동인구</h4>${chart({ bars: { data: flow, color: '#bcd8ee' }, labels: flow.map((_, i) => i % 6 === 0 ? i + '시' : ''), noMax: true }, 'xs', true)}
       <h4>업종별 예상 (월 매출 순)</h4><table class="t"><thead><tr><th>업종</th><th class="r">손님/일</th><th class="r">월 매출</th><th class="r">경쟁</th><th></th></tr></thead><tbody>`;
     const rows = Sim.CAT_KEYS.map(k => { const e = Sim.lotEstimate(S, t.x, t.y, k, 0); return { k, e, rev: e.cust * Sim.CATS[k].ticket / 1.1 * 30 }; }).sort((a, b) => b.rev - a.rev);
@@ -240,8 +258,14 @@
     const served = S.stores.filter(s => s.facId === f.id).length;
     const armedDel = armed === 'facdel:' + f.id;
     let h = head(F.icon, `${F.name}${F.range ? ' ' + f.level + '단계' : ''}`, `${logo(comp, 14)} ${esc(comp.name)} · ${hoodOfXY(f.x, f.y).name}`);
-    h += `<div class="rows">${F.range ? `<span>담당 매장</span><span>${served} / ${Sim.facCap(f)}곳</span><span>배송 반경</span><span>${F.range}칸</span>` : ''}<span>운영비</span><span>월 ${won(F.upkeep * (1 + 0.5 * (f.level - 1)))}</span></div><p class="hint">${F.desc}</p>`;
-    if (f.owner === 0) h += `<div class="btn-row">${F.range && f.level < 3 ? `<button class="btn primary" data-act="facup" ${comp.cash < F.cost * 0.5 * f.level ? 'disabled' : ''}>확장 <small>${short(F.cost * 0.5 * f.level)}</small></button>` : ''}<button class="btn danger ${armedDel ? 'armed' : ''}" data-act="facdel">${armedDel ? '정말 철거하기' : '철거'}</button></div>`;
+    let extra = '';
+    if (f.kind === 'rental') { const ri = Sim.rentalIncome(S, f); extra = `<span>입주율</span><span>${Math.round(ri.occ * 100)}%</span><span>월 임대 수입</span><span class="up">${won(ri.month)}</span><span>건물 가치</span><span>${won(Sim.facValue(S, f))}</span><span>층</span><span>${4 + f.level * 2}층</span>`; }
+    else if (f.kind === 'factory') extra = `<span>이번 달 영업이익(누적)</span><span class="up">${won(f.mrev || 0)}</span><span>생산 라인</span><span>${f.level}개</span>`;
+    else if (f.kind === 'hq') extra = `<span>본사 직원</span><span>${comp.hq ? comp.hq.staff.length : 0}명</span>`;
+    h += `<div class="rows">${F.range ? `<span>담당 매장</span><span>${served} / ${Sim.facCap(f)}곳</span><span>배송 반경</span><span>${F.range}칸</span>` : ''}${extra}${F.upkeep ? `<span>운영비</span><span>월 ${won(F.upkeep * (1 + 0.5 * (f.level - 1)))}</span>` : ''}</div><p class="hint">${F.desc}</p>`;
+    const upCost = f.kind === 'rental' ? 300 * 6e6 * 0.8 : F.cost * 0.5 * f.level;
+    if (f.owner === 0 && f.kind === 'hq') h += `<div class="btn-row"><button class="btn primary" data-act="tab" data-arg="hq">본사 관리 열기</button></div>`;
+    if (f.owner === 0) h += `<div class="btn-row">${(F.range || f.kind === 'factory' || f.kind === 'rental') && f.level < 3 ? `<button class="btn primary" data-act="facup" ${comp.cash < upCost ? 'disabled' : ''}>${f.kind === 'rental' ? '증축' : '확장'} <small>${short(upCost)}</small></button>` : ''}<button class="btn danger ${armedDel ? 'armed' : ''}" data-act="facdel">${armedDel ? '정말 철거하기' : '철거'}</button></div>`;
     return h;
   }
 
@@ -284,6 +308,9 @@
       <div class="ctl"><span class="lbl">영업시간</span><button class="step" data-act="hours" data-arg="open:-1">−</button><span class="val sm">${st.open}시 오픈</span><button class="step" data-act="hours" data-arg="open:1">+</button>
         <button class="step" data-act="hours" data-arg="close:-1">−</button><span class="val sm">${st.close}시 마감</span><button class="step" data-act="hours" data-arg="close:1">+</button></div>
       <div class="ctl"><span class="lbl">홍보</span><div class="seg">${Sim.MKT_NAME.map((n, i) => `<button class="${st.mkt === i ? 'on' : ''}" data-act="mkt" data-arg="${i}" title="하루 ${won(Sim.MKT[i])}">${n}</button>`).join('')}</div></div>
+      ${C.dlv > 0 ? `<div class="ctl"><span class="lbl">배달앱</span><div class="seg" style="max-width:170px"><button class="${st.delivery ? 'on' : ''}" data-act="dlv" data-arg="1">입점</button><button class="${!st.delivery ? 'on' : ''}" data-act="dlv" data-arg="0">안 함</button></div><span class="chip">업종 배달 비중 ${Math.round(C.dlv * 100)}%</span></div>
+      <p class="hint" style="margin-top:0">배달 주문은 좌석 없이 주방만 쓰지만 주문마다 수수료 9.8%와 배달비 3,000원이 들어요. 어제 배달 ${st.dayDlv || 0}건 · 수수료 ${won(st.dayDlvFee || 0)}</p>` : ''}
+      <h4>${C.icon} ${C.name}의 특징</h4><ul class="traits">${(C.traits || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
       <h4>매장 이벤트</h4><div class="evgrid">${Object.entries(Sim.STORE_EVENTS).map(([k, E]) => { const on = st.ev.find(e => e.kind === k && e.until > S.hour); return `<button class="evbtn ${on ? 'on' : ''}" data-act="sevent" data-arg="${k}" ${on ? 'disabled' : ''}><b>${E.name}</b><span>${E.desc}</span><small>${on ? `진행 중 · ${Math.ceil((on.until - S.hour) / 24)}일 남음` : E.cost ? won(E.cost) : '무료'}</small></button>`; }).join('')}</div>
       <div class="rows">
         <span>월세${st.owned ? '' : ` (${Math.max(0, 24 - Math.floor((Sim.dayOf(S) - st.leaseDay) / 30.4))}개월 뒤 갱신)`}</span><span>${st.owned ? '자가 건물' : won(st.rent)}</span>
@@ -415,14 +442,14 @@
   }
 
   // ---------- 패널 ----------
-  const TABS = [['company', '회사'], ['stores', '매장'], ['hoods', '상권'], ['logi', '물류'], ['brand', '브랜드·가맹'], ['events', '이벤트'], ['stock', '주식'], ['news', '소식']];
+  const TABS = [['company', '회사'], ['hq', '본사'], ['stores', '매장'], ['hoods', '상권'], ['logi', '물류'], ['brand', '브랜드·가맹'], ['events', '이벤트'], ['stock', '주식'], ['news', '소식']];
   function renderTabs() {
     $('tabs').innerHTML = TABS.map(([id, nm]) => `<button role="tab" class="${tab === id ? 'on' : ''}" data-tab="${id}" aria-selected="${tab === id}">${nm}</button>`).join('') +
       '<button class="only-sm" data-act="closepanel" aria-label="패널 닫기">✕</button>';
   }
   function renderPanel() {
     charts = charts.filter(c => c.sv || c.insp);
-    const fn = { company: pCompany, stores: pStores, hoods: pHoods, logi: pLogi, brand: pBrand, events: pEvents, stock: pStock, news: pNews }[tab];
+    const fn = { hq: pHq, company: pCompany, stores: pStores, hoods: pHoods, logi: pLogi, brand: pBrand, events: pEvents, stock: pStock, news: pNews }[tab];
     const body = $('tabBody'); const top = body.scrollTop;
     body.innerHTML = fn(); body.scrollTop = top;
     paintLogos(body);
@@ -436,7 +463,7 @@
     const fShare = p.founderShares / p.shares;
     const own = S.stores.filter(s => s.owner === 0);
     const months = p.months.slice(-12);
-    const rows = [['매출 (부가세 제외)', 'rev'], ['가맹 수입', 'royalty'], ['식자재 원가', 'cogs', 1], ['인건비', 'wage', 1], ['임대료', 'rent', 1], ['관리비·공과금', 'util', 1], ['카드 수수료', 'card', 1], ['마케팅·이벤트', 'mkt', 1], ['시설 운영비', 'upkeep', 1], ['이자', 'interest', 1], ['감가상각', 'dep', 1], ['법인세', 'tax', 1]];
+    const rows = [['매출 (부가세 제외)', 'rev'], ['가맹 수입', 'royalty'], ['기타 사업 매출', 'biz'], ['식자재 원가', 'cogs', 1], ['인건비', 'wage', 1], ['임대료', 'rent', 1], ['관리비·공과금', 'util', 1], ['카드 수수료', 'card', 1], ['배달앱 수수료', 'dlv', 1], ['마케팅·이벤트', 'mkt', 1], ['시설 운영비', 'upkeep', 1], ['본사 인건비', 'hq', 1], ['기타 사업 원가', 'bizCost', 1], ['이자', 'interest', 1], ['감가상각', 'dep', 1], ['법인세', 'tax', 1]];
     return `<div class="cards">
       <div class="stat"><span class="lbl">현금</span><b class="${p.cash < 0 ? 'down' : ''}">${won(p.cash)}</b></div>
       <div class="stat"><span class="lbl">대출</span><b>${won(p.debt)}</b><span class="d">한도 ${short(Sim.loanLimit(S, p))}</span></div>
@@ -448,11 +475,31 @@
       ${months.length ? chart({ bars: { data: months.map(m => m.rev + m.royalty), color: '#bcd8ee' }, series: [{ data: months.map(m => m.ni), color: '#4f9a6e' }], zero: true, labels: months.map(m => m.month + '월') }) : '<p class="hint">첫 달 결산이 끝나면 그래프가 나타나요.</p>'}
       <h3>손익 계산서</h3>
       <table class="t"><thead><tr><th></th><th class="r">이번 달(진행)</th><th class="r">지난달</th></tr></thead><tbody>
-      ${rows.map(([n, k, neg]) => `<tr><td>${n}</td><td class="r">${neg ? won(-L[k]) : won(L[k])}</td><td class="r">${lm ? (neg ? won(-lm[k]) : won(lm[k])) : '—'}</td></tr>`).join('')}
+      ${rows.filter(([n, k]) => (L[k] || 0) !== 0 || (lm && (lm[k] || 0) !== 0) || ['rev', 'cogs', 'wage', 'rent'].includes(k)).map(([n, k, neg]) => `<tr><td>${n}</td><td class="r">${neg ? won(-(L[k] || 0)) : won(L[k] || 0)}</td><td class="r">${lm ? (neg ? won(-(lm[k] || 0)) : won(lm[k] || 0)) : '—'}</td></tr>`).join('')}
       <tr><td><b>순이익</b></td><td class="r"><b class="${Sim.ledgerNI(L) >= 0 ? 'up' : 'down'}">${won(Sim.ledgerNI(L))}</b></td><td class="r"><b class="${lm && lm.ni >= 0 ? 'up' : 'down'}">${lm ? won(lm.ni) : '—'}</b></td></tr></tbody></table>
       <p class="hint">법인세는 월말에 9%(연 2억 이하)·19%로 계산해요. 매장 보증금은 자산이라 돌려받을 수 있어요.</p>
       <h3>은행</h3><div class="btn-row"><button class="btn" data-act="borrow">1억 대출 받기</button><button class="btn" data-act="repay" ${p.debt <= 0 ? 'disabled' : ''}>1억 갚기</button><span class="chip">연 5.5%</span></div>
       <h3>게임</h3><div class="btn-row"><button class="btn" data-act="save">지금 저장</button><button class="btn danger ${armed === 'newgame' ? 'armed' : ''}" data-act="newgame">${armed === 'newgame' ? '정말 새로 시작' : '새 게임'}</button></div>`;
+  }
+  function pHq() {
+    const p = S.companies[0];
+    if (!p.hq) return `<h3>아직 본사가 없어요</h3><p class="hint">매장이 몇 곳 생기면 본사를 세워 보세요. 본사가 있어야 가맹사업을 할 수 있고, 부서별 전문 인력이 회사 전체를 끌어올려요.</p>
+      <div class="evgrid">${Sim.DEPT_KEYS.map(d => `<div class="evbtn"><b>${Sim.DEPTS[d].icon} ${Sim.DEPTS[d].name}</b><span>${esc(Sim.DEPTS[d].desc)}</span></div>`).join('')}</div>
+      <div class="btn-row"><button class="btn primary" data-act="buildhq">🏢 본사 자리 고르기 <small>${short(Sim.FAC.hq.cost)}</small></button></div>`;
+    const payroll = p.hq.staff.reduce((a, e) => a + e.salary, 0);
+    let h = `<div class="cards"><div class="stat"><span class="lbl">본사 직원</span><b>${p.hq.staff.length}명</b></div><div class="stat"><span class="lbl">월 인건비</span><b>${won(payroll)}</b></div></div>
+      <p class="hint">부서 힘은 소속 직원의 전문성과 사기로 정해져요. 같은 부서 사람끼리 MBTI가 잘 맞으면 사기가 올라요.</p>`;
+    for (const d of Sim.DEPT_KEYS) {
+      const D = Sim.DEPTS[d], P = Sim.deptPower(S, p, d), staff = p.hq.staff.filter(e => e.dept === d);
+      h += `<div class="box"><div class="box-h"><span class="ic">${D.icon}</span><strong>${D.name}</strong><span class="chip ${P >= 2 ? 'good' : P > 0 ? 'warn' : ''}">힘 ${P.toFixed(1)} / 4</span></div>
+        <div class="bar"><i style="width:${P / 4 * 100}%"></i></div><p class="hint" style="margin:6px 0">${esc(D.desc)}</p>
+        ${staff.map(e => { const armedF = armed === 'hqfire:' + e.id; return `<div class="staff"><div class="staff-h"><b>${esc(e.name)}</b><span class="chip blue">${e.mbti}</span><span class="morale ${e.morale < 40 ? 'down' : e.morale > 75 ? 'up' : ''}">${e.morale < 40 ? '😣' : e.morale > 75 ? '😊' : '🙂'} 사기 ${Math.round(e.morale)}</span></div>
+          ${statBar('전문성', e.exp)}<div class="staff-m"><span>월급 ${won(e.salary)}${e.salary < Sim.hqSalaryAsk(e) ? ` <span class="down">(희망 ${won(Sim.hqSalaryAsk(e))})</span>` : ''}</span><span>근속 ${e.days}일</span></div>
+          <div class="staff-a"><div class="seg sm">${Sim.DEPT_KEYS.map(k => `<button class="${e.dept === k ? 'on' : ''}" data-act="hqdept" data-arg="${e.id}:${k}" title="${Sim.DEPTS[k].name}">${Sim.DEPTS[k].icon}</button>`).join('')}</div>
+          <button class="btn sm" data-act="hqws" data-arg="${e.id}">워크숍 <small>300만</small></button><button class="btn sm" data-act="hqraise" data-arg="${e.id}">연봉 +5%</button><button class="btn sm danger ${armedF ? 'armed' : ''}" data-act="hqfire" data-arg="${e.id}">${armedF ? '정말 내보내기' : '계약 종료'}</button></div></div>`; }).join('') || '<p class="hint" style="margin:0">아직 사람이 없어요.</p>'}</div>`;
+    }
+    h += `<h3>본사 지원자 <span class="chip">매주 월요일 새로 와요</span></h3><div class="staff-list">${S.hqCands.map(c => `<div class="staff cand"><div class="staff-h"><b>${esc(c.name)}</b><span class="chip blue">${c.mbti}</span><span class="chip">${Sim.DEPTS[c.dept].icon} ${Sim.DEPTS[c.dept].name}</span><span class="morale">희망 월급 ${won(c.salary)}</span></div>${statBar('전문성', c.exp)}<div class="staff-a"><button class="btn sm primary" data-act="hqhire" data-arg="${c.id}">채용하기</button></div></div>`).join('')}</div>`;
+    return h;
   }
   function pStores() {
     let list = S.stores.filter(s => s.owner === 0);
@@ -467,11 +514,13 @@
   }
   function pHoods() {
     const hs = Sim.hoodStats(S);
-    return `<p class="hint" style="margin-top:0">동네마다 손님층과 임대료가 달라요. 뉴스로 동네가 뜨면 젊은 손님과 관광객이 늘고, 임대료도 몇 달에 걸쳐 따라 올라요.</p>
+    return `<p class="hint" style="margin-top:0">동네마다 소득, 삶의 질, 노후도, 손님층, 임대료가 달라요. 역·랜드마크·호수가 가까우면 비싸고 낡은 동네는 싸요. 동네가 뜨면 임대료와 소득이 오르고 오래 살던 주민과 작은 가게가 밀려나요(젠트리피케이션). 소득이 높은 동네는 가격에 덜 민감하고 브런치·일식·샐러드를 좋아해요.</p>
       <div class="btn-row" style="margin-top:0"><button class="btn ${R.showHoods ? 'primary' : ''}" data-act="hoodlabels">지도에 동네 이름 ${R.showHoods ? '숨기기' : '보기'}</button></div>
       ${hs.map(h => `<div class="box click" data-act="gotohood" data-arg="${h.i}"><div class="box-h"><strong>${esc(h.name)}</strong>${h.hype >= 40 ? '<span class="chip bad">🔥 뜨는 중</span>' : h.hype >= 15 ? '<span class="chip warn">관심 상승</span>' : ''}${h.transit ? '<span class="chip blue">🚇 역세권</span>' : ''}</div>
         <p class="hint" style="margin:0 0 6px">${esc(h.desc)}</p>${segBars(h.mix)}
-        <div class="rows"><span>평당 월세 평균</span><span>${won(h.rent)}</span><span>유동 인구</span><span>${Math.round(h.pop).toLocaleString('ko-KR')}명</span><span>매장 · 빈 땅</span><span>${h.stores}곳 · ${h.empty}칸</span><span>화제성</span><span>${Math.round(h.hype)}</span></div></div>`).join('')}`;
+        <div class="rows"><span>평당 월세 평균</span><span>${won(h.rent)}</span><span>가구 소득</span><span>월 ${h.income.toFixed(0)}만원</span><span>유동 인구</span><span>${Math.round(h.pop).toLocaleString('ko-KR')}명</span><span>매장 · 빈 땅</span><span>${h.stores}곳 · ${h.empty}칸</span></div>
+        ${statBar('삶의 질', h.qol)}${statBar('노후도', h.age * 100, 'warn')}${statBar('화제성', h.hype, 'star')}${h.gentri > 5 ? statBar('젠트리', h.gentri, 'warn') : ''}
+        ${h.displaced > 0 ? `<p class="hint" style="margin:4px 0 0">떠난 원주민 약 ${Math.round(h.displaced).toLocaleString('ko-KR')}명</p>` : ''}</div>`).join('')}`;
   }
   function pLogi() {
     const p = S.companies[0], mine = S.stores.filter(s => s.owner === 0);
@@ -498,7 +547,7 @@
         <div class="brandbars">${alive.map(c => `<div class="brandbar"><span class="nm">${logo(c, 13)} ${esc(c.name)}</span><div class="bar"><i style="width:${c.brand[k]}%;background:${c.color}"></i></div><span class="num">${c.brand[k].toFixed(0)}</span></div>`).join('')}</div>
         <div class="ctl"><span class="lbl">레시피</span><span class="val" style="min-width:auto">${p.recipe[k]} / 10단계</span><button class="btn" data-act="research" data-arg="${k}" ${p.recipe[k] >= 10 || p.cash < Sim.researchCost(p, k) ? 'disabled' : ''}>연구 <small>${short(Sim.researchCost(p, k))}</small></button></div>
         ${can.ok || fr.on ? `<div class="ctl"><span class="lbl">가맹</span><button class="btn ${fr.on ? '' : 'primary'}" data-act="fr" data-arg="${k}">${fr.on ? '모집 중단' : '모집 시작'}</button><span class="lbl" style="width:auto">로열티</span><button class="step" data-act="roy" data-arg="${k}:-1">−</button><span class="val" style="min-width:44px">${pct(fr.royalty)}</span><button class="step" data-act="roy" data-arg="${k}:1">+</button></div>
-          <p class="hint" style="margin:0">가맹점 ${frN} / ${can.own * 5}곳. 가맹비 1,000만·교육비 300만·인테리어 마진 10%를 받아요.</p>` : `<p class="hint" style="margin:0">가맹 조건: 직영점 ${can.own}/3곳, 인지도 ${can.brand.toFixed(0)}/20</p>`}</div>`;
+          <p class="hint" style="margin:0">가맹점 ${frN} / ${can.own * 5}곳. 가맹비 1,000만·교육비 300만·인테리어 마진 10%를 받아요.</p>` : `<p class="hint" style="margin:0">가맹 조건: 본사 ${can.hq ? '✓' : '없음'}, 직영점 ${can.own}/3곳, 인지도 ${can.brand.toFixed(0)}/20</p>`}</div>`;
     }
     return h;
   }
@@ -617,6 +666,14 @@
       case 'price': if (st) st.price = Math.max(60, Math.min(180, st.price + +arg)); Sim.computeDemand(S); break;
       case 'hours': if (st) { const [k, d] = arg.split(':'); const o = k === 'open' ? st.open + +d : st.open, c = k === 'close' ? st.close + +d : st.close; result(Sim.setHours(S, st.id, o, c)); } break;
       case 'mkt': if (st) { st.mkt = +arg; Sim.computeDemand(S); } break;
+      case 'dlv': if (st) st.delivery = arg === '1'; break;
+      case 'tab': tab = arg; renderTabs(); $('panel').classList.add('open'); break;
+      case 'hqhire': { const r = Sim.hqHire(S, +arg); result(r); if (r.ok) Snd.play('hire'); break; }
+      case 'hqdept': { const [id, d] = arg.split(':'); result(Sim.hqAct(S, +id, 'dept', d)); break; }
+      case 'hqws': result(Sim.hqAct(S, +arg, 'workshop')); break;
+      case 'hqraise': result(Sim.hqAct(S, +arg, 'raise')); break;
+      case 'hqfire': if (armed === 'hqfire:' + arg) { armed = null; result(Sim.hqAct(S, +arg, 'fire')); } else arm('hqfire:' + arg); break;
+      case 'buildhq': setTool('fac:hq'); closePanelSm(); break;
       case 'sevent': if (st) result(Sim.runStoreEvent(S, st.id, arg)); break;
       case 'upgrade': if (st) result(Sim.upgradeStore(S, st.id), '매장을 넓혔어요. 좌석이 늘어났어요.'); break;
       case 'buyprop': if (st) result(Sim.buyProperty(S, st.id), '건물을 샀어요! 이제 월세가 들지 않고, 건축 양식을 바꿀 수 있어요.'); break;

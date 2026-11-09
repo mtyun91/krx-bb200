@@ -100,4 +100,36 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   run(S, 40); finite(S);
   console.log('[인수] 경쟁사 매장', before, '곳 인수 완료');
 }
+// 5) 땅값 현실성·본사·임대 빌딩·배달
+{
+  const S = Sim.newGame({ seed: 21 });
+  const hs = Sim.hoodStats(S);
+  const by = n => hs.find(h => h.name === n).rent;
+  console.log('[땅값] 중앙동', Math.round(by('중앙동')), '호수공원동', Math.round(by('호수공원동')), '풍차언덕', Math.round(by('풍차언덕')));
+  assert(by('중앙동') > by('호수공원동') && by('호수공원동') > by('풍차언덕') && by('물레방아동') < by('서재골'), '임대료 순서');
+  const near = Sim.tile(S, 15, 15).rent, far = Sim.tile(S, 18, 18).rent;
+  assert(near > far, '역·랜드마크 근처가 더 비쌈');
+  const p = S.companies[0]; p.cash = 1e11;
+  assert(!Sim.canFranchise(S, 'cafe').hq, '본사 없으면 가맹 불가');
+  const lot = S.tiles.find(t => Sim.isLot(t) && t.h === 4);
+  assert(Sim.buildFacility(S, 0, lot.x, lot.y, 'hq').ok && p.hq);
+  for (const c of S.hqCands.slice(0, 4)) Sim.hqHire(S, c.id);
+  const d = p.hq.staff[0].dept;
+  assert(Sim.deptPower(S, p, d) > 0, '부서 힘');
+  const lot2 = S.tiles.find(t => Sim.isLot(t) && t.h === 8);
+  const r = Sim.buildFacility(S, 0, lot2.x, lot2.y, 'rental'); assert(r.ok);
+  const spot = Sim.bestLot(S, 'chicken', 0, 1);
+  const st = Sim.openStore(S, 0, spot.x, spot.y, 'chicken', {}).store;
+  assert(st.delivery, '치킨은 배달 기본');
+  run(S, 31);
+  finite(S);
+  const m = p.months[p.months.length - 1];
+  console.log('[본사] 부서', d, '힘', Sim.deptPower(S, p, d).toFixed(2), '본사 인건비', Sim.won(m.hq), '임대 수입', Sim.won(m.biz), '배달 수수료', Sim.won(m.dlv));
+  assert(m.biz > 0 && m.hq > 0 && m.dlv > 0);
+  // 젠트리피케이션: 화제성이 높으면 소득↑ 노후도↓
+  const h = S.hoods[2]; h.hype = 90; const inc0 = h.income, age0 = h.age;
+  run(S, 62);
+  console.log('[젠트리] 풍차언덕 소득', inc0, '→', Math.round(h.income), '노후도', age0, '→', h.age.toFixed(2), '떠난 주민', Math.round(h.displaced));
+  assert(h.income > inc0 && h.age < age0);
+}
 console.log('모든 시뮬레이션 점검 통과');
