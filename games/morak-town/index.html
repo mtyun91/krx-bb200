@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>모락모락 타운</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">♨</span>
+      <div class="brand-text">
+        <strong id="coName">모락상회</strong>
+        <span class="date" id="date">1년차 3월 1일</span>
+      </div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><span class="lbl">현금</span><b id="kCash">0</b></div>
+      <div class="kpi"><span class="lbl" id="kValLbl">기업가치</span><b id="kVal">0</b></div>
+      <div class="kpi hide-sm"><span class="lbl">매장</span><b id="kStores">0</b></div>
+      <div class="kpi hide-sm"><span class="lbl">인구</span><b id="kPop">0</b></div>
+    </div>
+    <div class="speed" role="group" aria-label="게임 속도">
+      <button id="sp0" data-speed="0" title="일시정지 (Space)">❚❚</button>
+      <button id="sp1" data-speed="1" title="보통 (1)">▶</button>
+      <button id="sp2" data-speed="2" title="빠르게 (2)">▶▶</button>
+      <button id="sp3" data-speed="4" title="아주 빠르게 (3)">▶▶▶</button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <canvas id="map" aria-label="도시 지도"></canvas>
+    <nav class="tools" id="tools" aria-label="건설 도구"></nav>
+    <section class="quest" id="quest" aria-label="목표"></section>
+    <section class="inspector" id="inspector" hidden></section>
+    <div class="map-ctl">
+      <button id="btnLogi" title="물류망 보기">🚚</button>
+      <button id="btnFit" title="전체 보기">⤢</button>
+      <button id="btnPanel" class="only-sm" title="경영 패널">📊</button>
+    </div>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <div class="banner" id="banner" hidden></div>
+  </main>
+
+  <aside class="panel" id="panel">
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="tab-body" id="tabBody"></div>
+  </aside>
+
+  <footer class="ticker" id="ticker"></footer>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-card">
+    <p class="eyebrow">작은 가게에서 프랜차이즈 제국까지</p>
+    <h1>모락모락 타운</h1>
+    <p class="lead">호숫가 작은 도시에 첫 가게를 열고, 직원을 들이고, 창고와 주방으로 물류망을 짜고, 가맹점을 모집해 주식시장에 상장해 보세요. 경쟁사 세 곳도 같은 손님을 노리고 있어요.</p>
+    <ol class="howto">
+      <li><b>왼쪽 도구</b>에서 업종을 고르면 지도에 장사가 잘될 자리가 초록빛으로 보여요.</li>
+      <li><b>매장을 누르면</b> 가격·직원·홍보·확장을 조정할 수 있어요.</li>
+      <li><b>오른쪽 패널</b>에서 물류, 브랜드·가맹, 주식시장을 운영해요.</li>
+    </ol>
+    <label for="nameInput">회사 이름</label>
+    <input id="nameInput" maxlength="12" value="모락상회" autocomplete="off">
+    <div class="modal-actions">
+      <button class="primary" id="btnNew">새로 시작하기</button>
+      <button id="btnContinue" hidden>이어하기</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/sim.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
