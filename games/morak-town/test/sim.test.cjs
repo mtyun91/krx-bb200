@@ -13,6 +13,22 @@ function finite(S) {
 const own0 = S => S.stores.filter(s => s.owner === 0 && !s.franchise).every(s => s.profitAvg > 0) && S.stores.some(s => s.owner === 0);
 const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
 
+// 지도: 크기·구역·랜드마크·여러 칸 건물
+{
+  const S = Sim.newGame({ seed: 2 });
+  assert.equal(S.tiles.length, 80 * 80);
+  const lm = S.tiles.filter(t => t.b && t.b.k === 'lm').map(t => t.b.kind);
+  console.log('[지도] 랜드마크', lm.length, '개 · 인구', Sim.population(S), '· 빈 땅', S.tiles.filter(Sim.isLot).length);
+  assert(lm.length >= 11, '랜드마크');
+  assert(S.tiles.some(t => t.t === 'bridge') && S.tiles.some(t => t.t === 'mount'), '다리·산');
+  const big = S.tiles.filter(t => t.b && (t.b.w || 1) * (t.b.d || 1) >= 4);
+  assert(big.length > 20, '2×2 이상 건물');
+  for (const t of big) for (let j = 0; j < t.b.d; j++) for (let i = 0; i < t.b.w; i++) if (i || j) assert.equal(S.tiles[(t.y + j) * 80 + t.x + i].ref, t.y * 80 + t.x, '건물 칸 연결');
+  const S2 = Sim.newGame({ seed: 4, competitors: 50, difficulty: 'hard' });
+  assert.equal(S2.companies.length, 51); assert(S2.companies[0].cash === Sim.DIFFICULTY.hard.cash);
+  assert(new Set(S2.companies.slice(1).map(c => c.ai.arch)).size >= 5, '다양한 성향');
+}
+
 // 0) 달력·시간
 {
   const S = Sim.newGame({ seed: 1 });
@@ -28,13 +44,14 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
 // 1) 경쟁사만 있는 도시: 2년간 숫자가 깨지지 않고 매장 상한을 지킴
 {
   const S = Sim.newGame({ seed: 7 });
-  assert.equal(S.stores.length, 12, '경쟁사 초기 매장 12곳');
+  assert(S.stores.length >= 8, '경쟁사 초기 매장');
+  assert(S.stores.every(s => Sim.tile(S, s.x, s.y).b && Sim.tile(S, s.x, s.y).b.id === s.id), '매장 자리 점유');
   assert(S.stores.every(s => s.staff.length >= 1), '모든 매장에 직원');
   run(S, 730);
   finite(S);
   const ai = S.companies.filter(c => c.ai).map(c => S.stores.filter(s => s.owner === c.id).length);
   console.log('[대기] 2년 뒤 경쟁사 매장', ai.join('/'), '인구', Sim.population(S), '최저시급', S.minWage);
-  assert(ai.every(n => n <= 32));
+  assert(ai.every(n => n <= 40));
   assert(S.minWage > 10600, '최저시급 인상 반영');
 }
 
@@ -43,7 +60,7 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   const S = Sim.newGame({ seed: 9 });
   S.companies[0].cash = 1e10;
   const spot = Sim.bestLot(S, 'cafe', 0, 1);
-  const st = Sim.openStore(S, 0, spot.x, spot.y, 'cafe', { size: 2, style: 'wood', tier: 2 }).store;
+  const st = Sim.openStore(S, 0, spot.x, spot.y, 'cafe', { size: 1, style: 'wood', tier: 2 }).store;
   st.staff.forEach(s => { s.speed = 30; s.skill = 30; s.clean = 30; s.star = 30; s.morale = 70; });
   Sim.computeDemand(S); st._chem = 1;
   const slowCap = Sim.hourCap(st, 9), lowQ = Sim.quality(S, st), lowDem = Sim.dayDemand(st);
@@ -71,7 +88,7 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
     if (d % 15 === 0) {
       const cat = d % 45 === 0 ? 'bakery' : 'cafe';
       const spot = Sim.bestLot(S, cat, 0, 4);
-      if (spot) { const c = Sim.openCost(S, cat, spot.x, spot.y, 2, 'nordic', 2); if (p.cash < c.total + 3e7 && p.debt + 1e8 <= Sim.loanLimit(S, p) && own0(S)) Sim.borrow(S); if (p.cash > c.total + 3e7) Sim.openStore(S, 0, spot.x, spot.y, cat, { size: 2, style: 'nordic', tier: 2 }); }
+      if (spot) { const c = Sim.openCost(S, cat, spot.x, spot.y, 2, 'nordic', 2); if (p.cash < c.total + 3e7 && p.debt + 1e8 <= Sim.loanLimit(S, p) && own0(S)) Sim.borrow(S); if (p.cash > c.total + 3e7) Sim.openStore(S, 0, spot.x, spot.y, cat, { size: Sim.findFit(S, spot.x, spot.y, 2, 1) ? 2 : 1, style: 'nordic', tier: 2 }); }
     }
     if (d % 30 === 0 && p.cash < 1e8 && p.debt + 1e8 <= Sim.loanLimit(S, p) && S.stores.some(s => s.owner === 0)) Sim.borrow(S);
     if (d % 30 === 0) for (const k of ['cafe', 'bakery']) if (Sim.canFranchise(S, k).ok && !p.fr[k].on) Sim.setFranchise(S, k, true, 0.04);
@@ -105,21 +122,23 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   const S = Sim.newGame({ seed: 21 });
   const hs = Sim.hoodStats(S);
   const by = n => hs.find(h => h.name === n).rent;
-  console.log('[땅값] 중앙동', Math.round(by('중앙동')), '호수공원동', Math.round(by('호수공원동')), '풍차언덕', Math.round(by('풍차언덕')));
-  assert(by('중앙동') > by('호수공원동') && by('호수공원동') > by('풍차언덕') && by('물레방아동') < by('서재골'), '임대료 순서');
-  const near = Sim.tile(S, 15, 15).rent, far = Sim.tile(S, 18, 18).rent;
-  assert(near > far, '역·랜드마크 근처가 더 비쌈');
+  console.log('[땅값] 한빛중앙', Math.round(by('한빛중앙')), '은행나무마을', Math.round(by('은행나무마을')), '물레골', Math.round(by('물레골')));
+  assert(by('한빛중앙') > by('은행나무마을') && by('은행나무마을') > by('물레골') && by('물레골') < by('느티골'), '임대료 순서');
+  const land = S.tiles.filter(t => t.t === 'land' && t.h === 9);
+  const near = land.filter(t => Math.abs(t.x - 41) + Math.abs(t.y - 51) <= 3), far = land.filter(t => Math.abs(t.x - 41) + Math.abs(t.y - 51) >= 8);
+  const avg = a => a.reduce((x, t) => x + t.rent, 0) / a.length;
+  assert(avg(near) > avg(far), '역 근처가 더 비쌈');
   const p = S.companies[0]; p.cash = 1e11;
   assert(!Sim.canFranchise(S, 'cafe').hq, '본사 없으면 가맹 불가');
-  const lot = S.tiles.find(t => Sim.isLot(t) && t.h === 4);
+  const lot = S.tiles.find(t => Sim.isLot(t) && Sim.findFit(S, t.x, t.y, 2, 2));
   assert(Sim.buildFacility(S, 0, lot.x, lot.y, 'hq').ok && p.hq);
   for (const c of S.hqCands.slice(0, 4)) Sim.hqHire(S, c.id);
   const d = p.hq.staff[0].dept;
   assert(Sim.deptPower(S, p, d) > 0, '부서 힘');
-  const lot2 = S.tiles.find(t => Sim.isLot(t) && t.h === 8);
+  const lot2 = S.tiles.find(t => Sim.isLot(t) && t !== lot && Sim.findFit(S, t.x, t.y, 2, 2) && Math.abs(t.x - lot.x) + Math.abs(t.y - lot.y) > 4);
   const r = Sim.buildFacility(S, 0, lot2.x, lot2.y, 'rental'); assert(r.ok);
   const spot = Sim.bestLot(S, 'chicken', 0, 1);
-  const st = Sim.openStore(S, 0, spot.x, spot.y, 'chicken', {}).store;
+  const st = Sim.openStore(S, 0, spot.x, spot.y, 'chicken', { size: 1 }).store;
   assert(st.delivery, '치킨은 배달 기본');
   run(S, 31);
   finite(S);
@@ -127,9 +146,9 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   console.log('[본사] 부서', d, '힘', Sim.deptPower(S, p, d).toFixed(2), '본사 인건비', Sim.won(m.hq), '임대 수입', Sim.won(m.biz), '배달 수수료', Sim.won(m.dlv));
   assert(m.biz > 0 && m.hq > 0 && m.dlv > 0);
   // 젠트리피케이션: 화제성이 높으면 소득↑ 노후도↓
-  const h = S.hoods[2]; h.hype = 90; const inc0 = h.income, age0 = h.age;
+  const h = S.hoods[3]; h.hype = 90; const inc0 = h.income, age0 = h.age;
   run(S, 62);
-  console.log('[젠트리] 풍차언덕 소득', inc0, '→', Math.round(h.income), '노후도', age0, '→', h.age.toFixed(2), '떠난 주민', Math.round(h.displaced));
+  console.log('[젠트리] 물레골 소득', inc0, '→', Math.round(h.income), '노후도', age0, '→', h.age.toFixed(2), '떠난 주민', Math.round(h.displaced));
   assert(h.income > inc0 && h.age < age0);
 }
 console.log('모든 시뮬레이션 점검 통과');

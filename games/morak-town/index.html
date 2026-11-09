@@ -84,7 +84,7 @@
   <div class="modal-card">
     <p class="eyebrow">작은 가게에서 프랜차이즈 제국까지</p>
     <h1>모락모락 타운</h1>
-    <p class="lead">호숫가 작은 도시에서 첫 가게를 계약하고, 성향이 맞는 직원을 뽑고, 공간을 꾸미고, 뜨는 동네를 찾아 가맹점을 늘려 코스닥에 상장해 보세요. 하루는 24시간, 아침 출근길과 점심 피크와 저녁 손님이 모두 달라요.</p>
+    <p class="lead">강이 가로지르는 큰 도시에서 첫 가게를 계약하고, 성향이 맞는 직원을 뽑고, 공간을 꾸미고, 뜨는 동네를 찾아 가맹점을 늘려 코스닥에 상장해 보세요. 하루는 24시간, 아침 출근길과 점심 피크와 저녁 손님이 모두 달라요.</p>
     <ol class="howto">
       <li><b>빈 땅을 누르면</b> 그 자리의 손님층과 시간대별 유동인구를 볼 수 있어요.</li>
       <li><b>매장을 두 번 누르면</b> 안으로 들어가 직원·인테리어·건물을 돌볼 수 있어요.</li>
@@ -94,6 +94,13 @@
     <input id="nameInput" maxlength="12" value="모락상회" autocomplete="off">
     <label style="margin-top:10px">회사 로고</label>
     <div id="logoPick" class="logo-pick"></div>
+    <label style="margin-top:12px">난이도</label>
+    <div class="seg" id="diffPick"></div>
+    <p class="hint" id="diffDesc" style="margin:4px 0 0"></p>
+    <div class="seg" id="evPick" style="margin-top:6px"></div>
+    <label for="compInput" style="margin-top:12px">경쟁사 수 <b id="compVal">8개</b></label>
+    <input type="range" id="compInput" min="0" max="50" value="8" class="range">
+    <p class="hint" style="margin:2px 0 0">경쟁사마다 업종과 목표가 달라요. 프랜차이즈 확장형, 동네 맛집형, 프리미엄형, 박리다매형, 트렌드형, 부동산 투자형이 섞여요.</p>
     <div class="modal-actions">
       <button class="primary" id="btnNew">새로 시작하기</button>
       <button id="btnContinue" hidden>이어하기</button>

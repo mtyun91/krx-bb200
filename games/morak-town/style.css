@@ -464,3 +464,5 @@ table.t td { border-bottom: 1px dashed var(--line); }
   .quest { left: 8px; top: 8px; }
   .map-ctl { right: 8px; top: 8px; }
 }
+.range { width: 100%; accent-color: var(--berry); padding: 0 !important; border: 0 !important; background: none !important; }
+#diffPick button, #evPick button { padding: 7px 0; }

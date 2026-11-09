@@ -3,7 +3,7 @@
   'use strict';
   const Sim = window.Sim, Renderer = window.Renderer, Snd = window.GameAudio;
   const $ = id => document.getElementById(id);
-  const SAVE_KEY = 'morak.save.v2';
+  const SAVE_KEY = 'morak.save.v4';
   const HOUR_MS = 2500;                 // 1배속: 게임 1시간 = 2.5초 (하루 1분)
   const SPEEDS = [0, 1, 3, 10];
 
@@ -13,6 +13,7 @@
   let openForm = null;                  // 개설 설정 { x, y, cat, size, style, tier }
   let storeView = null;                 // { id, tab }
   let hoverStaff = null, coCat = 'cafe';
+  let newDiff = 'normal', newEvents = true;
   let newLogo = 'circle', newColor = '#f2b950', lotAll = false, pickerOpen = false, lastQuests = 0, lastNews = 0;
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -103,7 +104,7 @@
     if (!r.ok) { toast(r.msg, 'bad'); return; }
     toast(`${Sim.CATS[f.cat].icon} ${storeName(r.store)}을 열었어요! 직원 ${r.store.staff.length}명이 함께해요.`, 'good');
     R.pop(f.x, f.y); Snd.play('build');
-    openForm = null; selected = { x: f.x, y: f.y }; R.sel = selected;
+    openForm = null; selected = { x: r.store.x, y: r.store.y }; R.sel = selected;
     if (tool.startsWith('store:')) setTool('select');
     dirty = true;
   }
@@ -165,20 +166,33 @@
   function renderInspector() {
     const el = $('inspector');
     if (!selected) { el.hidden = true; return; }
-    const t = Sim.tile(S, selected.x, selected.y);
+    const t = Sim.anchorOf(S, Sim.tile(S, selected.x, selected.y));
     const H = Sim.HOODS[t.h], hd = S.hoods[t.h];
     const hot = hd.hype >= 40 ? ' <span class="chip bad">🔥 요즘 뜨는 동네</span>' : '';
     let h = '';
     charts = charts.filter(c => !c.insp);
     if (t.t === 'road') h = head('🛣️', '도로', H.name) + '<p class="hint">길에는 지을 수 없어요. 사람과 배송 트럭이 오가는 곳이에요.</p>';
-    else if (t.t === 'water') h = head('🌊', '호수', H.name) + '<p class="hint">오리들이 사는 호수예요. 관광객이 이 근처를 좋아해요.</p>';
+    else if (t.t === 'mount') h = head('⛰️', '달빛산', H.name) + '<p class="hint">개발할 수 없는 산이에요. 산자락 근처는 조망이 좋아 임대료가 조금 올라가요.</p>';
+    else if (t.t === 'bridge') h = head('🌉', '다리', H.name) + '<p class="hint">강북과 강남을 잇는 다리예요. 출퇴근 시간에 차가 몰려요.</p>';
+    else if (t.t === 'water') h = head('🌊', '한별강', H.name) + '<p class="hint">오리들이 사는 호수예요. 관광객이 이 근처를 좋아해요.</p>';
     else if (!t.b) h = openForm && openForm.x === t.x && openForm.y === t.y ? openFormCard(t) : lotCard(t, hot);
     else if (t.b.k === 'store') h = storeSummary(S.stores.find(s => s.id === t.b.id));
     else if (t.b.k === 'fac') h = facCard(S.facs.find(f => f.id === t.b.id));
-    else if (Sim.SEG[t.b.k]) {
-      const names = { res: ['🏠', '주택'], off: ['🏢', '오피스'], uni: ['🏫', '대학 건물'], tour: ['🏨', '호텔·관광시설'] }[t.b.k];
-      h = head(names[0], `${names[1]} ${t.b.lv}단계`, H.name + hot) + `<div class="rows"><span>사는·일하는 사람</span><span>${Math.round(Sim.SEG[t.b.k].pop * t.b.lv * hd.popMult)}명</span><span>손님 유형</span><span>${Sim.SEG[t.b.k].name}</span><span>가격 민감도</span><span>${Sim.SEG[t.b.k].sens >= 1.5 ? '아주 높음' : Sim.SEG[t.b.k].sens >= 1 ? '보통' : '낮음'}</span></div><p class="hint">공원·버스정류장·지하철이 가깝거나 동네가 뜨면 건물이 빨리 커져요.</p>`;
-    } else if (t.b.k === 'park') h = head('🌳', '공원', H.name) + '<p class="hint">산책 나온 관광객이 찾아오고, 2칸 안 매장의 매력이 10% 올라가요.</p>';
+    else if (t.b.k === 'lm') {
+      const L = Sim.LANDMARKS[t.b.kind];
+      h = head('🏛️', L.name, `랜드마크 · ${H.name}`) + `<div class="rows"><span>하루 방문객</span><span>약 ${L.pop.toLocaleString('ko-KR')}명</span><span>손님 성향</span><span>${Sim.PROFILE_NAME[L.prof]}</span><span>주변 임대료</span><span>최대 +${Math.round(L.rent * 100)}%</span><span>크기</span><span>${L.w}×${L.d}칸</span></div><p class="hint">랜드마크 주변 5칸은 땅값이 오르고 관광객과 쇼핑객이 많이 지나가요.</p>`;
+    } else if (Sim.BTYPES[t.b.k] && Sim.BTYPES[t.b.k].cls !== 'pub') {
+      const T = Sim.BTYPES[t.b.k], pop = Math.round(Sim.buildingPop(t.b) * hd.popMult);
+      const ic = { res: '🏠', com: '🏪', off: '🏢', edu: '🏫', ind: '🏭' }[T.cls];
+      const who = T.cls === 'res' ? '사는 사람' : T.cls === 'off' || T.cls === 'ind' ? '일하는 사람' : T.cls === 'edu' ? '학생' : '오가는 손님';
+      const pm = Sim.PROFILE_MULT[T.prof] || {};
+      const likes = Object.entries(pm).filter(([, v]) => v >= 1.2).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k]) => Sim.CATS[k].icon + Sim.CATS[k].name).join(', ');
+      const dislikes = Object.entries(pm).filter(([, v]) => v <= 0.7).map(([k]) => Sim.CATS[k].name).join(', ');
+      h = head(ic, T.name, `${Sim.CLS_NAME[T.cls]} · ${H.name}${hot}`) + `<div class="rows"><span>크기 · 층수</span><span>${t.b.w || 1}×${t.b.d || 1}칸 · ${t.b.lv}층</span><span>${who}</span><span>${pop.toLocaleString('ko-KR')}명</span><span>손님 성향</span><span>${Sim.PROFILE_NAME[T.prof]}</span><span>가구 소득</span><span>월 ${Math.round(hd.income * T.inc)}만원</span></div>
+        ${likes ? `<p class="hint" style="margin:4px 0 0">잘 찾는 업종: ${likes}</p>` : ''}${dislikes ? `<p class="hint" style="margin:2px 0 0">잘 안 찾는 업종: ${dislikes}</p>` : ''}
+        <p class="hint">역·공원이 가깝거나 동네가 뜨면 건물이 높아지고 사람이 늘어요.</p>`;
+    } else if (t.b.k === 'rpark') h = head('🌿', '한강공원', H.name) + '<p class="hint">강변 산책로예요. 주말과 저녁에 산책하는 사람들이 와요.</p>';
+    else if (t.b.k === 'park') h = head('🌳', '공원', H.name) + '<p class="hint">산책 나온 관광객이 찾아오고, 2칸 안 매장의 매력이 10% 올라가요.</p>';
     else if (t.b.k === 'bus') h = head('🚏', '버스정류장', H.name) + '<p class="hint">하루 140명가량의 출퇴근 인구가 오가요.</p>';
     el.innerHTML = h; el.hidden = false; paintLogos(el);
     for (const c of charts.filter(c => c.insp)) { const cv = document.getElementById(c.id); if (cv) drawChart(cv, c.cfg); }
@@ -216,7 +230,7 @@
     const mi = Sim.menuInfo(S, { cat: f.cat, size: f.size, menu: f.menu, sig: f.sig });
     const p = S.companies[0];
     let h = head(C.icon, `${C.name} 개설 계약`, `${Sim.HOODS[t.h].name} · 영업 ${C.hours[0]}~${C.hours[1]}시`);
-    h += `<h4>매장 크기</h4><div class="seg">${[1, 2, 3].map(s => `<button class="${f.size === s ? 'on' : ''}" data-act="of" data-arg="size:${s}">${Sim.SIZES[s].name}</button>`).join('')}</div>
+    h += `<h4>매장 크기</h4><div class="seg">${[1, 2, 3].map(s => `<button class="${f.size === s ? 'on' : ''}" data-act="of" data-arg="size:${s}">${Sim.SIZES[s].name} <small>${Sim.SIZES[s].fp.join('×')}칸</small></button>`).join('')}</div>
       <h4>인테리어 스타일</h4><div class="chips">${Sim.STYLE_KEYS.map(k => `<button class="pick ${f.style === k ? 'on' : ''}" data-act="of" data-arg="style:${k}" title="${esc(Sim.STYLES[k].desc)}"><span class="sw" style="background:${Sim.STYLES[k].floor};border-color:${Sim.STYLES[k].accent}"></span>${Sim.STYLES[k].name}</button>`).join('')}</div>
       <p class="hint" style="margin:4px 0 0">${esc(Sim.STYLES[f.style].desc)}</p>
       <h4>인테리어 등급</h4><div class="seg">${[1, 2, 3, 4].map(k => `<button class="${f.tier === k ? 'on' : ''}" data-act="of" data-arg="tier:${k}">${Sim.TIERS[k].name}</button>`).join('')}</div>
@@ -232,7 +246,8 @@
         <span>월세 (2년 계약)</span><span>${won(cost.rent)}</span>
         <span>예상 손님 (평일)</span><span>${Math.round(est.cust)}명/일</span>
       </div>
-      <div class="btn-row"><button class="btn primary" data-act="confirmopen" ${p.cash < cost.total ? 'disabled' : ''}>계약하고 열기</button><button class="btn" data-act="cancelopen">취소</button></div>
+      ${!Sim.findFit(S, f.x, f.y, Sim.SIZES[f.size].fp[0], Sim.SIZES[f.size].fp[1]) ? `<p class="hint down">${Sim.SIZES[f.size].name}은 ${Sim.SIZES[f.size].fp.join('×')}칸이 필요한데 붙어 있는 빈 땅이 부족해요. 더 작은 크기를 골라 주세요.</p>` : ''}
+      <div class="btn-row"><button class="btn primary" data-act="confirmopen" ${p.cash < cost.total || !Sim.findFit(S, f.x, f.y, Sim.SIZES[f.size].fp[0], Sim.SIZES[f.size].fp[1]) ? 'disabled' : ''}>계약하고 열기</button><button class="btn" data-act="cancelopen">취소</button></div>
       ${p.cash < cost.total ? `<p class="hint down">현금이 ${won(cost.total - p.cash)} 부족해요. 회사 탭에서 대출을 받을 수 있어요.</p>` : '<p class="hint">기본 직원은 손님 예상에 맞춰 자동으로 뽑아요. 매장에 들어가 바꿀 수 있어요.</p>'}`;
     return h;
   }
@@ -470,7 +485,9 @@
       <div class="stat"><span class="lbl">${p.listed ? '시가총액' : '기업가치(추정)'}</span><b>${won(p.listed ? Sim.marketCap(p) : p.value)}</b></div>
       <div class="stat"><span class="lbl">회장님 지분 ${pct(fShare)}</span><b>${won(fShare * (p.listed ? Sim.marketCap(p) : p.value) + S.founder.cash)}</b></div>
       <div class="stat"><span class="lbl">직영 · 가맹</span><b>${own.filter(s => !s.franchise).length} · ${own.filter(s => s.franchise).length}곳</b></div>
-      <div class="stat"><span class="lbl">최저시급</span><b>${won(S.minWage)}</b>${S.nextMinWage ? `<span class="d">내년 ${won(S.nextMinWage)}</span>` : ''}</div></div>
+      <div class="stat"><span class="lbl">최저시급</span><b>${won(S.minWage)}</b>${S.nextMinWage ? `<span class="d">내년 ${won(S.nextMinWage)}</span>` : ''}</div>
+      <div class="stat"><span class="lbl">기준금리 · 대출금리</span><b>${S.macro.base.toFixed(2)}% · ${Sim.loanRate(S).toFixed(2)}%</b></div>
+      <div class="stat"><span class="lbl">회장님 개인 현금</span><b>${won(S.founder.cash)}</b><span class="d">배당으로 늘어요</span></div></div>
       <h3>월별 매출과 순이익</h3>
       ${months.length ? chart({ bars: { data: months.map(m => m.rev + m.royalty), color: '#bcd8ee' }, series: [{ data: months.map(m => m.ni), color: '#4f9a6e' }], zero: true, labels: months.map(m => m.month + '월') }) : '<p class="hint">첫 달 결산이 끝나면 그래프가 나타나요.</p>'}
       <h3>손익 계산서</h3>
@@ -478,7 +495,7 @@
       ${rows.filter(([n, k]) => (L[k] || 0) !== 0 || (lm && (lm[k] || 0) !== 0) || ['rev', 'cogs', 'wage', 'rent'].includes(k)).map(([n, k, neg]) => `<tr><td>${n}</td><td class="r">${neg ? won(-(L[k] || 0)) : won(L[k] || 0)}</td><td class="r">${lm ? (neg ? won(-(lm[k] || 0)) : won(lm[k] || 0)) : '—'}</td></tr>`).join('')}
       <tr><td><b>순이익</b></td><td class="r"><b class="${Sim.ledgerNI(L) >= 0 ? 'up' : 'down'}">${won(Sim.ledgerNI(L))}</b></td><td class="r"><b class="${lm && lm.ni >= 0 ? 'up' : 'down'}">${lm ? won(lm.ni) : '—'}</b></td></tr></tbody></table>
       <p class="hint">법인세는 월말에 9%(연 2억 이하)·19%로 계산해요. 매장 보증금은 자산이라 돌려받을 수 있어요.</p>
-      <h3>은행</h3><div class="btn-row"><button class="btn" data-act="borrow">1억 대출 받기</button><button class="btn" data-act="repay" ${p.debt <= 0 ? 'disabled' : ''}>1억 갚기</button><span class="chip">연 5.5%</span></div>
+      <h3>은행</h3><div class="btn-row"><button class="btn" data-act="borrow">1억 대출 받기</button><button class="btn" data-act="repay" ${p.debt <= 0 ? 'disabled' : ''}>1억 갚기</button><span class="chip">연 ${Sim.loanRate(S).toFixed(2)}%</span></div>
       <h3>게임</h3><div class="btn-row"><button class="btn" data-act="save">지금 저장</button><button class="btn danger ${armed === 'newgame' ? 'armed' : ''}" data-act="newgame">${armed === 'newgame' ? '정말 새로 시작' : '새 게임'}</button></div>`;
   }
   function pHq() {
@@ -518,6 +535,8 @@
       <div class="btn-row" style="margin-top:0"><button class="btn ${R.showHoods ? 'primary' : ''}" data-act="hoodlabels">지도에 동네 이름 ${R.showHoods ? '숨기기' : '보기'}</button></div>
       ${hs.map(h => `<div class="box click" data-act="gotohood" data-arg="${h.i}"><div class="box-h"><strong>${esc(h.name)}</strong>${h.hype >= 40 ? '<span class="chip bad">🔥 뜨는 중</span>' : h.hype >= 15 ? '<span class="chip warn">관심 상승</span>' : ''}${h.transit ? '<span class="chip blue">🚇 역세권</span>' : ''}</div>
         <p class="hint" style="margin:0 0 6px">${esc(h.desc)}</p>${segBars(h.mix)}
+        <div class="legend" style="margin:2px 0 4px">${Object.entries(h.prof).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `<span>${Sim.PROFILE_NAME[k]} ${Math.round(v / Math.max(1, h.pop) * 100)}%</span>`).join('')}</div>
+        <div class="legend" style="margin:0 0 4px">${Object.entries(h.cls).map(([k, v]) => `<span>${Sim.CLS_NAME[k]} ${v}동</span>`).join('')}</div>
         <div class="rows"><span>평당 월세 평균</span><span>${won(h.rent)}</span><span>가구 소득</span><span>월 ${h.income.toFixed(0)}만원</span><span>유동 인구</span><span>${Math.round(h.pop).toLocaleString('ko-KR')}명</span><span>매장 · 빈 땅</span><span>${h.stores}곳 · ${h.empty}칸</span></div>
         ${statBar('삶의 질', h.qol)}${statBar('노후도', h.age * 100, 'warn')}${statBar('화제성', h.hype, 'star')}${h.gentri > 5 ? statBar('젠트리', h.gentri, 'warn') : ''}
         ${h.displaced > 0 ? `<p class="hint" style="margin:4px 0 0">떠난 원주민 약 ${Math.round(h.displaced).toLocaleString('ko-KR')}명</p>` : ''}</div>`).join('')}`;
@@ -586,7 +605,9 @@
     for (const c of S.companies) {
       if (c.isPlayer || c.dead) continue;
       const mine = (p.holdings[c.id] || 0) / c.shares, ph = c.priceHist, ch = ph.length > 30 ? c.price / ph[ph.length - 31] - 1 : 0;
-      h += `<div class="box"><div class="box-h">${logo(c, 20)}<strong>${esc(c.name)}</strong><span class="chip ${ch >= 0 ? 'good' : 'bad'}">${ch >= 0 ? '+' : ''}${(ch * 100).toFixed(1)}%</span></div>
+      const A = c.ai && Sim.ARCHETYPES[c.ai.arch];
+      if (!c.listed) { h += `<div class="box"><div class="box-h">${logo(c, 20)}<strong>${esc(c.name)}</strong><span class="chip">비상장</span>${A ? `<span class="chip blue">${A.name}</span>` : ''}</div><p class="hint" style="margin:0">${A ? esc(A.goal) : ''} · 매장 ${S.stores.filter(s => s.owner === c.id).length}곳</p></div>`; continue; }
+      h += `<div class="box"><div class="box-h">${logo(c, 20)}<strong>${esc(c.name)}</strong>${A ? `<span class="chip blue">${A.name}</span>` : ''}<span class="chip ${ch >= 0 ? 'good' : 'bad'}">${ch >= 0 ? '+' : ''}${(ch * 100).toFixed(1)}%</span></div>
         ${chart({ series: [{ data: ph.slice(-120), color: c.color }], spark: true }, 'sm')}
         <div class="rows"><span>주가 · 시총</span><span>${Math.round(c.price).toLocaleString('ko-KR')}원 · ${short(Sim.marketCap(c))}</span><span>내 지분</span><span>${pct(mine)}</span><span>매장</span><span>${S.stores.filter(s => s.owner === c.id).length}곳</span></div>
         <div class="btn-row"><button class="btn" data-act="buy" data-arg="${c.id}:0.01">1% 매수 <small>${short(c.shares * 0.01 * c.price * 1.006)}</small></button><button class="btn" data-act="buy" data-arg="${c.id}:0.05">5% 매수 <small>${short(c.shares * 0.05 * c.price * 1.03)}</small></button><button class="btn" data-act="sell" data-arg="${c.id}:0.05" ${mine <= 0 ? 'disabled' : ''}>5% 매도</button>${mine > 0.5 ? `<button class="btn primary" data-act="acquire" data-arg="${c.id}">🏆 인수하기</button>` : ''}</div></div>`;
@@ -699,7 +720,7 @@
       case 'farm': Sim.setFarm(S, !S.companies[0].farm); break;
       case 'logiview': $('btnLogi').classList.toggle('on'); refreshOverlay(); break;
       case 'hoodlabels': R.showHoods = !R.showHoods; break;
-      case 'gotohood': { const i = +arg; R.centerOn((i % 3) * Sim.HOOD + 5, Math.floor(i / 3) * Sim.HOOD + 5); R.showHoods = true; closePanelSm(); break; }
+      case 'gotohood': { const c = S.hoodCenters[+arg]; R.centerOn(c.x, c.y); R.cam.z = Math.max(R.cam.z, 0.7); R.showHoods = true; closePanelSm(); break; }
       case 'borrow': result(Sim.borrow(S), '1억원을 빌렸어요.'); break;
       case 'repay': result(Sim.repay(S), '1억원을 갚았어요.'); break;
       case 'ipo': result(Sim.ipo(S)); break;
@@ -747,7 +768,12 @@
       }
       const p = R.pick(e.offsetX, e.offsetY);
       R.hover = p;
-      if (tool !== 'select' && p) R.ghost = { x: p.x, y: p.y, ok: Sim.isLot(Sim.tile(S, p.x, p.y)), icon: toolIcon() };
+      if (tool !== 'select' && p) {
+        const [kind, k] = tool.split(':');
+        const fp = kind === 'fac' ? Sim.FAC[k].fp : [1, 1];
+        const fit = Sim.isLot(Sim.tile(S, p.x, p.y)) ? Sim.findFit(S, p.x, p.y, fp[0], fp[1]) : null;
+        R.ghost = fit ? { x: fit.x, y: fit.y, w: fit.w, d: fit.d, ok: true, icon: toolIcon() } : { x: p.x, y: p.y, w: fp[0], d: fp[1], ok: false, icon: toolIcon() };
+      }
     });
     const up = e => {
       ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
@@ -758,9 +784,10 @@
           if (p) {
             if (tool !== 'select') { if (Sim.isLot(Sim.tile(S, p.x, p.y))) clickBuild(p.x, p.y); else toast('빈 땅을 골라주세요. 길·건물 위에는 지을 수 없어요.', 'bad'); }
             else {
-              const t = Sim.tile(S, p.x, p.y);
-              if (selected && selected.x === p.x && selected.y === p.y && t.b && t.b.k === 'store') openStoreView(t.b.id);
-              else { selected = p; R.sel = p; armed = null; openForm = null; renderInspector(); }
+              const t = Sim.anchorOf(S, Sim.tile(S, p.x, p.y));
+              const q = t.b ? { x: t.x, y: t.y } : p;
+              if (selected && selected.x === q.x && selected.y === q.y && t.b && t.b.k === 'store') openStoreView(t.b.id);
+              else { selected = q; R.sel = q; armed = null; openForm = null; renderInspector(); }
             }
           }
         }
@@ -805,9 +832,12 @@
       renderLogoPick();
     });
     $('nameInput').addEventListener('input', renderLogoPick);
+    $('diffPick').addEventListener('click', e => { const b = e.target.closest('[data-diff]'); if (b) { newDiff = b.dataset.diff; renderDiff(); } });
+    $('evPick').addEventListener('click', e => { const b = e.target.closest('[data-ev]'); if (b) { newEvents = b.dataset.ev === '1'; renderDiff(); } });
+    $('compInput').addEventListener('input', () => { $('compVal').textContent = $('compInput').value + '개'; });
     $('btnNew').addEventListener('click', () => {
       const name = ($('nameInput').value || '').trim() || '모락상회';
-      S = Sim.newGame({ seed: (Date.now() % 2147483647) | 0, name, color: newColor, logo: newLogo });
+      S = Sim.newGame({ seed: (Date.now() % 2147483647) | 0, name, color: newColor, logo: newLogo, difficulty: newDiff, events: newEvents, competitors: +$('compInput').value });
       start();
       toast('빈 땅을 눌러 상권을 살펴보거나, 왼쪽에서 ☕ 카페를 골라 첫 가게를 열어 보세요!');
     });
@@ -825,16 +855,21 @@
     });
   }
 
+  function renderDiff() {
+    $('diffPick').innerHTML = Object.entries(Sim.DIFFICULTY).map(([k, D]) => `<button class="${newDiff === k ? 'on' : ''}" data-diff="${k}" title="${D.desc}">${D.name}</button>`).join('');
+    $('diffDesc').textContent = Sim.DIFFICULTY[newDiff].desc + ` 시작 자금 ${won(Sim.DIFFICULTY[newDiff].cash)}.`;
+    $('evPick').innerHTML = `<button class="${newEvents ? 'on' : ''}" data-ev="1">사건 있음</button><button class="${!newEvents ? 'on' : ''}" data-ev="0">평화롭게</button>`;
+  }
   function openModal() {
     modalOpen = true; speedIdx = 0;
     $('btnContinue').hidden = !readSave();
-    $('modal').hidden = false; renderLogoPick();
+    $('modal').hidden = false; renderLogoPick(); renderDiff();
     renderTop();
   }
   function start() {
     modalOpen = false; $('modal').hidden = true; closeStoreView(); lastQuests = Object.keys(S.quests).length; lastNews = S.news[0];
     selected = null; tool = 'select'; armed = null; openForm = null; acc = 0;
-    R.setState(S); R.sel = null; R.overlay = null; R.fit();
+    R.setState(S); R.sel = null; R.overlay = null; R.home();
     speedIdx = 1; renderTabs(); renderTools(); dirty = true; renderUi(true);
   }
 
@@ -878,7 +913,7 @@
     bindInput();
     const hotSave = data && data.save ? (() => { try { return Sim.deserialize(data.save); } catch (e) { return null; } })() : null;
     if (hotSave) { S = hotSave; tab = data.tab || tab; start(); speedIdx = data.speed != null ? data.speed : 1; }
-    else { S = Sim.newGame({ seed: 20261109 }); R.setState(S); R.fit(); renderTabs(); renderTools(); dirty = true; renderUi(true); openModal(); }
+    else { S = Sim.newGame({ seed: 20261109 }); R.setState(S); R.home(); renderTabs(); renderTools(); dirty = true; renderUi(true); openModal(); }
     window.__morak = { get S() { return S; }, R, act, openStoreView };
     window.claude?.hot?.snapshot?.(() => ({ save: modalOpen ? null : Sim.serialize(S), speed: speedIdx, tab }));
     requestAnimationFrame(frame);
