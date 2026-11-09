@@ -499,6 +499,11 @@
     for (const k in LANDMARKS) { const L = LANDMARKS[k]; if (fits(S, L.x, L.y, L.w, L.d)) occupy(S, L.x, L.y, L.w, L.d, { k: 'lm', kind: k, lv: 1 }); }
     // 강변 공원과 해변
     for (const t of S.tiles) if (t.bank && isLot(t)) occupy(S, t.x, t.y, 1, 1, { k: 'rpark', lv: 1, v: Math.floor(rnd(S) * 3), beach: !!t.beach });
+    // 동네 공원: 건물보다 먼저 자리를 잡고, 자리가 막혔으면 가까운 빈 땅으로
+    for (const [x, y] of [[33, 33], [9, 22], [47, 44], [62, 46], [18, 60], [35, 70], [20, 18], [50, 8], [6, 46], [30, 58], [46, 68], [64, 22], [16, 32], [58, 40], [24, 44], [44, 24]]) {
+      let done = false;
+      for (let r = 0; r < 4 && !done; r++) for (let dy = -r; dy <= r && !done; dy++) for (let dx = -r; dx <= r && !done; dx++) { const t = T(x + dx, y + dy); if (isLot(t) && !t.bank) { occupy(S, t.x, t.y, 1, 1, { k: 'park', lv: 1, v: 0 }); const n = T(t.x + 1, t.y); if (isLot(n) && !n.bank) occupy(S, n.x, n.y, 1, 1, { k: 'park', lv: 1, v: 1 }); done = true; } }
+    }
     // 동네별 건물 채우기
     for (const t of S.tiles) {
       if (!isLot(t)) continue;
@@ -507,8 +512,6 @@
       if (r < hd.dev) placeBuilding(S, t.x, t.y, wpick(S, hd.mix), t.h === 2 || t.h === 7 || t.h === 9 ? 0.3 : 0);
       else if (r < hd.dev + 0.16) t.tree = true;
     }
-    // 동네 공원 몇 곳
-    for (const [x, y] of [[33, 33], [9, 22], [47, 44], [62, 46], [18, 60], [35, 70], [20, 18], [50, 8], [6, 46], [30, 58], [46, 68], [64, 22], [16, 32]]) { const t = T(x, y); if (isLot(t)) occupy(S, x, y, 1, 1, { k: 'park', lv: 1, v: 0 }); }
     S.hoodCenters = HOODS.map((_, i) => { const ts = S.tiles.filter(t => t.h === i && t.t !== 'water'); return { x: Math.round(ts.reduce((a, t) => a + t.x, 0) / ts.length), y: Math.round(ts.reduce((a, t) => a + t.y, 0) / ts.length) }; });
     precomputeFixed(S);
   }

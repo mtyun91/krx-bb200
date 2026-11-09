@@ -22,6 +22,7 @@
   const HAIR = ['#3b2228', '#5a3a2e', '#1f1416', '#8a5a3c', '#c79b6b', '#e3a63c'];
   const CARS = ['#e46b5f', '#e3a63c', '#a3477a', '#b9a3e0', '#c94f6d', '#7fb2d9'];
 
+  function icon(ctx, e, x, y, size, lw, fill) { if (!(root.Icons && root.Icons.draw(ctx, e, x, y, size, INK, lw, fill))) { ctx.font = `${size}px ${EMOJI}`; ctx.fillText(e, x, y); } }
   function hash(x, y, s) { let h = (x * 374761393 + y * 668265263 + (s || 0) * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
   function shade(hex, f) {
     if (hex[0] !== '#') return hex;
@@ -130,7 +131,7 @@
     this.c = canvas; this.ctx = canvas.getContext('2d');
     this.cam = { x: 0, y: (Sim.W + Sim.H) * HH / 2, z: 0.9 };
     this.S = null; this.hover = null; this.sel = null; this.ghost = null; this.hourF = 12;
-    this.overlay = null; this.walkers = []; this.cars = []; this.trucks = []; this.floaters = []; this.particles = [];
+    this.overlay = null; this.walkers = []; this.shoppers = []; this.inside = {}; this.shopT = {}; this.doors = new Map(); this.cars = []; this.trucks = []; this.floaters = []; this.particles = [];
     this.clouds = []; this.groundKey = ''; this.pathCache = new Map(); this.t = 0;
     for (let i = 0; i < 4; i++) this.clouds.push({ x: Math.random() * 2400 - 1200, y: Math.random() * 1000, s: 0.6 + Math.random() * 0.8 });
     this.resize();
@@ -158,7 +159,7 @@
   R.centerOn = function (x, y) { const p = iso(x, y); this.cam.x = p.x; this.cam.y = p.y; };
   R.zoomAt = function (sx, sy, f) {
     const before = this.toWorld(sx, sy);
-    this.cam.z = Math.max(0.2, Math.min(2.8, this.cam.z * f));
+    this.cam.z = Math.max(0.2, Math.min(3.6, this.cam.z * f));
     const after = this.toWorld(sx, sy);
     this.cam.x += before.x - after.x; this.cam.y += before.y - after.y;
   };
@@ -296,6 +297,58 @@
     }
     if (hash(seed, 8) < 0.22) R0.pigeon(ctx, c[0] + (hash(seed, 9) - 0.5) * 14, c[1] + 2, seed);
   }
+
+  // ---------- 유럽풍 지붕 ----------
+  // 망사르드: 경사진 지붕 띠 + 지붕창(도머) + 굴뚝
+  function mansard(ctx, g, h, col, seed, lit, snow) {
+    const mh = 9, i = Math.min(0.18, 0.3 / Math.max(1, Math.min(g.w, g.d)) + 0.08);
+    const gi = geo(g.ax + i, g.ay + i, g.w - 2 * i, g.d - 2 * i, g.m);
+    const c1 = snow ? '#fbf7f7' : col, c2 = snow ? '#efe9ea' : shade(col, -0.15);
+    poly(ctx, [up(g.L, h), up(g.B, h), up(gi.B, h + mh), up(gi.L, h + mh)], c1, 1);
+    poly(ctx, [up(g.B, h), up(g.R, h), up(gi.R, h + mh), up(gi.B, h + mh)], c2, 1);
+    poly(ctx, [up(gi.L, h + mh), up(gi.B, h + mh), up(gi.R, h + mh), up(gi.T, h + mh)], snow ? '#fbf7f7' : shade(col, 0.35), 1);
+    poly(ctx, [up(g.L, h), up(g.B, h), up(g.R, h), up(g.R, h + 1.6), up(g.B, h + 1.6), up(g.L, h + 1.6)], '#fff4ea', 0.7);
+    for (const side of ['L', 'R']) {
+      const n = Math.max(1, Math.round(1.6 * (side === 'L' ? g.w : g.d)));
+      for (let k = 0; k < n; k++) {
+        const u = (k + 0.5) / n, a = fpt(g, side, u), b = fpt(gi, side, u), x = (a.x + b.x) / 2, y = (a.y + b.y) / 2 - h - mh * 0.45;
+        const dx = side === 'L' ? -1 : 1;
+        poly(ctx, [[x - 2.4, y + 3 - dx * 1.2], [x + 2.4, y + 3 + dx * 1.2], [x + 2.4, y - 2.5 + dx * 1.2], [x - 2.4, y - 2.5 - dx * 1.2]], '#fff4ea', 0.8);
+        poly(ctx, [[x - 1.5, y + 2.4 - dx * 0.75], [x + 1.5, y + 2.4 + dx * 0.75], [x + 1.5, y - 1.8 + dx * 0.75], [x - 1.5, y - 1.8 - dx * 0.75]], lit && hash(seed, k, side === 'L' ? 3 : 4) < lit ? '#ffd98a' : GLASS, 0.5);
+        poly(ctx, [[x - 3, y - 2.5 - dx * 1.5], [x + 3, y - 2.5 + dx * 1.5], [x, y - 6]], c2, 0.8);
+      }
+    }
+    chimney(ctx, g, gi, h + mh, seed);
+  }
+  function chimney(ctx, g, gi, h, seed) {
+    const n = 1 + (hash(seed, 2) < 0.5 ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      const p = iso(gi.ax + (k ? gi.w - 0.75 : 0.15) + 0.1, gi.ay + 0.15);
+      ctx.beginPath(); ctx.rect(p.x - 2.5, p.y - h - 8, 5, 8); ctx.fillStyle = '#c86a55'; ctx.fill(); ink(ctx, 0.8);
+      ctx.beginPath(); ctx.rect(p.x - 3.2, p.y - h - 9.5, 6.4, 2); ctx.fillStyle = '#efe2d0'; ctx.fill(); ink(ctx, 0.7);
+    }
+    void g;
+  }
+  // 박공지붕: 긴 쪽으로 용마루, 짧은 앞면에 삼각 박공과 둥근 창
+  function gable(ctx, g, h, rh, col, wall, snow) {
+    const c1 = snow ? '#fbf7f7' : col, c2 = snow ? '#efe9ea' : shade(col, -0.15);
+    if (g.w >= g.d) {
+      const cy = g.ay + (g.d - 1) / 2, E1 = iso(g.ax - 0.5 + g.m, cy), E2 = iso(g.ax + g.w - 0.5 - g.m, cy);
+      poly(ctx, [up(g.L, h), up(g.B, h), up(E2, h + rh), up(E1, h + rh)], c1, 1);
+      poly(ctx, [up(g.B, h), up(g.R, h), up(E2, h + rh)], wall, 1);
+      const m = { x: (g.B.x + g.R.x + E2.x) / 3, y: (g.B.y + g.R.y + E2.y) / 3 - h - rh / 3 };
+      ctx.beginPath(); ctx.ellipse(m.x, m.y, 2.4, 2.6, -0.45, 0, 7); ctx.fillStyle = GLASS; ctx.fill(); ink(ctx, 0.7);
+      ctx.beginPath(); ctx.moveTo(g.B.x, g.B.y - h); ctx.lineTo(E2.x, E2.y - h - rh); ctx.lineTo(g.R.x, g.R.y - h); ink(ctx, 1.6);
+    } else {
+      const cx = g.ax + (g.w - 1) / 2, E1 = iso(cx, g.ay - 0.5 + g.m), E2 = iso(cx, g.ay + g.d - 0.5 - g.m);
+      poly(ctx, [up(g.B, h), up(g.R, h), up(E1, h + rh), up(E2, h + rh)], c2, 1);
+      poly(ctx, [up(g.L, h), up(g.B, h), up(E2, h + rh)], wall, 1);
+      const m = { x: (g.L.x + g.B.x + E2.x) / 3, y: (g.L.y + g.B.y + E2.y) / 3 - h - rh / 3 };
+      ctx.beginPath(); ctx.ellipse(m.x, m.y, 2.4, 2.6, 0.45, 0, 7); ctx.fillStyle = GLASS; ctx.fill(); ink(ctx, 0.7);
+      ctx.beginPath(); ctx.moveTo(g.L.x, g.L.y - h); ctx.lineTo(E2.x, E2.y - h - rh); ctx.lineTo(g.B.x, g.B.y - h); ink(ctx, 1.6);
+    }
+  }
+  const ROOFC = ['#6f7fa8', '#c86a55', '#7fa392', '#a8647a', '#d98a5a'];
   const FLOOR = 4.6;
   function fh(lv) { return 8 + lv * FLOOR; }
 
@@ -307,18 +360,19 @@
     return { minX: iso(x0, y1).x - HW - 2, maxX: iso(x1, y0).x + HW + 2, minY: iso(x0, y0).y - HH - 2, maxY: iso(x1, y1).y + HH + 2, x0, y0, x1, y1 };
   };
   R.getChunk = function (cx, cy, season) {
-    const S = this.S, key = cx + ',' + cy, ver = S.mapVer + ':' + season + ':' + S.stations.length;
+    const S = this.S, key = cx + ',' + cy, zs = this.cam.z * this.dpr, sc = zs > 2.3 ? 2.4 : zs > 1.5 ? 1.8 : this.dpr >= 2 ? 1.5 : 1.15;
+    const ver = S.mapVer + ':' + season + ':' + S.stations.length + ':' + sc;
     const cache = this.chunks || (this.chunks = new Map());
     let ch = cache.get(key);
     if (ch && ch.ver === ver) { cache.delete(key); cache.set(key, ch); return ch; }
-    const bd = this.chunkBounds(cx, cy), sc = this.dpr >= 2 ? 1.5 : 1.15;
+    const bd = this.chunkBounds(cx, cy);
     const cv = (ch && ch.cv) || document.createElement('canvas');
     cv.width = Math.ceil((bd.maxX - bd.minX) * sc); cv.height = Math.ceil((bd.maxY - bd.minY) * sc);
     const ctx = cv.getContext('2d');
     ctx.setTransform(sc, 0, 0, sc, -bd.minX * sc, -bd.minY * sc);
     for (let y = bd.y0; y <= bd.y1; y++) for (let x = bd.x0; x <= bd.x1; x++) { const t = Sim.tile(S, x, y); if (t) this.groundTile(ctx, t, season); }
     ch = { cv, ver, bd, sc }; cache.set(key, ch);
-    while (cache.size > 18) cache.delete(cache.keys().next().value);
+    while (cache.size > (sc > 1.6 ? 8 : 18)) cache.delete(cache.keys().next().value);
     return ch;
   };
   function isRoadT(t) { return t && (t.t === 'road' || t.t === 'bridge'); }
@@ -327,15 +381,17 @@
     const S = this.S, p = iso(t.x, t.y), cx = p.x, cy = p.y, winter = season === 'winter';
     const ave = t.road === 'ave', alley = t.road === 'alley', bridge = t.t === 'bridge';
     if (bridge) diamond(ctx, cx, cy, 1, '#86c3d3');
-    const asphalt = winter ? '#e8e0e2' : ave ? '#b9a1a6' : '#c9b4b6';
-    diamond(ctx, cx, cy, 1, alley ? (winter ? '#f3ecec' : '#ead9d4') : asphalt);
+    const asphalt = winter ? '#e8e0e2' : ave ? '#c3adae' : '#dcc7bd';
+    diamond(ctx, cx, cy, 1, alley ? (winter ? '#f3ecec' : '#e9d6c9') : asphalt);
     const nb = (dx, dy) => isRoadT(Sim.tile(S, t.x + dx, t.y + dy));
     const cross = isCross(S, t);
     const along = nb(1, 0) || nb(-1, 0) ? (nb(0, 1) || nb(0, -1) ? null : 'x') : 'y';
     ctx.save(); diamondPath(ctx, cx, cy, 1); ctx.clip();
-    if (alley) {
-      ctx.strokeStyle = 'rgba(94,31,43,0.14)'; ctx.lineWidth = 0.7;
-      for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(cx + i * 8 - 30, cy + i * 4 + 15); ctx.lineTo(cx + i * 8 + 30, cy + i * 4 - 15); ctx.stroke(); }
+    if (!ave && !bridge) {
+      // 자갈 포장: 엇갈린 둥근 돌
+      ctx.strokeStyle = 'rgba(94,31,43,0.22)'; ctx.lineWidth = 0.6;
+      const st2 = alley ? 4 : 5;
+      for (let j = -6; j <= 6; j++) for (let i = -6; i <= 6; i++) { const u = (i + (j % 2 ? 0.5 : 0)) * st2, v = j * st2; const px = cx + (u - v), py = cy + (u + v) / 2; ctx.beginPath(); ctx.ellipse(px, py, st2 * 0.62, st2 * 0.34, 0, 0, 7); ctx.stroke(); }
     } else if (!cross) {
       // 차선: 대로는 흰 점선 + 반대 방향 대로와 맞닿은 쪽 노란 중앙선, 이면도로는 가운데 점선
       ctx.strokeStyle = '#f6efe9'; ctx.lineWidth = 1.4; ctx.setLineDash([5, 6]); ctx.beginPath();
@@ -417,6 +473,20 @@
       if (open && hash(seed, i) < 0.75) { walkerSit(ctx, tx - 5, ty, SHIRTS[(seed + i) % SHIRTS.length], HAIR[(seed + i * 3) % HAIR.length]); if (hash(seed, i, 3) < 0.5) walkerSit(ctx, tx + 5, ty + 1, SHIRTS[(seed + i + 4) % SHIRTS.length], HAIR[(seed + i) % HAIR.length]); }
     }
   };
+  // 잔디에 누운 사람 (돗자리는 선택)
+  function lying(ctx, x, y, shirt, mat) {
+    if (mat) poly(ctx, [[x - 10, y - 1], [x + 1, y + 4.5], [x + 7, y + 1.5], [x - 4, y - 4]], mat, 0.8);
+    ctx.beginPath(); ctx.moveTo(x - 7, y - 1); ctx.lineTo(x + 2, y + 3); ctx.strokeStyle = INK; ctx.lineWidth = 3.4; ctx.lineCap = 'round'; ctx.stroke(); ctx.strokeStyle = shirt; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 2, y + 3); ctx.lineTo(x + 5, y + 4.3); ctx.strokeStyle = INK; ctx.lineWidth = 2.6; ctx.stroke(); ctx.strokeStyle = '#5d6a9e'; ctx.lineWidth = 1.3; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x - 8, y - 1.8, 1.8, 0, 7); ctx.fillStyle = '#f4d2bd'; ctx.fill(); ink(ctx, 0.6);
+  }
+  // 돗자리 소풍: 둘이 앉아 있고 바구니
+  function picnic(ctx, x, y, sd) {
+    poly(ctx, [[x - 9, y], [x, y + 4.5], [x + 9, y], [x, y - 4.5]], ['#e46b5f', '#f2d36b', '#9ea7de'][sd % 3], 0.8);
+    ctx.beginPath(); ctx.moveTo(x - 4.5, y - 2.2); ctx.lineTo(x + 4.5, y + 2.2); ctx.moveTo(x + 4.5, y - 2.2); ctx.lineTo(x - 4.5, y + 2.2); ctx.strokeStyle = '#fff8ee'; ctx.lineWidth = 0.8; ctx.stroke();
+    walkerSit(ctx, x - 4, y + 1, SHIRTS[(sd + 2) % 9], HAIR[(sd + 1) % 6]); walkerSit(ctx, x + 4, y + 1, SHIRTS[(sd + 5) % 9], HAIR[(sd + 4) % 6]);
+    ctx.beginPath(); ctx.rect(x - 1.5, y - 3, 3, 2.4); ctx.fillStyle = '#c9a27e'; ctx.fill(); ink(ctx, 0.6);
+  }
   function walkerSit(ctx, x, y, shirt, hair) {
     ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x - 2, y - 7, 4, 4.5, 1.5); else ctx.rect(x - 2, y - 7, 4, 4.5); ctx.fillStyle = shirt; ctx.fill(); ink(ctx, 0.8);
     ctx.beginPath(); ctx.arc(x, y - 9, 1.8, 0, 7); ctx.fillStyle = '#f4d2bd'; ctx.fill(); ink(ctx, 0.7);
@@ -469,10 +539,15 @@
     if (k === 'lm') { this.drawLandmark(ctx, b.kind, g, season, night, lod); return; }
     if (k === 'park' || k === 'rpark') {
       if (lod) { drawTree(ctx, g.c.x, g.c.y, season, 1); return; }
-      if (k === 'park') { ctx.beginPath(); ctx.ellipse(g.c.x, g.c.y, 11, 5.5, 0, 0, 7); ctx.fillStyle = PAVE; ctx.fill(); ink(ctx); ctx.beginPath(); ctx.ellipse(g.c.x, g.c.y, 6.5, 3.2, 0, 0, 7); ctx.fillStyle = '#86c3d3'; ctx.fill(); ink(ctx, 1); }
+      const sd = t.x * 7 + t.y * 13, calm = night < 0.4 && season !== 'winter';
+      if (k === 'park') {
+        ctx.beginPath(); ctx.ellipse(g.c.x, g.c.y, 11, 5.5, 0, 0, 7); ctx.fillStyle = PAVE; ctx.fill(); ink(ctx); ctx.beginPath(); ctx.ellipse(g.c.x, g.c.y, 6.5, 3.2, 0, 0, 7); ctx.fillStyle = '#86c3d3'; ctx.fill(); ink(ctx, 1);
+        if (calm) { picnic(ctx, g.c.x + 13, g.c.y + 6, sd); this.bench(ctx, g.c.x - 12, g.c.y + 7); walkerSit(ctx, g.c.x - 14, g.c.y + 5, SHIRTS[sd % 9], HAIR[sd % 6]); }
+      }
       else if (b.beach) { this.beachProps(ctx, g.c.x, g.c.y, b.v, t.x * 7 + t.y, season, night); return; }
-      else if (b.v === 0) this.bench(ctx, g.c.x + 4, g.c.y + 2);
-      else if (b.v === 1) { ctx.beginPath(); ctx.moveTo(g.c.x - 12, g.c.y + 3); ctx.quadraticCurveTo(g.c.x, g.c.y - 4, g.c.x + 12, g.c.y + 3); ctx.strokeStyle = '#efdcd6'; ctx.lineWidth = 3; ctx.stroke(); }
+      else if (b.v === 0) { this.bench(ctx, g.c.x + 4, g.c.y + 2); if (calm && hash(sd, 1) < 0.7) { walkerSit(ctx, g.c.x + 1, g.c.y, SHIRTS[sd % 9], HAIR[sd % 6]); if (hash(sd, 2) < 0.4) walkerSit(ctx, g.c.x + 5, g.c.y + 2, SHIRTS[(sd + 3) % 9], HAIR[(sd + 2) % 6]); } }
+      else if (b.v === 1) { ctx.beginPath(); ctx.moveTo(g.c.x - 12, g.c.y + 3); ctx.quadraticCurveTo(g.c.x, g.c.y - 4, g.c.x + 12, g.c.y + 3); ctx.strokeStyle = '#efdcd6'; ctx.lineWidth = 3; ctx.stroke(); if (calm && hash(sd, 3) < 0.6) lying(ctx, g.c.x + 6, g.c.y + 6, SHIRTS[sd % 9], null); }
+      else if (calm && hash(sd, 4) < 0.7) { lying(ctx, g.c.x + 4, g.c.y + 4, SHIRTS[(sd + 1) % 9], ['#e46b5f', '#9ea7de', '#f2d36b'][sd % 3]); }
       drawTree(ctx, g.c.x - 10, g.c.y, season, 1 + (b.v || 0)); if (k === 'park') drawTree(ctx, g.c.x + 10, g.c.y - 4, season, 2);
       return;
     }
@@ -489,6 +564,7 @@
         stoop(ctx, g, 'R', 0.5, shade(wall, -0.4));
         hedge(ctx, g, 'L', 0.1, 0.9, season);
         hipRoof(ctx, g, h, 12, roofSnow(ROOFS[Math.floor(hv * 9) % ROOFS.length]));
+        { const p = iso(g.ax + 0.25, g.ay + 0.1); ctx.beginPath(); ctx.rect(p.x - 2.5, p.y - h - 12, 5, 9); ctx.fillStyle = '#c86a55'; ctx.fill(); ink(ctx, 0.8); }
         break;
       }
       case 'hanok': {
@@ -511,8 +587,8 @@
         winBoxes(ctx, g, 'L', 3, h - 2, b.lv, 2, seed, lit);
         winBoxes(ctx, g, 'R', 9, h - 2, b.lv - 1, 1, seed + 3, lit);
         stoop(ctx, g, 'R', 0.5, shade(wall, -0.4));
-        ledgeG(ctx, g, h, roofSnow(shade(wall, 0.25)));
-        if (hv > 0.6) scallop(ctx, g, h, '#fff4ea');
+        if (hv < 0.55) gable(ctx, g, h, 13, ROOFC[Math.floor(hv * 50) % 5], shade(wall, -0.08), snow);
+        else mansard(ctx, g, h, ROOFC[Math.floor(hv * 50) % 5], seed, lit, snow);
         const p = up(g.c, h + 3); ctx.beginPath(); ctx.ellipse(p[0] + 6, p[1] - 4, 4, 2, 0, 0, 7); ctx.fillStyle = '#9ea7de'; ctx.fill(); ink(ctx, 0.8); ctx.beginPath(); ctx.rect(p[0] + 2, p[1] - 4, 8, 4); ctx.fill(); ink(ctx, 0.8);
         break;
       }
@@ -521,8 +597,8 @@
         fbox(ctx, g, h, wall);
         winBoxes(ctx, g, 'L', 3, h - 2, b.lv, 2.5, seed, lit * 1.2);
         winBoxes(ctx, g, 'R', 3, h - 2, b.lv, 1.5, seed + 5, lit * 1.2);
-        ledgeG(ctx, g, h, roofSnow(shade(wall, -0.1)));
-        roofLife(this, ctx, g, h, seed, season, night);
+        if (hv < 0.6) mansard(ctx, g, h, ROOFC[Math.floor(hv * 70) % 5], seed, lit, snow);
+        else { ledgeG(ctx, g, h, roofSnow(shade(wall, -0.1))); roofLife(this, ctx, g, h, seed, season, night); }
         if (hv < 0.5) { const p = fpt(g, 'R', 0.85); signBoard(ctx, p.x + 3, p.y - h * 0.6, 7, 20, '#fff8ee'); ctx.save(); ctx.translate(p.x + 3, p.y - h * 0.6); ctx.fillStyle = INK; ctx.font = '5.5px "Jua",sans-serif'; ctx.textAlign = 'center'; ctx.fillText('원', 0, -4); ctx.fillText('룸', 0, 3); ctx.restore(); }
         break;
       }
@@ -533,10 +609,8 @@
         for (let r = 0; r < n; r++) { const v = 4 + (h - 8) * r / n; fq(ctx, g, 'L', 0.03, 0.97, v, v + 2.2, '#dcdcf4', 0.6); }
         for (let r = 0; r < n; r += 2) { const v = 4 + (h - 8) * r / n; fq(ctx, g, 'R', 0.15, 0.85, v, v + 2.2, night > 0.3 && hash(seed, r) < 0.6 ? '#ffd98a' : '#c8cbea', 0.6); }
         fq(ctx, g, 'R', 0.88, 0.97, 4, h, stripe, 0.8);
-        ledgeG(ctx, g, h, roofSnow('#efe2d0'));
-        scallop(ctx, g, h, stripe);
+        mansard(ctx, g, h, ROOFC[Math.floor(hv * 40) % 5], seed, lit, snow);
         hedge(ctx, g, 'L', 0.05, 0.95, season);
-        roofLife(this, ctx, g, h, seed, season, night);
         const p = fpt(g, 'R', 0.5); ctx.save(); ctx.fillStyle = stripe; ctx.font = '7px "Jua",sans-serif'; ctx.textAlign = 'center'; ctx.fillText(['햇살', '푸른숲', '한별', '노을'][Math.floor(hv * 4)], p.x, p.y - h + 9); ctx.restore();
         break;
       }
@@ -556,10 +630,11 @@
         this.awning(ctx, g, 'L', 11, ['#e46b5f', '#8fb38a', '#9ea7de', '#e3a63c'][Math.floor(hv * 4)]);
         if (b.lv > 1) winBoxes(ctx, g, 'L', 15, h - 2, b.lv - 1, 2, seed, lit);
         winBoxes(ctx, g, 'R', 4, h - 2, b.lv, 1, seed + 2, lit);
-        ledgeG(ctx, g, h, roofSnow(shade(wall, 0.3)));
-        if (hv < 0.45) scallop(ctx, g, h, '#fff4ea');
+        if (hv < 0.35) { ledgeG(ctx, g, h, roofSnow(shade(wall, 0.3))); scallop(ctx, g, h, '#fff4ea'); }
+        else if (hv < 0.7) gable(ctx, g, h, 12, ROOFC[Math.floor(hv * 30) % 5], shade(wall, -0.08), snow);
+        if (hv >= 0.7) mansard(ctx, g, h, ROOFC[Math.floor(hv * 30) % 5], seed, lit, snow);
         if (night < 0.5) { const q = fpt(g, 'L', 0.25); poly(ctx, [[q.x - 7, q.y + 1], [q.x + 1, q.y + 5], [q.x + 1, q.y + 1], [q.x - 7, q.y - 3]], '#c9a27e', 0.8); for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(q.x - 6 + i * 1.7, q.y - 3 + i * 0.9, 1.5, 0, 7); ctx.fillStyle = ['#e46b5f', '#f2d36b', '#e3a63c'][i % 3]; ctx.fill(); ink(ctx, 0.4); } }
-        roofLife(this, ctx, g, h, seed, season, night);
+        if (hv < 0.35) roofLife(this, ctx, g, h, seed, season, night);
         const p = fpt(g, 'L', 0.5); signBoard(ctx, p.x, p.y - 17, 22, 8, '#fff8ee', SHOP_SIGNS[Math.floor(hv * SHOP_SIGNS.length)]);
         break;
       }
@@ -580,7 +655,7 @@
         wins(ctx, g, 'R', 4, h - 3, b.lv, 1.5, GLASS, lit, seed + 1);
         // 세로 간판 줄
         for (let i = 0; i < Math.min(5, b.lv - 1); i++) { const q = fpt(g, 'L', 0.92); signBoard(ctx, q.x + 4, q.y - 18 - i * 10, 8, 8, ['#e46b5f', '#e3a63c', '#8fb38a', '#9ea7de', '#e58ba3'][(i + seed) % 5]); }
-        ledgeG(ctx, g, h, roofSnow(shade(wall, -0.1)));
+        mansard(ctx, g, h, ROOFC[Math.floor(hv * 13) % 5], seed, lit, snow);
         break;
       }
       case 'hotel': {
@@ -588,7 +663,7 @@
         wins(ctx, g, 'L', 14, h - 4, Math.min(12, b.lv), 2, GLASS, lit, seed, 'balcony');
         wins(ctx, g, 'R', 14, h - 4, Math.min(12, b.lv), 1.5, GLASS, lit, seed + 7);
         fq(ctx, g, 'L', 0.2, 0.8, 0, 11, '#b98a5e');
-        ledgeG(ctx, g, h, roofSnow('#e3a63c'));
+        mansard(ctx, g, h, '#5d6a9e', seed, lit, snow);
         const q = fpt(g, 'R', 0.92); signBoard(ctx, q.x + 3, q.y - h * 0.55, 9, 34, '#a3477a'); ctx.save(); ctx.fillStyle = '#fff8ee'; ctx.font = '6px "Jua",sans-serif'; ctx.textAlign = 'center'; 'HOTEL'.split('').forEach((c, i) => ctx.fillText(c, q.x + 3, q.y - h * 0.55 - 12 + i * 6.5)); ctx.restore();
         if (night > 0.3) this._glows.push({ x: q.x + 3, y: q.y - h * 0.55, r: 18, a: 0.7, c: '255,140,200' });
         break;
@@ -598,20 +673,18 @@
         fbox(ctx, g, h, wall);
         wins(ctx, g, 'L', 4, h - 3, b.lv, 1, GLASS, night > 0.3 && this.hourF < 22 ? 0.5 : 0, seed, 'ribbon');
         wins(ctx, g, 'R', 4, h - 3, b.lv, 1, GLASS, night > 0.3 && this.hourF < 22 ? 0.5 : 0, seed + 1, 'ribbon');
-        ledgeG(ctx, g, h, roofSnow(shade(wall, 0.3)));
-        roofLife(this, ctx, g, h, seed, season, night);
+        mansard(ctx, g, h, ROOFC[Math.floor(hv * 20) % 5], seed, night > 0.3 ? 0.4 : 0, snow);
         break;
       }
       case 'tower': {
-        const col = ['#9ea7de', '#a99bd9', '#86c3d3', '#c8cbea'][Math.floor(hv * 4)];
-        fbox(ctx, g, h, col);
-        for (let i = 1; i < 6 * w; i++) fq(ctx, g, 'L', i / (6 * w), i / (6 * w), 3, h - 3, null, 0.6);
-        for (let i = 1; i < 6 * d; i++) fq(ctx, g, 'R', i / (6 * d), i / (6 * d), 3, h - 3, null, 0.6);
-        for (let r = 1; r < b.lv / 3; r++) { fq(ctx, g, 'L', 0, 1, r * 3 * FLOOR, r * 3 * FLOOR, null, 0.5); }
-        if (night > 0.3 && this.hourF < 23) for (let r = 0; r < b.lv / 2; r++) if (hash(seed, r) < 0.5) fq(ctx, g, 'L', 0.1 + hash(seed, r, 2) * 0.6, 0.25 + hash(seed, r, 2) * 0.6, 8 + r * 2 * FLOOR, 11 + r * 2 * FLOOR, '#ffd98a', 0);
-        const g2 = geo(t.x + w * 0.2, t.y + d * 0.2, w * 0.6, d * 0.6, 0.15);
-        fbox(ctx, g2, h + 8, shade(col, 0.2), roofSnow(shade(col, 0.4)), h);
-        if (hv < 0.4) { const p = up(g2.c, h + 8); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(p[0], p[1] - 14); ink(ctx, 1.2); if (night > 0.3) this._glows.push({ x: p[0], y: p[1] - 14, r: 7, a: 1, c: '255,90,90' }); }
+        const wall = ['#efe2d0', '#f3e1c4', '#e9d6d0', '#f0dcc8'][Math.floor(hv * 4)];
+        fbox(ctx, g, h, wall);
+        fq(ctx, g, 'L', 0.02, 0.98, 0, 9, shade(wall, -0.12), 0.8); fq(ctx, g, 'R', 0.02, 0.98, 0, 9, shade(wall, -0.18), 0.8);
+        for (let i = 0; i < 4 * w; i++) fq(ctx, g, 'L', (i + 0.2) / (4 * w), (i + 0.8) / (4 * w), 1, 7, night > 0.3 ? '#ffe2a0' : GLASS, 0.6);
+        winBoxes(ctx, g, 'L', 10, h - 2, b.lv - 1, 3, seed, night > 0.3 && this.hourF < 22 ? 0.45 : 0);
+        winBoxes(ctx, g, 'R', 10, h - 2, b.lv - 1, 3, seed + 1, night > 0.3 && this.hourF < 22 ? 0.45 : 0);
+        for (let r = 1; r < b.lv; r += 2) { fq(ctx, g, 'L', 0, 1, 10 + r * (h - 12) / (b.lv - 1) - 0.8, 10 + r * (h - 12) / (b.lv - 1) + 0.8, '#fff4ea', 0.5); fq(ctx, g, 'R', 0, 1, 10 + r * (h - 12) / (b.lv - 1) - 0.8, 10 + r * (h - 12) / (b.lv - 1) + 0.8, '#fff4ea', 0.5); }
+        mansard(ctx, g, h, ROOFC[Math.floor(hv * 9) % 5], seed, night > 0.3 ? 0.4 : 0, snow);
         break;
       }
       case 'cowork': {
@@ -789,6 +862,7 @@
     const wallCol = arch === 'basic' ? shade(comp.color, 0.55) : A.wall;
     gshadow(ctx, g);
     if (lod) { fbox(ctx, g, h, wallCol, comp.color); const p = up(g.c, h + 10); drawLogo(ctx, comp, p[0], p[1], 7); return; }
+    if (this.cut) { this.drawStoreCut(ctx, st, g, season, night); return; }
     fbox(ctx, g, h, wallCol);
     if (arch === 'brick') { ctx.strokeStyle = 'rgba(94,31,43,0.35)'; ctx.lineWidth = 0.6; for (let i = 1; i < 9; i++) { fq(ctx, g, 'L', 0, 1, h * i / 9, h * i / 9, null, 0.5); fq(ctx, g, 'R', 0, 1, h * i / 9, h * i / 9, null, 0.5); } }
     if (arch === 'glass' || arch === 'greenhouse' || arch === 'container') { const n = arch === 'container' ? 10 : 6; for (let i = 1; i < n * g.w; i++) fq(ctx, g, 'L', i / (n * g.w), i / (n * g.w), 0, h, null, 0.6); for (let i = 1; i < n * g.d; i++) fq(ctx, g, 'R', i / (n * g.d), i / (n * g.d), 0, h, null, 0.6); }
@@ -809,14 +883,78 @@
     hedge(ctx, g, 'R', 0.1, 0.4, season);
     const sp = up(g.c, h + roofTop + 10);
     signBoard(ctx, sp[0] + 1, sp[1], 30, 15, '#fff8ee');
-    ctx.font = `10px ${EMOJI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(Sim.CATS[st.cat].icon, sp[0] - 6, sp[1] + 1);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    icon(ctx, Sim.CATS[st.cat].icon, sp[0] - 6, sp[1] + 0.5, 10, 1.9);
     drawLogo(ctx, comp, sp[0] + 8, sp[1] + 0.5, 5.2);
     if (st.franchise) { ctx.fillStyle = INK; ctx.font = '7px "Jua",sans-serif'; ctx.fillText('가맹', sp[0] + 1, sp[1] - 12); }
     if (!open) { ctx.fillStyle = INK; ctx.font = '7px "Jua",sans-serif'; const q = fpt(g, 'L', 0.4); ctx.fillText('CLOSED', q.x, q.y - 2); }
     if (['cafe', 'noodle', 'hansik', 'japanese', 'chinese', 'snack', 'chicken'].includes(st.cat) && open && st.served > 0) this.steam(ctx, sp[0] + 12, sp[1] + 10, st.id);
     if (open && st.delivery && Sim.CATS[st.cat].dlv > 0) { const ph = (this.t / 3000 + st.id * 0.3) % 1; if (ph < 0.5) this.scooter(ctx, g.R.x + 4 + ph * 30, g.R.y + 4 - ph * 15, comp.color); }
     if (glow) this._glows.push({ x: g.c.x, y: g.c.y - h * 0.25, r: 30 + 8 * g.w, a: 0.55 });
+  };
+
+  // ---------- 확대하면 매장 안이 보이는 단면 ----------
+  // 지붕과 앞벽을 걷어 내고 바닥·뒷벽·가구·손님을 지도 위에 직접 그려요.
+  function roomFit(st) {
+    const [nx, ny] = Sim.ROOM[st.size], w = st.w || 1, d = st.d || 1, m = 0.07;
+    const s = Math.min((w - 2 * m) / nx, (d - 2 * m) / ny);
+    const x0 = st.x - 0.5 + m + ((w - 2 * m) - nx * s) / 2, y0 = st.y - 0.5 + m + ((d - 2 * m) - ny * s) / 2;
+    const o = iso(x0, y0);
+    return { s, tw: s * TW, ox: o.x, oy: o.y, x0, y0 };
+  }
+  R.drawStoreCut = function (ctx, st, g, season, night) {
+    const S = this.S, comp = S.companies[st.owner], style = Sim.STYLES[st.interior.style];
+    const arch = st.owned ? st.arch : 'basic', A = Sim.ARCH[arch];
+    const wallCol = arch === 'basic' ? shade(comp.color, 0.55) : A.wall;
+    const open = this.hourF >= st.open && this.hourF < st.close;
+    const wh = 20;
+    gshadow(ctx, g);
+    // 바닥 (매장 전체)
+    poly(ctx, [up(g.L, 0), up(g.B, 0), up(g.R, 0), up(g.T, 0)], style.floor, 1.2);
+    ctx.save(); ctx.beginPath(); ctx.moveTo(g.L.x, g.L.y); ctx.lineTo(g.B.x, g.B.y); ctx.lineTo(g.R.x, g.R.y); ctx.lineTo(g.T.x, g.T.y); ctx.closePath(); ctx.clip();
+    ctx.strokeStyle = 'rgba(94,31,43,0.18)'; ctx.lineWidth = 0.5;
+    const n = Math.round(6 * (g.d)); for (let i = 1; i < n; i++) { const a = fpt(g, 'R', 1 - i / n), b = { x: g.L.x + (g.T.x - g.L.x) * (i / n), y: g.L.y + (g.T.y - g.L.y) * (i / n) }; void a; const p0 = iso(g.ax - 0.5 + g.m, g.ay - 0.5 + g.m + (g.d - 2 * g.m) * i / n), p1 = iso(g.ax + g.w - 0.5 - g.m, g.ay - 0.5 + g.m + (g.d - 2 * g.m) * i / n); ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); void b; }
+    ctx.restore();
+    // 뒷벽 두 면 (안쪽 면이 보임) + 벽 윗면 두께
+    poly(ctx, [up(g.L, 0), up(g.T, 0), up(g.T, wh), up(g.L, wh)], style.wall, 1.1);
+    poly(ctx, [up(g.T, 0), up(g.R, 0), up(g.R, wh), up(g.T, wh)], shade(style.wall, -0.06), 1.1);
+    poly(ctx, [up(g.L, wh), up(g.T, wh), [g.T.x, g.T.y - wh - 2.5], [g.L.x, g.L.y - wh - 2.5]], wallCol, 0.9);
+    poly(ctx, [up(g.T, wh), up(g.R, wh), [g.R.x, g.R.y - wh - 2.5], [g.T.x, g.T.y - wh - 2.5]], shade(wallCol, -0.1), 0.9);
+    const sky = this.hourF >= 7 && this.hourF < 17 ? '#bfe0f3' : this.hourF >= 17 && this.hourF < 20 ? '#f6c9a0' : '#4a4f86';
+    const wq = (a, b, u0, u1, v0, v1, col, lw) => { const p = u => ({ x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u }); poly(ctx, [[p(u0).x, p(u0).y - v0], [p(u1).x, p(u1).y - v0], [p(u1).x, p(u1).y - v1], [p(u0).x, p(u0).y - v1]], col, lw); };
+    const nw = Math.max(1, Math.round(1.5 * g.w));
+    for (let i = 0; i < nw; i++) { const u0 = (i + 0.25) / nw, u1 = (i + 0.75) / nw; wq(g.T, g.R, u0 - 0.03, u1 + 0.03, 7, 17, '#fff4ea', 0.7); wq(g.T, g.R, u0, u1, 8, 16, sky, 0.5); }
+    wq(g.L, g.T, 0.35, 0.75, 9, 16, '#3e4a44', 0.7);
+    wq(g.L, g.T, 0, 1, 0, 2.5, shade(style.accent, 0.3), 0.5); wq(g.T, g.R, 0, 1, 0, 2.5, shade(style.accent, 0.25), 0.5);
+    // 가구와 사람
+    const rf = roomFit(st);
+    Renderer.drawInterior(null, S, st, { embed: { ctx, tw: rf.tw, ox: rf.ox, oy: rf.oy }, hour: Math.floor(this.hourF) % 24, t: this.t, visitors: (this.inside && this.inside[st.id] || []).length });
+    // 앞쪽 낮은 벽 (입구는 비워 둠)
+    const lowH = 3.2;
+    poly(ctx, [up(g.L, 0), up(fpt(g, 'L', 0.78), 0), up(fpt(g, 'L', 0.78), lowH), up(g.L, lowH)], wallCol, 1);
+    poly(ctx, [up(fpt(g, 'R', 0.2), 0), up(g.R, 0), up(g.R, lowH), up(fpt(g, 'R', 0.2), lowH)], shade(wallCol, -0.12), 1);
+    for (const [a, b] of [[g.L, fpt(g, 'L', 0.78)], [fpt(g, 'R', 0.2), g.R]]) { ctx.beginPath(); ctx.moveTo(a.x, a.y - lowH); ctx.lineTo(b.x, b.y - lowH); ctx.strokeStyle = '#fff4ea'; ctx.lineWidth = 1.2; ctx.stroke(); }
+    // 기둥과 간판
+    for (const p of [g.L, g.B, g.R]) { ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - wh); ink(ctx, 1.4); }
+    const sp = up(g.T, wh + 12);
+    ctx.beginPath(); ctx.moveTo(g.T.x, g.T.y - wh - 2); ctx.lineTo(sp[0], sp[1] + 6); ink(ctx, 1);
+    signBoard(ctx, sp[0] + 1, sp[1], 30, 14, '#fff8ee');
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    icon(ctx, Sim.CATS[st.cat].icon, sp[0] - 6, sp[1] + 0.5, 10, 1.9);
+    drawLogo(ctx, comp, sp[0] + 8, sp[1] + 0.5, 5);
+    if (!open) { ctx.fillStyle = INK; ctx.font = '7px "Jua",sans-serif'; ctx.fillText('CLOSED', g.c.x, g.c.y - 2); }
+    if (open && night > 0.3) this._glows.push({ x: g.c.x, y: g.c.y - 8, r: 26 + 8 * g.w, a: 0.6 });
+  };
+  // 매장 출입문: 매장에 붙은 길 칸과, 문 안쪽 지점
+  R.doorOf = function (st) {
+    const S = this.S, w = st.w || 1, d = st.d || 1;
+    const c = [];
+    for (let i = 0; i < w; i++) c.push([st.x + i, st.y + d, st.x + i, st.y + d - 0.8]);
+    for (let j = 0; j < d; j++) c.push([st.x + w, st.y + j, st.x + w - 0.8, st.y + j]);
+    for (let i = 0; i < w; i++) c.push([st.x + i, st.y - 1, st.x + i, st.y - 0.2]);
+    for (let j = 0; j < d; j++) c.push([st.x - 1, st.y + j, st.x - 0.2, st.y + j]);
+    for (const [rx, ry, ix, iy] of c) if (roadAt(S, rx, ry)) return { rx, ry, ix, iy, sx: rx + (ix - rx) * 0.45, sy: ry + (iy - ry) * 0.45 };
+    return null;
   };
   R.scooter = function (ctx, x, y, col) {
     ctx.beginPath(); ctx.arc(x - 3, y, 1.8, 0, 7); ctx.arc(x + 3, y + 1.5, 1.8, 0, 7); ctx.fillStyle = '#3b2228'; ctx.fill();
@@ -837,8 +975,8 @@
     else if (f.kind === 'smartfarm') { for (let i = 0; i < 2; i++) { const gg = geo(g.ax + i, g.ay, 1, g.d, 0.1); fbox(ctx, gg, 14, 'rgba(207,231,210,0.95)', rs('#cfe7d2')); hipRoof(ctx, gg, 14, 8, rs('#e8f3e9')); } h = 22; }
     if (f.kind !== 'hq' && f.kind !== 'rental') {
       const p = up(g.c, h + 14);
-      ctx.font = `11px ${EMOJI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      signBoard(ctx, p[0] - 4, p[1], 26, 13, '#fff8ee'); ctx.fillText(Sim.FAC[f.kind].icon, p[0] - 10, p[1] + 1); drawLogo(ctx, comp, p[0] + 4, p[1], 4.6);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      signBoard(ctx, p[0] - 4, p[1], 26, 13, '#fff8ee'); icon(ctx, Sim.FAC[f.kind].icon, p[0] - 10, p[1], 10, 1.9); drawLogo(ctx, comp, p[0] + 4, p[1], 4.6);
     }
   };
   R.steam = function (ctx, x, y, seed, big) {
@@ -859,9 +997,13 @@
     if (this.cam.z >= 0.65) { ctx.font = '8px "Jua",sans-serif'; const w = ctx.measureText(s2.name).width + 8; signBoard(ctx, x + 5, y - 31, w, 11, '#fff8ee', s2.name); }
   };
   R.drawLamp = function (ctx, x, y, night) {
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 24); ctx.quadraticCurveTo(x, y - 28, x + 4, y - 28); ink(ctx, 1.5);
-    ctx.beginPath(); ctx.arc(x + 5, y - 27, 2.4, 0, 7); ctx.fillStyle = night > 0.3 ? '#ffe7a6' : '#f2d36b'; ctx.fill(); ink(ctx, 0.9);
-    if (night > 0.2) this._glows.push({ x: x + 5, y: y - 20, r: 28, a: 0.45 });
+    ctx.beginPath(); ctx.ellipse(x, y, 2.4, 1.2, 0, 0, 7); ctx.fillStyle = '#3b2228'; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 22); ink(ctx, 1.6);
+    ctx.beginPath(); ctx.moveTo(x - 1.6, y - 3); ctx.lineTo(x + 1.6, y - 3); ink(ctx, 1.2);
+    const on = night > 0.3;
+    poly(ctx, [[x - 2.6, y - 23], [x + 2.6, y - 23], [x + 3.4, y - 29], [x - 3.4, y - 29]], on ? '#ffe7a6' : '#f6ead6', 0.9);
+    poly(ctx, [[x - 4, y - 29], [x + 4, y - 29], [x, y - 32]], '#3b2228', 0.8);
+    if (night > 0.2) this._glows.push({ x, y: y - 22, r: 28, a: 0.45 });
   };
 
   // ---------- 이동체 ----------
@@ -896,8 +1038,32 @@
     if (this.trucks.length > 24) this.trucks.splice(0, this.trucks.length - 24);
     if (this.floaters.length > 40) this.floaters.splice(0, this.floaters.length - 40);
   };
+  // 길 위 사람: 산책·러닝·출근·강아지 산책·둘이 걷기
+  const SPORT = ['#e46b5f', '#6fb7b2', '#f2d36b', '#9ea7de', '#e58ba3'];
+  function newWalker(hour, weekend, o) {
+    const commuteH = !weekend && ((hour >= 7 && hour < 10) || (hour >= 17 && hour < 20));
+    const runH = (hour >= 6 && hour < 9) || (hour >= 17 && hour < 21);
+    const r = Math.random();
+    const kind = commuteH && r < 0.45 ? 'commute' : runH && r > 0.86 ? 'run' : 'stroll';
+    const w = { f: 1, side: Math.random() < 0.5 ? -1 : 1, kind,
+      c: kind === 'commute' ? ['#5d6a9e', '#3b2228', '#7a4a5a', '#efe2d0'][Math.floor(Math.random() * 4)] : kind === 'run' ? SPORT[Math.floor(Math.random() * SPORT.length)] : SHIRTS[Math.floor(Math.random() * SHIRTS.length)],
+      hair: HAIR[Math.floor(Math.random() * HAIR.length)], c2: SHIRTS[Math.floor(Math.random() * SHIRTS.length)], hair2: HAIR[Math.floor(Math.random() * HAIR.length)],
+      pair: kind === 'stroll' && Math.random() < 0.2, sp: kind === 'run' ? 1.5 + Math.random() * 0.5 : kind === 'commute' ? 0.95 + Math.random() * 0.2 : 0.45 + Math.random() * 0.3,
+      umb: Math.random() < 0.8, dog: kind === 'stroll' && Math.random() < 0.09 };
+    return Object.assign(w, o);
+  }
   const ACTIVITY = [0.1, 0.05, 0.03, 0.03, 0.03, 0.08, 0.2, 0.5, 0.8, 0.7, 0.7, 0.85, 1, 0.95, 0.8, 0.8, 0.85, 0.9, 1, 0.9, 0.7, 0.5, 0.35, 0.2];
   function stepMover(S, w, dt, sp, phase) {
+    if (w.enter != null || w.leave != null) return;
+    if (w.path) {
+      w.f += dt / 1000 * w.sp * sp;
+      while (w.f >= 1) {
+        w.f -= 1; w.pi++; w.x = w.tx; w.y = w.ty;
+        if (w.pi >= w.path.length - 1) { w.path = null; w.enter = 0; w.f = 0; return; }
+        const n = w.path[w.pi + 1]; w.dx = n.x - w.x; w.dy = n.y - w.y; w.tx = n.x; w.ty = n.y;
+      }
+      return;
+    }
     w.f += dt / 1000 * w.sp * sp;
     if (w.f >= 1 && w.car && w.tx !== undefined) {
       // 다음 칸이 교차로이고 내 방향 신호가 빨간불이면 정지선에서 대기
@@ -927,13 +1093,16 @@
     const roadsIn = () => { for (let i = 0; i < 40; i++) { const x = view.x0 + Math.floor(Math.random() * (view.x1 - view.x0)), y = view.y0 + Math.floor(Math.random() * (view.y1 - view.y0)); const t = Sim.tile(S, x, y); if (t && (t.t === 'road' || t.t === 'bridge')) return t; } return null; };
     const outside = m => m.x < view.x0 - 2 || m.x > view.x1 + 2 || m.y < view.y0 - 2 || m.y > view.y1 + 2;
     this.walkers = this.walkers.filter(m => !outside(m)); this.cars = this.cars.filter(m => !outside(m));
-    while (this.walkers.length < want) { const t = roadsIn(); if (!t) break; this.walkers.push({ x: t.x, y: t.y, tx: t.x, ty: t.y, f: 1, side: Math.random() < 0.5 ? -1 : 1, c: SHIRTS[Math.floor(Math.random() * SHIRTS.length)], hair: HAIR[Math.floor(Math.random() * HAIR.length)], c2: SHIRTS[Math.floor(Math.random() * SHIRTS.length)], hair2: HAIR[Math.floor(Math.random() * HAIR.length)], pair: Math.random() < 0.18, sp: 0.5 + Math.random() * 0.4, umb: Math.random() < 0.8, dog: Math.random() < 0.06 }); }
+    const hr = Math.floor(this.hourF) % 24, wkend = S.day ? !!(S.day.weekend || S.day.holiday) : false;
+    this.shoppers = (this.shoppers || []).filter(m => !outside(m));
+    while (this.walkers.length < want) { const t = roadsIn(); if (!t) break; this.walkers.push(newWalker(hr, wkend, { x: t.x, y: t.y, tx: t.x, ty: t.y })); }
     if (this.walkers.length > want) this.walkers.length = want;
     while (this.cars.length < wantCars) { const t = roadsIn(); if (!t || t.road === 'alley') break; this.cars.push({ car: true, x: t.x, y: t.y, tx: t.x, ty: t.y, f: 1, c: CARS[Math.floor(Math.random() * CARS.length)], sp: 1.4 + Math.random() * 0.8, taxi: Math.random() < 0.15 }); }
     if (this.cars.length > wantCars) this.cars.length = wantCars;
     if (!speed) return;
     const sp = Math.min(2, Math.max(0.6, speed));
     for (const w of this.walkers) stepMover(S, w, dt, sp);
+    this.updateShoppers(dt, sp, view, hr, wkend, mobile, lod);
     const phase = Math.floor(this.hourF * 20) % 2;
     for (const c of this.cars) stepMover(S, c, dt, sp, phase);
     for (const tr of this.trucks) { tr.f += dt / 1000 * 3 * Math.min(3, speed); while (tr.f >= 1) { tr.f -= 1; tr.i++; } }
@@ -941,6 +1110,55 @@
     for (const f of this.floaters) f.t += dt;
     this.floaters = this.floaters.filter(f => f.t < 1800);
   };
+
+  // 손님: 매장 수요에 맞춰 근처 길에서 출발해 문으로 걸어 들어가고, 잠시 머문 뒤 컵을 들고 나와요
+  R.updateShoppers = function (dt, sp, view, hr, wkend, mobile, lod) {
+    const S = this.S;
+    this.inside = this.inside || {}; this.shopT = this.shopT || {}; this.doors = this.doors || new Map();
+    if (!lod && this.cam.z >= 0.9) for (const st of S.stores) {
+      if (st.x < view.x0 - 1 || st.x > view.x1 + 1 || st.y < view.y0 - 1 || st.y > view.y1 + 1) continue;
+      if (hr < st.open || hr >= st.close) continue;
+      const nt = this.shopT[st.id];
+      if (nt == null || nt > this.t + 20000) { this.shopT[st.id] = this.t + Math.random() * 2500; continue; }
+      if (this.t < nt) continue;
+      const rate = st.hourly[hr] || st.hourly[(hr + 23) % 24] || 0;
+      this.shopT[st.id] = this.t + Math.min(14000, Math.max(1500, 9000 / (0.3 + rate / 8))) * (0.6 + Math.random() * 0.8);
+      if (this.shoppers.length >= (mobile ? 14 : 30)) continue;
+      let dc = this.doors.get(st.id);
+      if (!dc || dc.v !== S.mapVer) { dc = { v: S.mapVer, d: this.doorOf(st) }; this.doors.set(st.id, dc); }
+      const door = dc.d; if (!door) continue;
+      let start = null;
+      for (let k = 0; k < 14 && !start; k++) { const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 4; const t = Sim.tile(S, Math.round(door.rx + Math.cos(a) * r), Math.round(door.ry + Math.sin(a) * r)); if (t && t.t === 'road') start = t; }
+      if (!start) continue;
+      const path = this.path(start, { x: door.rx, y: door.ry });
+      if (!path || path.length < 2 || path.length > 16) continue;
+      const p2 = path.slice(), last = p2[p2.length - 1];
+      if (last.x !== door.rx || last.y !== door.ry) { if (Math.abs(last.x - door.rx) + Math.abs(last.y - door.ry) !== 1) continue; p2.push({ x: door.rx, y: door.ry }); }
+      if (p2.length < 2) continue;
+      this.shoppers.push(newWalker(hr, wkend, { path: p2, pi: 0, x: p2[0].x, y: p2[0].y, tx: p2[1].x, ty: p2[1].y, f: 0, dx: p2[1].x - p2[0].x, dy: p2[1].y - p2[0].y, shop: st.id, door, kind: 'stroll', pair: false, dog: false, sp: 0.75 + Math.random() * 0.3 }));
+    }
+    for (const w of this.shoppers) {
+      stepMover(S, w, dt, sp);
+      if (w.enter != null) { w.enter += dt / 1000 * 1.3 * sp; if (w.enter >= 1) { w.gone = true; (this.inside[w.shop] || (this.inside[w.shop] = [])).push({ until: this.t + 6000 + Math.random() * 10000, w }); } }
+      else if (w.leave != null) { w.leave += dt / 1000 * 1.3 * sp; if (w.leave >= 1) { w.leave = null; w.x = w.tx = w.door.rx; w.y = w.ty = w.door.ry; w.f = 1; w.done = true; } }
+    }
+    for (const w of this.shoppers) if (w.done) { w.done = false; w.shop = null; w.gone = true; this.walkers.push(w); }
+    this.shoppers = this.shoppers.filter(w => !w.gone);
+    for (const id in this.inside) {
+      const L = this.inside[id];
+      for (let i = L.length - 1; i >= 0; i--) if (this.t > L[i].until) { const v = L.splice(i, 1)[0].w; v.gone = false; v.enter = null; v.leave = 0; v.cup = true; this.shoppers.push(v); }
+    }
+  };
+  // 그릴 위치: 길 위(인도 쪽), 문으로 들어가는 중, 나오는 중
+  function walkerPos(w) {
+    if (w.enter != null || w.leave != null) {
+      const k = w.enter != null ? w.enter : 1 - w.leave, D = w.door;
+      const fx = k < 0.5 ? D.rx + (D.sx - D.rx) * k * 2 : D.sx + (D.ix - D.sx) * (k - 0.5) * 2, fy = k < 0.5 ? D.ry + (D.sy - D.ry) * k * 2 : D.sy + (D.iy - D.sy) * (k - 0.5) * 2;
+      return { fx, fy, p: iso(fx, fy), moving: true };
+    }
+    const fx = w.x + (w.tx - w.x) * w.f, fy = w.y + (w.ty - w.y) * w.f;
+    return { fx, fy, moving: true };
+  }
   function drawCar(ctx, x, y, dx, dy, col, taxi) {
     const along = dx !== 0 ? 'x' : 'y';
     const s = 0.24, sy = 0.14;
@@ -1020,6 +1238,7 @@
     const hf = this.hourF, night = darkness(hf), dusk = duskTint(hf);
     const wk = S.weather ? S.weather.kind : 'sun';
     const lod = z < 0.5;
+    this.cut = z >= 1.45;
     // 보이는 범위 (월드 좌표 + 타일 범위)
     const wv = { x0: this.toWorld(0, 0).x - 80, x1: this.toWorld(this.w, 0).x + 80, y0: this.toWorld(0, 0).y - 60, y1: this.toWorld(0, this.h).y + 260 };
     const tl = [[wv.x0, wv.y0], [wv.x1, wv.y0], [wv.x0, wv.y1], [wv.x1, wv.y1]].map(([x, y]) => ({ x: (y / HH + x / HW) / 2, y: (y / HH - x / HW) / 2 }));
@@ -1104,6 +1323,7 @@
     if (ovp) { const max = Math.max(1, ...ovp.map(o => o.cust)); for (const o of ovp) items.push({ d: o.x + o.y - 0.01, o, k: o.cust / max }); }
     if (!lod) {
       for (const w of this.walkers) items.push({ d: w.x + (w.tx - w.x) * w.f + w.y + (w.ty - w.y) * w.f + 0.1, w });
+      for (const w of this.shoppers || []) { const q = walkerPos(w); items.push({ d: q.fx + q.fy + 0.1, w }); }
       for (const c of this.cars) items.push({ d: c.x + (c.tx - c.x) * c.f + c.y + (c.ty - c.y) * c.f + 0.15, car: c });
       for (const tr of this.trucks) { const a = tr.p[tr.i], b = tr.p[tr.i + 1]; items.push({ d: a.x + (b.x - a.x) * tr.f + a.y + (b.y - a.y) * tr.f + 0.2, tr }); }
     }
@@ -1121,7 +1341,7 @@
           if (k < 0.5) for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; ctx.beginPath(); ctx.arc(g.c.x + Math.cos(a) * (14 + k * 40), g.c.y + Math.sin(a) * (7 + k * 20), 4 - k * 4, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.8); }
         } else if (t.b.k === 'store' || t.b.k === 'fac' || (t.b.k === 'lm' && (t.b.kind === 'amusement' || t.b.kind === 'tower'))) this.drawBuilding(ctx, t, season, night, lod);
         else {
-          const sc = z * dpr > 1.6 ? 2 : z * dpr > 0.9 ? 1.25 : 0.8;
+          const sc = z * dpr > 3 ? 3 : z * dpr > 1.6 ? 2 : z * dpr > 0.9 ? 1.25 : 0.8;
           const sp = this.spriteFor(t, season, night, sc);
           ctx.drawImage(sp.cv, sp.minX, sp.minY, sp.cv.width / sp.sc, sp.cv.height / sp.sc);
           for (const gl of sp.glows) this._glows.push(gl);
@@ -1142,13 +1362,17 @@
         diamondPath(ctx, p.x, p.y, 0.92); ctx.fillStyle = k < 0.2 ? 'rgba(94,31,43,0.12)' : `rgba(${Math.round(150 - 70 * k)},${Math.round(185 - 10 * k)},${Math.round(110 - 30 * k)},${(0.35 + 0.45 * k).toFixed(2)})`; ctx.fill();
         if (k >= 0.2) { ctx.setLineDash([3, 3]); ink(ctx, 1); ctx.setLineDash([]); }
       } else if (it.w) {
-        const w = it.w; const fx = w.x + (w.tx - w.x) * w.f, fy = w.y + (w.ty - w.y) * w.f;
-        const ddx = w.dx || 0, ddy = w.dy || 0;
+        const w = it.w; const wp = walkerPos(w), fx = wp.fx, fy = wp.fy;
+        const ddx = w.dx || 0;
         const tw = Sim.tile(S, Math.round(fx), Math.round(fy));
         const sOff = tw && tw.road === 'alley' ? 0.15 : 0.37;
-        const p = ddx ? iso(fx, fy + w.side * sOff) : iso(fx + w.side * sOff, fy);
-        const bob = REDUCED || paused || w.wait ? 0 : Math.abs(Math.sin(this.t / 140 + fx * 3)) * 1.2;
-        walker(ctx, p.x, p.y, w.c, w.hair, bob, rain && w.umb, paused || w.wait ? 0 : this.t / 110 + w.sp * 10);
+        const p = wp.p || (ddx ? iso(fx, fy + w.side * sOff) : iso(fx + w.side * sOff, fy));
+        const run = w.kind === 'run';
+        const bob = REDUCED || paused || w.wait ? 0 : Math.abs(Math.sin(this.t / (run ? 80 : 140) + fx * 3)) * (run ? 2.2 : 1.2);
+        walker(ctx, p.x, p.y, w.c, w.hair, bob, rain && w.umb && !run, paused || w.wait ? 0 : this.t / (run ? 60 : 110) + w.sp * 10);
+        if (run) { ctx.beginPath(); ctx.moveTo(p.x - 2, p.y - 12.2 - bob); ctx.lineTo(p.x + 2, p.y - 12.2 - bob); ctx.strokeStyle = '#fff8ee'; ctx.lineWidth = 1; ctx.stroke(); }
+        if (w.kind === 'commute') { ctx.beginPath(); ctx.rect(p.x + 2.2, p.y - 5.5 - bob * 0.3, 3.4, 2.6); ctx.fillStyle = '#7a4a2e'; ctx.fill(); ink(ctx, 0.6); }
+        if (w.cup) { ctx.beginPath(); ctx.rect(p.x + 2.4, p.y - 8.2 - bob, 1.8, 2.4); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.5); }
         if (w.pair) walker(ctx, p.x + 5, p.y + 1.5, w.c2, w.hair2, bob, rain && w.umb, paused ? 0 : this.t / 110 + 1.5);
         const ox = 0, oy = 0;
         if (w.dog && !w.pair) { const dx = p.x + ox + 5, dy = p.y + oy + 1; ctx.beginPath(); ctx.ellipse(dx, dy - 2, 3, 1.8, 0, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.8); ctx.beginPath(); ctx.arc(dx + 3, dy - 3.5, 1.4, 0, 7); ctx.fill(); ink(ctx, 0.7); }
@@ -1189,7 +1413,7 @@
       const gw = this.ghost.w || 1, gd = this.ghost.d || 1, g = geo(this.ghost.x, this.ghost.y, gw, gd, 0);
       ctx.beginPath(); ctx.moveTo(g.T.x, g.T.y); ctx.lineTo(g.R.x, g.R.y); ctx.lineTo(g.B.x, g.B.y); ctx.lineTo(g.L.x, g.L.y); ctx.closePath();
       ctx.fillStyle = this.ghost.ok ? 'rgba(143,179,138,0.55)' : 'rgba(228,107,95,0.45)'; ctx.fill(); ink(ctx, 1.4);
-      if (this.ghost.icon) { ctx.font = `18px ${EMOJI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.globalAlpha = 0.9; ctx.fillText(this.ghost.icon, g.c.x, g.c.y - 16); ctx.globalAlpha = 1; }
+      if (this.ghost.icon) { ctx.beginPath(); ctx.arc(g.c.x, g.c.y - 18, 12, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 1.2); icon(ctx, this.ghost.icon, g.c.x, g.c.y - 18, 16, 1.8); }
     }
     if (this.sel) { const st = Sim.anchorOf(S, Sim.tile(S, this.sel.x, this.sel.y)); const b = st && st.b; const g = geo(st.x, st.y, b ? b.w || 1 : 1, b ? b.d || 1 : 1, -0.03); ctx.beginPath(); ctx.moveTo(g.T.x, g.T.y); ctx.lineTo(g.R.x, g.R.y); ctx.lineTo(g.B.x, g.B.y); ctx.lineTo(g.L.x, g.L.y); ctx.closePath(); ctx.strokeStyle = '#e3a63c'; ctx.lineWidth = 4; ctx.stroke(); ink(ctx, 1.4); }
     if (night < 0.5 && !lod) this.drawBirds(ctx, adt);
@@ -1343,21 +1567,26 @@
   // opts: { hour, t, hoverStaff, edit, ghost:{k,x,y,r} }
   Renderer.drawInterior = function (canvas, S, st, opts) {
     opts = opts || {};
-    const dpr = Math.min(2, root.devicePixelRatio || 1);
-    const W = canvas.clientWidth, Hh = canvas.clientHeight; if (!W || !Hh) return;
-    if (canvas.width !== Math.round(W * dpr)) { canvas.width = W * dpr; canvas.height = Hh * dpr; }
-    const ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const E = opts.embed || null;   // 지도 위에 바로 그릴 때: { ctx, tw, ox, oy }
+    let W = 0, Hh = 0, ctx;
+    if (E) ctx = E.ctx;
+    else {
+      const dpr = Math.min(2, root.devicePixelRatio || 1);
+      W = canvas.clientWidth; Hh = canvas.clientHeight; if (!W || !Hh) return;
+      if (canvas.width !== Math.round(W * dpr)) { canvas.width = W * dpr; canvas.height = Hh * dpr; }
+      ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
     const comp = S.companies[st.owner], skey = st.interior.style, style = Sim.STYLES[skey], tier = st.interior.tier, cat = Sim.CATS[st.cat];
     const hour = opts.hour == null ? S.hour % 24 : opts.hour, t = REDUCED ? 0 : (opts.t || 0);
     const open = hour >= st.open && hour < st.close;
     const [nx, ny] = Sim.ROOM[st.size];
     const furn = Sim.ensureFurn(st);
     const C = pal(style, skey);
-    const tw = Math.min(W / (nx + ny) * 1.85, (Hh * 0.9) / ((nx + ny) / 4 + 2.25), 84), th = tw / 2, wallH = tw * 2.05;
-    const ox = W / 2 + (ny - nx) * tw / 4, oy = (Hh - (nx + ny) * th / 2) / 2 + wallH * 0.52 + 6;
+    const tw = E ? E.tw : Math.min(W / (nx + ny) * 1.85, (Hh * 0.9) / ((nx + ny) / 4 + 2.25), 84), th = tw / 2, wallH = tw * 2.05;
+    const ox = E ? E.ox : W / 2 + (ny - nx) * tw / 4, oy = E ? E.oy : (Hh - (nx + ny) * th / 2) / 2 + wallH * 0.52 + 6;
     const P = (x, y) => ({ x: ox + (x - y) * tw / 2, y: oy + (x + y) * th / 2 });
-    canvas._lay = { ox, oy, tw, th, nx, ny };
-    const LWI = Math.max(1, tw / 34);
+    if (!E) canvas._lay = { ox, oy, tw, th, nx, ny };
+    const LWI = E ? 0.55 : Math.max(1, tw / 34);
     const q = (pts, fill, w) => { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (w !== 0) { ctx.strokeStyle = INK; ctx.lineWidth = (w || 1) * LWI; ctx.lineJoin = 'round'; ctx.stroke(); } };
     const Z = (p, z) => ({ x: p.x, y: p.y - z * tw });
     const PZ = (x, y, z) => Z(P(x, y), z);
@@ -1370,6 +1599,7 @@
     const disc = (x, y, z, rx, fill, w) => { const c = PZ(x, y, z); ctx.beginPath(); ctx.ellipse(c.x, c.y, rx * tw, rx * tw * 0.5, 0, 0, 7); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (w !== 0) { ctx.strokeStyle = INK; ctx.lineWidth = (w || 1) * LWI; ctx.stroke(); } return c; };
     const line = (a, b, col, w) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.strokeStyle = col || INK; ctx.lineWidth = (w || 1) * LWI; ctx.lineCap = 'round'; ctx.stroke(); };
 
+    if (!E) {
     // ----- 배경과 바닥 -----
     ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, Hh);
     const slab = tw * 0.14;
@@ -1469,6 +1699,7 @@
       lab('주방', 1, ny - 0.5); lab('입구', nx - 0.5, ny - 0.5);
     }
 
+    }
     // ----- 가구 -----
     const items = [];
     const seats = []; // 손님 자리 {x,y,dir}
@@ -1678,7 +1909,7 @@
     }
     if (opts.erase) { const e = opts.erase; items.push({ d: 999, draw: () => q([P(e.x, e.y), P(e.x + 1, e.y), P(e.x + 1, e.y + 1), P(e.x, e.y + 1)], 'rgba(228,107,95,0.5)', 1) }); }
     // 펜던트 조명 (등급이 높을수록)
-    if (tier >= 2) for (const f of furn) if (/^table|bar/.test(f.k)) {
+    if (tier >= 2 && !E) for (const f of furn) if (/^table|bar/.test(f.k)) {
       const r = Sim.furnRect(f), cx = f.x + r.w / 2, cy = f.y + r.d / 2;
       items.push({ d: cx + cy + 0.5, draw: () => { const top = PZ(cx, cy, wallH / tw + 0.2), c = PZ(cx, cy, 1.45); line(top, c, 'rgba(94,31,43,0.6)', 0.7); ctx.beginPath(); ctx.moveTo(c.x - tw * 0.13, c.y + tw * 0.08); ctx.quadraticCurveTo(c.x, c.y - tw * 0.14, c.x + tw * 0.13, c.y + tw * 0.08); ctx.closePath(); ctx.fillStyle = skey === 'luxury' ? '#c7a35a' : tier >= 3 ? C.red : C.acc; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = LWI; ctx.stroke(); if (open && (hour >= 17 || hour < 7 || tier >= 4)) { ctx.fillStyle = 'rgba(255,220,150,0.22)'; const s = PZ(cx, cy, 0.42); ctx.beginPath(); ctx.ellipse(s.x, s.y, tw * 0.4, tw * 0.18, 0, 0, 7); ctx.fill(); } } });
     }
@@ -1686,9 +1917,9 @@
     const rs = (i, k) => hash(st.id * 13 + i, k, 77);
     const cust = i => ({ shirt: SHIRTS[Math.floor(rs(i, 1) * SHIRTS.length)], pants: PANTS[Math.floor(rs(i, 2) * PANTS.length)], hair: HAIR[Math.floor(rs(i, 3) * HAIR.length)], skin: SKIN[Math.floor(rs(i, 4) * SKIN.length)], hs: Math.floor(rs(i, 5) * 4), cap: rs(i, 6) < 0.12 ? SHIRTS[Math.floor(rs(i, 7) * SHIRTS.length)] : null });
     const want = open ? Math.round((st.hourly[hour] || st.hourly[(hour + 23) % 24] || 0) * cat.dwell * (1 - cat.takeout) * 0.5) : 0;
-    const seated = Math.min(seats.length, want);
+    const seated = Math.min(seats.length, (E ? Math.round(want * 0.45) : want) + (opts.visitors || 0));
     const order = seats.map((s, i) => ({ s, k: hash(st.id, i, 5) })).sort((a, b) => a.k - b.k).map(o => o.s);
-    const pk = tw / 26;
+    const pk = E ? Math.max(0.4, tw / 26) : tw / 26;
     for (let i = 0; i < seated; i++) {
       const s = order[i], o = cust(i);
       items.push({ d: s.d, draw: () => { const c = PZ(s.x, s.y, s.hi ? 0.42 : s.back === 'sofa' ? 0.26 : 0.25); person(ctx, c.x, c.y + tw * 0.05, Object.assign(o, { sit: true, k: pk, cup: rs(i, 8) < 0.5, arm: Math.max(0, Math.sin(t / 900 + i * 2)) * (rs(i, 9) < 0.4 ? 1 : 0) })); } });
@@ -1718,15 +1949,16 @@
         if (hi) { ctx.fillStyle = 'rgba(242,185,80,0.5)'; ctx.beginPath(); ctx.ellipse(c.x, c.y + 1, tw * 0.28, tw * 0.13, 0, 0, 7); ctx.fill(); }
         person(ctx, c.x, c.y, { k: pk, shirt: '#fff8ee', pants: '#3b2228', hair: HAIR[s.id % HAIR.length], skin: SKIN[s.id % SKIN.length], hs: s.id % 4, apron: comp.color, walk, bob: s.role === 'kitchen' ? Math.abs(Math.sin(t / 260 + i)) * 0.8 : 0, cap: s.role === 'kitchen' ? '#fff8ee' : null, cup: s.role === 'hall' && !walk });
         const em = s.role === 'manager' ? '⭐' : s.morale < 40 ? '💧' : s.morale > 85 ? '♪' : '';
-        if (em) { ctx.font = `${Math.round(tw * 0.2)}px ${EMOJI}`; ctx.textAlign = 'center'; ctx.fillStyle = INK; ctx.fillText(em, c.x + tw * 0.2, c.y - tw * 0.95); }
+        if (em) { if (em === '♪') { ctx.font = `${Math.round(tw * 0.22)}px "Jua",sans-serif`; ctx.textAlign = 'center'; ctx.fillStyle = INK; ctx.fillText(em, c.x + tw * 0.2, c.y - tw * 0.95); } else icon(ctx, em, c.x + tw * 0.2, c.y - tw * 0.98, tw * 0.24, 2, em === '⭐' ? '#f2d36b' : '#bfe0f3'); }
       } });
     });
     // 고양이 (꾸밈이 좋은 매장엔 가게 고양이가 놀러 와요)
     const fx = Sim.furnFx(st);
-    if (fx && fx.sum.deco >= 8 && freeH.length) { const [x, y] = freeH[Math.floor(hash(st.id, Math.floor(t / 20000), 4) * freeH.length)]; items.push({ d: x + y, draw: () => { const c = P(x, y); ctx.beginPath(); ctx.ellipse(c.x, c.y - 4, 7, 4, 0, 0, 7); ctx.fillStyle = '#e3a63c'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = LWI; ctx.stroke(); ctx.beginPath(); ctx.arc(c.x + 6, c.y - 8, 3.5, 0, 7); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(c.x - 7, c.y - 4); ctx.quadraticCurveTo(c.x - 12, c.y - 12 + Math.sin(t / 400) * 2, c.x - 9, c.y - 14); ctx.stroke(); } }); }
+    if (fx && fx.sum.deco >= 8 && freeH.length) { const [x, y] = freeH[Math.floor(hash(st.id, Math.floor(t / 20000), 4) * freeH.length)]; items.push({ d: x + y, draw: () => { const c = P(x, y); const ck = E ? 0.42 : 1; ctx.save(); ctx.translate(c.x, c.y); ctx.scale(ck, ck); ctx.translate(-c.x, -c.y); ctx.beginPath(); ctx.ellipse(c.x, c.y - 4, 7, 4, 0, 0, 7); ctx.fillStyle = '#e3a63c'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = LWI; ctx.stroke(); ctx.beginPath(); ctx.arc(c.x + 6, c.y - 8, 3.5, 0, 7); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(c.x - 7, c.y - 4); ctx.quadraticCurveTo(c.x - 12, c.y - 12 + Math.sin(t / 400) * 2, c.x - 9, c.y - 14); ctx.stroke(); ctx.restore(); } }); }
     items.sort((a, b) => a.d - b.d);
     for (const it of items) it.draw();
     // 영업 상태
+    if (E) return;
     if (!open && !opts.edit) { ctx.fillStyle = 'rgba(70,62,120,0.3)'; ctx.fillRect(0, 0, W, Hh); signBoard(ctx, W / 2, 26, 170, 24, '#fff8ee', `영업 준비 중 · ${st.open}시 오픈`); }
     else if (hour >= 18 || hour < 6) { ctx.fillStyle = 'rgba(255,190,110,0.08)'; ctx.fillRect(0, 0, W, Hh); }
   };

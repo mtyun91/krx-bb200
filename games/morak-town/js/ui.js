@@ -948,6 +948,7 @@
 
   function boot(data) {
     R = new Renderer($('map'));
+    if (window.Icons) Icons.watch(document.body);
     R.showHoods = true; $('btnHood').classList.add('on');
     bindInput();
     const hotSave = data && data.save ? (() => { try { return Sim.deserialize(data.save); } catch (e) { return null; } })() : null;
