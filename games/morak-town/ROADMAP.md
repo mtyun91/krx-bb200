@@ -1,6 +1,6 @@
 # 모락모락 타운 개발 계획서
 
-다음 세션은 이 문서를 먼저 읽고 위에서부터 진행한다. 각 항목 끝의 "완료 기준"을 만족하면 체크한다.
+다음 세션은 [DEVELOPMENT.md](DEVELOPMENT.md)(개발 지침)를 먼저 읽고, 이 문서를 위에서부터 진행한다. 각 항목 끝의 "완료 기준"을 만족하면 체크한다.
 코드 구조: `js/sim.js`(시뮬레이션, Node 공용) · `js/render.js`(캔버스) · `js/ui.js`(화면) · `js/audio.js` · `test/sim.test.cjs`.
 검증: `node games/morak-town/test/sim.test.cjs` + Playwright 스크린샷(데스크톱 1440×900, 휴대폰 400×820).
 
