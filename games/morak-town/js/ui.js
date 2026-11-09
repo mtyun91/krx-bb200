@@ -3,7 +3,7 @@
   'use strict';
   const Sim = window.Sim, Renderer = window.Renderer, Snd = window.GameAudio;
   const $ = id => document.getElementById(id);
-  const SAVE_KEY = 'morak.save.v4';
+  const SAVE_KEY = 'morak.save.v5';
   const HOUR_MS = 2500;                 // 1배속: 게임 1시간 = 2.5초 (하루 1분)
   const SPEEDS = [0, 1, 3, 10];
 
@@ -173,8 +173,8 @@
     charts = charts.filter(c => !c.insp);
     if (t.t === 'road') h = head('🛣️', '도로', H.name) + '<p class="hint">길에는 지을 수 없어요. 사람과 배송 트럭이 오가는 곳이에요.</p>';
     else if (t.t === 'mount') h = head('⛰️', '달빛산', H.name) + '<p class="hint">개발할 수 없는 산이에요. 산자락 근처는 조망이 좋아 임대료가 조금 올라가요.</p>';
-    else if (t.t === 'bridge') h = head('🌉', '다리', H.name) + '<p class="hint">강북과 강남을 잇는 다리예요. 출퇴근 시간에 차가 몰려요.</p>';
-    else if (t.t === 'water') h = head('🌊', '한별강', H.name) + '<p class="hint">오리들이 사는 호수예요. 관광객이 이 근처를 좋아해요.</p>';
+    else if (t.t === 'bridge') h = head('🌉', '다리', H.name) + '<p class="hint">강 양쪽 동네를 잇는 다리예요. 출퇴근 시간에 차가 몰려요.</p>';
+    else if (t.t === 'water') h = t.sea ? head('🌊', '모락 바다', H.name) + '<p class="hint">잔잔한 바다예요. 바다가 보이는 자리는 임대료가 조금 더 비싸요.</p>' : head('🌊', '물', H.name) + '<p class="hint">오리들이 사는 강과 호수예요. 관광객이 이 근처를 좋아해요.</p>';
     else if (!t.b) h = openForm && openForm.x === t.x && openForm.y === t.y ? openFormCard(t) : lotCard(t, hot);
     else if (t.b.k === 'store') h = storeSummary(S.stores.find(s => s.id === t.b.id));
     else if (t.b.k === 'fac') h = facCard(S.facs.find(f => f.id === t.b.id));
@@ -191,7 +191,7 @@
       h = head(ic, T.name, `${Sim.CLS_NAME[T.cls]} · ${H.name}${hot}`) + `<div class="rows"><span>크기 · 층수</span><span>${t.b.w || 1}×${t.b.d || 1}칸 · ${t.b.lv}층</span><span>${who}</span><span>${pop.toLocaleString('ko-KR')}명</span><span>손님 성향</span><span>${Sim.PROFILE_NAME[T.prof]}</span><span>가구 소득</span><span>월 ${Math.round(hd.income * T.inc)}만원</span></div>
         ${likes ? `<p class="hint" style="margin:4px 0 0">잘 찾는 업종: ${likes}</p>` : ''}${dislikes ? `<p class="hint" style="margin:2px 0 0">잘 안 찾는 업종: ${dislikes}</p>` : ''}
         <p class="hint">역·공원이 가깝거나 동네가 뜨면 건물이 높아지고 사람이 늘어요.</p>`;
-    } else if (t.b.k === 'rpark') h = head('🌿', '한강공원', H.name) + '<p class="hint">강변 산책로예요. 주말과 저녁에 산책하는 사람들이 와요.</p>';
+    } else if (t.b.k === 'rpark') h = t.b.beach ? head('🏖️', '모래사장', H.name) + '<p class="hint">파라솔과 선베드가 놓인 해변이에요. 여름과 주말에 관광객이 몰려요.</p>' : head('🌿', '강변 공원', H.name) + '<p class="hint">강변 산책로예요. 주말과 저녁에 산책하는 사람들이 와요.</p>';
     else if (t.b.k === 'park') h = head('🌳', '공원', H.name) + '<p class="hint">산책 나온 관광객이 찾아오고, 2칸 안 매장의 매력이 10% 올라가요.</p>';
     else if (t.b.k === 'bus') h = head('🚏', '버스정류장', H.name) + '<p class="hint">하루 140명가량의 출퇴근 인구가 오가요.</p>';
     el.innerHTML = h; el.hidden = false; paintLogos(el);
@@ -285,7 +285,7 @@
   }
 
   // ---------- 매장 안 (모달) ----------
-  const SV_TABS = [['ops', '운영'], ['menu', '메뉴'], ['staff', '직원'], ['interior', '인테리어'], ['building', '건물'], ['report', '기록']];
+  const SV_TABS = [['ops', '운영'], ['menu', '메뉴'], ['staff', '직원'], ['interior', '인테리어'], ['deco', '가구 배치'], ['building', '건물'], ['report', '기록']];
   function viewStore() { return storeView ? S.stores.find(s => s.id === storeView.id) : null; }
   function openStoreView(id) { Snd.play('door'); storeView = { id, tab: 'ops' }; $('storeModal').hidden = false; renderStoreView(); }
   function closeStoreView() { storeView = null; $('storeModal').hidden = true; hoverStaff = null; }
@@ -298,7 +298,7 @@
     $('svTabs').innerHTML = tabs.map(([k, n]) => `<button class="${storeView.tab === k ? 'on' : ''}" data-svtab="${k}">${n}</button>`).join('');
     charts = charts.filter(c => !c.sv);
     const body = $('svBody'), top = body.scrollTop;
-    body.innerHTML = { ops: svOps, menu: svMenu, staff: svStaff, interior: svInterior, building: svBuilding, report: svReport }[storeView.tab](st, mine);
+    body.innerHTML = { ops: svOps, menu: svMenu, staff: svStaff, interior: svInterior, deco: svDeco, building: svBuilding, report: svReport }[storeView.tab](st, mine);
     body.scrollTop = top;
     paintLogos($('storeModal'));
     for (const c of charts.filter(c => c.sv)) { const cv = document.getElementById(c.id); if (cv) drawChart(cv, c.cfg); }
@@ -426,6 +426,30 @@
       <h4>등급</h4><div class="seg">${[1, 2, 3, 4].map(k => `<button class="${sel.tier === k ? 'on' : ''}" data-act="ipick" data-arg="tier:${k}">${Sim.TIERS[k].name} <small>평당 ${short(Sim.TIERS[k].perPy * Sim.STYLES[sel.style].cost)}</small></button>`).join('')}</div>
       <h4>손님층별 선호도</h4><div class="legend">${Sim.SEG_KEYS.map(k => `<span>${Sim.SEG[k].name} ${'●'.repeat(Math.round(appeal(k) * 2))}${'○'.repeat(Math.max(0, 3 - Math.round(appeal(k) * 2)))}</span>`).join('')}</div>
       <div class="btn-row"><button class="btn primary" data-act="interior" ${comp.cash < cost ? 'disabled' : ''}>${same ? '리뉴얼 (상태 100%로)' : '새로 시공하기'} <small>${won(cost)}</small></button>${!same ? '<button class="btn" data-act="ipick" data-arg="reset">지금 그대로</button>' : ''}</div>`;
+    return h;
+  }
+  const FGRP = [['base', '계산·진열'], ['kitchen', '주방 장비'], ['seat', '좌석'], ['deco', '꾸미기']];
+  function svDeco(st) {
+    Sim.ensureFurn(st);
+    const fx = Sim.furnFx(st), comp = S.companies[0], tool = storeView.ftool || null;
+    const pct = v => (v >= 0 ? '+' : '') + Math.round(v * 100) + '%';
+    const segApp = Sim.SEG_KEYS.map(k => `${Sim.SEG[k].name} ${pct(Sim.furnAppeal(st, k) - 1)}`).join(' · ');
+    let h = `<div class="cards c3">
+      <div class="stat"><span class="lbl">좌석</span><b>${fx.sum.seats}석</b><span class="d">수용 ${pct(fx.seatF - 1)}</span></div>
+      <div class="stat"><span class="lbl">주방 속도</span><b class="${fx.kitF < 0.95 ? 'down' : ''}">${pct(fx.kitF - 1)}</b><span class="d">화구·머신·오븐 등급</span></div>
+      <div class="stat"><span class="lbl">꾸밈 점수</span><b>${Math.round(fx.sum.deco)}</b><span class="d">홀 ${Math.round(fx.crowd * 100)}% 사용${fx.crowd > 0.62 ? ' · 답답해요' : ''}</span></div></div>
+      <p class="hint">왼쪽 그림에서 칸을 눌러 가구를 놓아요. 왼쪽 두 줄은 <b>주방</b>, 나머지는 <b>홀</b>이고, 오른쪽 앞 모서리는 <b>입구</b>라 비워 둬야 해요. 좌석이 많으면 손님을 더 받지만 홀이 62%보다 꽉 차면 답답해서 손님이 덜 와요. 좋은 냉장고는 품질을, 좋은 화구는 조리 속도를 올려요.</p>
+      <p class="hint" style="margin-top:0">손님층별 매력: ${segApp}</p>
+      <div class="btn-row"><button class="btn ${tool && tool.k === 'erase' ? 'primary' : ''}" data-act="ftool" data-arg="erase">🧹 치우기</button><button class="btn ${tool && tool.r ? 'primary' : ''}" data-act="frot" ${!tool || tool.k === 'erase' ? 'disabled' : ''}>↻ 돌리기</button><button class="btn" data-act="ftool" data-arg="">선택 해제</button><button class="btn" data-act="freset">기본 배치로</button></div>`;
+    for (const [g, gn] of FGRP) {
+      h += `<h4>${gn}</h4><div class="furn-grid">`;
+      for (const k of Sim.FURN_KEYS) {
+        const F = Sim.FURN[k]; if (F.grp !== g) continue;
+        const eff = [F.seats ? `좌석 ${F.seats}` : '', F.kit ? `속도 +${Math.round(F.kit * 100)}%` : '', F.fresh ? `품질 +${Math.round(F.fresh * 100)}%` : '', F.deco ? `꾸밈 ${F.deco}` : ''].filter(Boolean).join(' · ');
+        h += `<button class="furn-card ${tool && tool.k === k ? 'on' : ''}" data-act="ftool" data-arg="${k}" ${comp.cash < F.cost ? 'disabled' : ''} title="${esc(F.desc)}"><span class="fi">${F.icon}</span><b>${F.name}</b><small>${short(F.cost)} · ${F.w}×${F.d}칸</small><small>${eff || esc(F.desc)}</small></button>`;
+      }
+      h += '</div>';
+    }
     return h;
   }
   function svBuilding(st) {
@@ -700,6 +724,9 @@
       case 'upgrade': if (st) result(Sim.upgradeStore(S, st.id), '매장을 넓혔어요. 좌석이 늘어났어요.'); break;
       case 'buyprop': if (st) result(Sim.buyProperty(S, st.id), '건물을 샀어요! 이제 월세가 들지 않고, 건축 양식을 바꿀 수 있어요.'); break;
       case 'arch': if (st) { const r = Sim.setArch(S, st.id, arg); result(r); if (r.ok) { R.pop(st.x, st.y); Snd.play('build'); } } break;
+      case 'ftool': storeView.ftool = arg ? { k: arg, r: 0 } : null; break;
+      case 'frot': if (storeView.ftool) storeView.ftool.r = storeView.ftool.r ? 0 : 1; break;
+      case 'freset': if (st) { if (armed === 'freset') { armed = null; result(Sim.resetFurn(S, st.id)); } else arm('freset'); } break;
       case 'ipick': if (arg === 'reset') storeView.pick = null; else { const [k, v] = arg.split(':'); storeView.pick[k] = k === 'style' ? v : +v; } break;
       case 'interior': if (st && storeView.pick) { result(Sim.setInterior(S, st.id, storeView.pick.style, storeView.pick.tier)); storeView.pick = null; } break;
       case 'close': if (st) { if (armed === 'close:' + st.id) { armed = null; result(Sim.closeStore(S, st.id)); closeStoreView(); selected = null; R.sel = null; } else arm('close:' + st.id); } break;
@@ -806,6 +833,17 @@
     $('svTabs').addEventListener('click', e => { const b = e.target.closest('[data-svtab]'); if (b) { Snd.play('tab'); storeView.tab = b.dataset.svtab; storeView.pick = null; storeView.menuSel = null; $('svBody').scrollTop = 0; renderStoreView(); } });
     for (const id of ['tabBody', 'inspector', 'quest', 'banner', 'tabs', 'svBody']) $(id).addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) act(b.dataset.act, b.dataset.arg); });
     $('svBody').addEventListener('mouseover', e => { const c = e.target.closest('[data-staff]'); hoverStaff = c ? +c.dataset.staff : null; });
+    const sc = $('svScene');
+    sc.addEventListener('pointermove', e => { if (!storeView || storeView.tab !== 'deco') return; storeView.fcell = Renderer.interiorCell(sc, e.offsetX, e.offsetY); });
+    sc.addEventListener('pointerleave', () => { if (storeView) storeView.fcell = null; });
+    sc.addEventListener('click', e => {
+      if (!storeView || storeView.tab !== 'deco' || !storeView.ftool) return;
+      const st = viewStore(), c = Renderer.interiorCell(sc, e.offsetX, e.offsetY); if (!st || !c) return;
+      const tl = storeView.ftool;
+      const r = tl.k === 'erase' ? Sim.removeFurn(S, st.id, c.x, c.y) : Sim.placeFurn(S, st.id, tl.k, c.x, c.y, tl.r);
+      result(r); if (r.ok) Snd.play(tl.k === 'erase' ? 'click' : 'build'); renderStoreView();
+    });
+    sc.addEventListener('contextmenu', e => { if (storeView && storeView.tab === 'deco') { e.preventDefault(); if (storeView.ftool && storeView.ftool.k !== 'erase') { storeView.ftool.r = storeView.ftool.r ? 0 : 1; renderStoreView(); } } });
     $('svClose').addEventListener('click', closeStoreView);
     $('storeModal').addEventListener('click', e => { if (e.target.id === 'storeModal') closeStoreView(); });
     $('catPicker').addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if (!b) return; Snd.play('click'); if (b.dataset.pick === 'close') { pickerOpen = false; renderPicker(); renderTools(); } else setTool('store:' + b.dataset.pick); });
@@ -904,7 +942,7 @@
       if (S.news.length && S.news[0] !== lastNews) { if (lastNews && S.news[0].kind === 'good') Snd.play('news'); lastNews = S.news[0]; }
     }
     renderUi();
-    if (storeView) { const st = viewStore(); sceneT += dt; if (st) Renderer.drawInterior($('svScene'), S, st, { hour: Math.floor(hourF()) % 24, t: sceneT, hoverStaff }); }
+    if (storeView) { const st = viewStore(); sceneT += dt; if (st) { const ed = storeView.tab === 'deco', tl = storeView.ftool, fc = storeView.fcell; Renderer.drawInterior($('svScene'), S, st, { hour: Math.floor(hourF()) % 24, t: sceneT, hoverStaff, edit: ed, ghost: ed && tl && fc && tl.k !== 'erase' ? { k: tl.k, x: fc.x, y: fc.y, r: tl.r } : null, erase: ed && tl && fc && tl.k === 'erase' ? fc : null }); } }
     requestAnimationFrame(frame);
   }
 

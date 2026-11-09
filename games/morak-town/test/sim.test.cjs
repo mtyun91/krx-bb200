@@ -126,8 +126,8 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   const S = Sim.newGame({ seed: 21 });
   const hs = Sim.hoodStats(S);
   const by = n => hs.find(h => h.name === n).rent;
-  console.log('[땅값] 한빛중앙', Math.round(by('한빛중앙')), '은행나무마을', Math.round(by('은행나무마을')), '물레골', Math.round(by('물레골')));
-  assert(by('한빛중앙') > by('은행나무마을') && by('은행나무마을') > by('물레골') && by('물레골') < by('느티골'), '임대료 순서');
+  console.log('[땅값] 라일락중심가', Math.round(by('라일락중심가')), '수국언덕', Math.round(by('수국언덕')), '고양이언덕', Math.round(by('고양이언덕')));
+  assert(by('라일락중심가') > by('수국언덕') && by('수국언덕') > by('고양이언덕') && by('고양이언덕') < by('느티나무길'), '임대료 순서');
   const land = S.tiles.filter(t => t.t === 'land' && t.h === 9);
   const near = land.filter(t => Math.abs(t.x - 41) + Math.abs(t.y - 51) <= 3), far = land.filter(t => Math.abs(t.x - 41) + Math.abs(t.y - 51) >= 8);
   const avg = a => a.reduce((x, t) => x + t.rent, 0) / a.length;
@@ -152,7 +152,35 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   // 젠트리피케이션: 화제성이 높으면 소득↑ 노후도↓
   const h = S.hoods[3]; h.hype = 90; const inc0 = h.income, age0 = h.age;
   run(S, 62);
-  console.log('[젠트리] 물레골 소득', inc0, '→', Math.round(h.income), '노후도', age0, '→', h.age.toFixed(2), '떠난 주민', Math.round(h.displaced));
+  console.log('[젠트리] 고양이언덕 소득', inc0, '→', Math.round(h.income), '노후도', age0, '→', h.age.toFixed(2), '떠난 주민', Math.round(h.displaced));
   assert(h.income > inc0 && h.age < age0);
+}
+
+// ---------- 가구 배치 ----------
+{
+  const S = Sim.newGame({ seed: 77, competitors: 0 });
+  S.companies[0].cash = 5e8;
+  let st = null;
+  for (const t of S.tiles) { if (st) break; if (t.t !== 'land' || t.b || t.ref != null) continue; const r = Sim.openStore(S, 0, t.x, t.y, 'cafe', { size: 2 }); if (r.ok) st = r.store; }
+  for (const cat of Sim.CAT_KEYS) for (const sz of [1, 2, 3]) { const L = Sim.defaultFurn(cat, sz); assert(L.filter(f => f.k === 'counter').length === 1, '기본 배치에 계산대 ' + cat + sz); assert(L.every(f => Sim.furnFits({ size: sz, furn: L }, f, f)), '기본 배치가 칸 안에 ' + cat + sz); }
+  const cap0 = Sim.seatCapOf(st);
+  Sim.ensureFurn(st);
+  const fx = Sim.furnFx(st);
+  assert(Math.abs(fx.seatF - 1) < 1e-9 && Math.abs(fx.kitF - 1) < 1e-9 && Math.abs(Sim.furnAppeal(st, 'res') - 1) < 0.03, '기본 배치는 효과 중립');
+  assert(Math.abs(Sim.seatCapOf(st) - cap0) < 1e-6, '기본 배치 좌석 그대로');
+  assert(!Sim.placeFurn(S, st.id, 'stove2', 4, 2).ok, '화구는 홀에 못 놓음');
+  assert(!Sim.placeFurn(S, st.id, 'table2', 7, 5).ok, '입구는 비워야 함');
+  const k0 = Sim.hourParts(st, 12).kitchen;
+  assert(Sim.placeFurn(S, st.id, 'sofa', 3, 4).ok, '소파 놓기');
+  assert(Sim.placeFurn(S, st.id, 'espresso', 0, 3).ok, '머신 추가');
+  assert(Sim.seatCapOf(st) > cap0 && Sim.hourParts(st, 12).kitchen > k0, '좌석·주방 속도 증가');
+  assert(Sim.furnAppeal(st, 'uni') > 1, '소파는 대학생 매력');
+  assert(!Sim.removeFurn(S, st.id, 1, 1).ok, '계산대 하나는 남겨야 함');
+  const S2 = Sim.deserialize(Sim.serialize(S));
+  assert(S2.stores.find(s => s.id === st.id).furn.length === st.furn.length, '가구 저장');
+  console.log('[가구] 좌석', fx.sum.seats, '→', Sim.furnFx(st).sum.seats, '수용', cap0.toFixed(1), '→', Sim.seatCapOf(st).toFixed(1), '주방', k0.toFixed(1), '→', Sim.hourParts(st, 12).kitchen.toFixed(1));
+  // 새 도시: 바다와 모래사장
+  assert(S.tiles.some(t => t.sea) && S.tiles.some(t => t.b && t.b.beach), '바다와 해변');
+  assert(S.tiles.filter(t => t.b && Sim.BTYPES[t.b.k] && t.b.lv > 9).length === 0, '높은 건물 없이 낮은 동네');
 }
 console.log('모든 시뮬레이션 점검 통과');

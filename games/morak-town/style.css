@@ -466,3 +466,13 @@ table.t td { border-bottom: 1px dashed var(--line); }
 }
 .range { width: 100%; accent-color: var(--berry); padding: 0 !important; border: 0 !important; background: none !important; }
 #diffPick button, #evPick button { padding: 7px 0; }
+
+/* 가구 배치 */
+.furn-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.furn-card { text-align: left; border: var(--bd, 1px solid var(--line)); background: var(--card); border-radius: 12px; padding: 6px 8px; display: grid; gap: 1px; cursor: pointer; }
+.furn-card .fi { font-size: 18px; line-height: 1.1; }
+.furn-card b { font-weight: 400; font-family: var(--f-display); font-size: 13px; }
+.furn-card small { color: var(--muted, #8a6a70); font-size: 11px; line-height: 1.25; }
+.furn-card.on { background: #ffe9b8; box-shadow: 0 0 0 2px var(--ink, #5e1f2b) inset; }
+.furn-card:disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 560px) { .furn-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

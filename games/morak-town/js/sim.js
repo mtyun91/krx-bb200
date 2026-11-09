@@ -161,44 +161,44 @@
 
   // ---------- 동네(상권) ----------
   // ---------- 구역(동네) ----------
-  // 서울의 구조를 참고한 가상 도시. income: 가구 월평균 소득(만원), age: 노후도, rent: 기준 평당 월세(원), mix: 새로 지어지는 건물 종류 비중
+  // 바닷가 강 하구의 작은 가상 도시 '모락 베이'. income: 가구 월평균 소득(만원), age: 노후도, rent: 기준 평당 월세(원), mix: 새로 지어지는 건물 종류 비중
   const HOODS = [
-    { name: '푸른언덕', kind: 'uni',  rent: 85000,  income: 300, age: 0.45, dev: 0.62, mix: { campus: 2, oneroom: 5, alley: 3, villa: 2, shop: 2, cowork: 1 }, desc: '대학 정문 앞 젊은 상권. 원룸과 먹자골목이 모여 있고 밤늦게까지 붐벼요.' },
-    { name: '은빛궁동', kind: 'old',  rent: 75000,  income: 420, age: 0.55, dev: 0.58, mix: { hanok: 6, house: 2, shop: 2, alley: 1, hotel: 0.3 }, desc: '옛 궁궐과 한옥이 남은 구도심. 관광객이 많아요.' },
-    { name: '한빛중앙', kind: 'off',  rent: 230000, income: 600, age: 0.3,  dev: 0.72, mix: { tower: 4, office: 4, plaza: 3, hotel: 0.4, shop: 1 }, desc: '시청과 고층 오피스가 모인 도심 업무지구. 땅값이 비싸요.' },
-    { name: '물레골',   kind: 'old',  rent: 42000,  income: 250, age: 0.8,  dev: 0.66, mix: { villa: 5, house: 4, shop: 1, alley: 1 }, desc: '산비탈 낡은 주택가와 전통시장. 임대료가 싸지만 소득이 낮아요.' },
-    { name: '느티골',   kind: 'res',  rent: 70000,  income: 380, age: 0.5,  dev: 0.62, mix: { house: 3, villa: 3, oneroom: 2, shop: 2, cowork: 1 }, desc: '조용한 주택가에 작은 공방과 카페가 섞여 있어요.' },
-    { name: '두레마을', kind: 'res',  rent: 65000,  income: 290, age: 0.55, dev: 0.66, mix: { oneroom: 5, villa: 3, alley: 2, shop: 2 }, desc: '원룸촌과 골목시장. 1인 가구가 많아 배달 수요가 커요.' },
-    { name: '벽돌숲',   kind: 'ind',  rent: 80000,  income: 330, age: 0.7,  dev: 0.56, mix: { factory: 4, cowork: 2, alley: 2, oneroom: 2, shop: 1 }, desc: '강변 공장지대를 고친 골목. 젠트리피케이션이 진행 중이에요.', hype: 30 },
-    { name: '여울섬',   kind: 'off',  rent: 260000, income: 750, age: 0.2,  dev: 0.6,  mix: { tower: 6, office: 2, plaza: 1, hotel: 0.4 }, desc: '강 위의 금융 섬. 증권사와 방송국이 모여 있어요.' },
-    { name: '은행나무마을', kind: 'rich', rent: 160000, income: 900, age: 0.15, dev: 0.52, mix: { luxury: 5, apt: 2, house: 2, shop: 1 }, desc: '강 남쪽 고급 주거지. 가격에 덜 민감하고 브런치·일식을 좋아해요.' },
-    { name: '한별남구', kind: 'off',  rent: 250000, income: 700, age: 0.15, dev: 0.72, mix: { tower: 4, plaza: 4, office: 3, oneroom: 2, hotel: 0.4, alley: 1 }, desc: '대로를 따라 빌딩숲이 늘어선 신도심. 직장인과 쇼핑객이 넘쳐요.' },
-    { name: '새솔밸리', kind: 'off',  rent: 120000, income: 480, age: 0.1,  dev: 0.58, mix: { knowledge: 5, office: 3, oneroom: 2, apt: 1, shop: 1 }, desc: '지식산업센터와 연구소가 모인 신흥 업무단지.' },
-    { name: '햇살단지', kind: 'res',  rent: 85000,  income: 560, age: 0.25, dev: 0.62, mix: { apt: 7, shop: 2, villa: 1 }, desc: '대단지 아파트 벨트. 가족 손님이 많고 주말에 붐벼요.' },
-    { name: '별빛호수', kind: 'tour', rent: 140000, income: 620, age: 0.2,  dev: 0.52, mix: { apt: 3, plaza: 2, hotel: 0.6, shop: 2, luxury: 1 }, desc: '호수와 놀이공원, 복합쇼핑몰이 있는 관광·쇼핑 권역.' },
+    { name: '해바라기언덕', kind: 'uni',  rent: 85000,  income: 300, age: 0.45, dev: 0.62, mix: { campus: 2, oneroom: 5, alley: 3, villa: 2, shop: 2, cowork: 1 }, desc: '해바라기대학 정문 앞 언덕. 자취방과 작은 술집 골목이 모여 밤늦게까지 웃음소리가 나요.' },
+    { name: '시계탑마을', kind: 'old',  rent: 75000,  income: 420, age: 0.55, dev: 0.58, mix: { hanok: 6, house: 2, shop: 3, alley: 1, hotel: 0.2 }, desc: '오래된 시계탑과 박공지붕 타운하우스가 남은 구시가. 관광객이 사진을 찍으러 와요.' },
+    { name: '라일락중심가', kind: 'off',  rent: 230000, income: 600, age: 0.3,  dev: 0.72, mix: { tower: 4, office: 4, plaza: 3, hotel: 0.4, shop: 1 }, desc: '타운홀과 사무실 건물이 모인 도심. 점심마다 직장인이 쏟아져 나오고 땅값이 비싸요.' },
+    { name: '고양이언덕',   kind: 'old',  rent: 42000,  income: 250, age: 0.8,  dev: 0.66, mix: { villa: 5, house: 4, shop: 1, alley: 1 }, desc: '등대 언덕 아래 낡은 계단 동네. 길고양이가 많고 임대료가 싸요.' },
+    { name: '느티나무길',   kind: 'res',  rent: 70000,  income: 380, age: 0.5,  dev: 0.62, mix: { house: 3, villa: 3, oneroom: 2, shop: 2, cowork: 1 }, desc: '느티나무 그늘 아래 조용한 주택가. 작은 공방과 카페가 섞여 있어요.' },
+    { name: '빨랫줄골목', kind: 'res',  rent: 65000,  income: 290, age: 0.55, dev: 0.66, mix: { oneroom: 5, villa: 3, alley: 2, shop: 2 }, desc: '빨랫줄이 걸린 좁은 골목과 원룸. 혼자 사는 사람이 많아 배달 주문이 많아요.' },
+    { name: '벽돌부두',   kind: 'ind',  rent: 80000,  income: 330, age: 0.7,  dev: 0.56, mix: { factory: 4, cowork: 2, alley: 2, oneroom: 2, shop: 1 }, desc: '옛 부두 창고를 고친 골목. 힙한 가게가 하나둘 들어오며 젠트리피케이션이 진행 중이에요.', hype: 30 },
+    { name: '등대섬',   kind: 'off',  rent: 260000, income: 750, age: 0.2,  dev: 0.6,  mix: { tower: 6, office: 2, plaza: 1, hotel: 0.4 }, desc: '강 하구의 작은 섬. 은행과 방송국, 전망 좋은 사무실이 모여 있어요.' },
+    { name: '수국언덕', kind: 'rich', rent: 160000, income: 900, age: 0.15, dev: 0.52, mix: { luxury: 5, apt: 2, house: 2, shop: 1 }, desc: '수국이 핀 정원 주택가. 여유 있는 주민이 많아 가격에 덜 민감하고 브런치·일식을 좋아해요.' },
+    { name: '포플러대로', kind: 'off',  rent: 250000, income: 700, age: 0.15, dev: 0.72, mix: { tower: 4, plaza: 4, office: 3, oneroom: 2, hotel: 0.4, alley: 1 }, desc: '포플러 가로수가 늘어선 새 시가지. 직장인과 쇼핑객이 많아요.' },
+    { name: '솔방울밸리', kind: 'off',  rent: 120000, income: 480, age: 0.1,  dev: 0.58, mix: { knowledge: 5, office: 3, oneroom: 2, apt: 1, shop: 1 }, desc: '작은 연구소와 스튜디오가 모인 숲가 업무단지.' },
+    { name: '햇살정원', kind: 'res',  rent: 85000,  income: 560, age: 0.25, dev: 0.62, mix: { apt: 7, shop: 2, villa: 1 }, desc: '정원이 딸린 저층 아파트 마을. 가족 손님이 많고 주말에 붐벼요.' },
+    { name: '조개해변', kind: 'tour', rent: 140000, income: 620, age: 0.2,  dev: 0.52, mix: { apt: 3, plaza: 2, hotel: 0.6, shop: 2, luxury: 1 }, desc: '모래사장과 호수, 해변 놀이공원과 아케이드가 있는 관광 권역.' },
   ];
 
   // ---------- 건물 종류 ----------
   // cls: res 주택 · com 상가 · off 오피스 · edu · ind · pub 공공. prof: 손님 성향, inc: 소득 배율, popPer: 층·칸당 인원
   const BTYPES = {
     house:     { cls: 'res', name: '단독주택',      seg: 'res',  prof: 'family',  inc: 1.0,  fp: [[1, 1]], floors: [1, 2], popPer: 6 },
-    hanok:     { cls: 'res', name: '한옥',          seg: 'res',  prof: 'family',  inc: 1.15, fp: [[1, 1], [2, 1]], floors: [1, 1], popPer: 5, tourPop: 12 },
+    hanok:     { cls: 'res', name: '타운하우스',    seg: 'res',  prof: 'family',  inc: 1.15, fp: [[1, 1], [2, 1]], floors: [2, 3], popPer: 2.5, tourPop: 12 },
     villa:     { cls: 'res', name: '다세대 빌라',   seg: 'res',  prof: 'family',  inc: 0.85, fp: [[1, 1]], floors: [3, 5], popPer: 7 },
-    oneroom:   { cls: 'res', name: '원룸·오피스텔', seg: 'res',  prof: 'single',  inc: 0.8,  fp: [[1, 1], [2, 1]], floors: [5, 14], popPer: 5 },
-    apt:       { cls: 'res', name: '아파트',        seg: 'res',  prof: 'family',  inc: 1.15, fp: [[2, 1], [2, 2], [3, 1]], floors: [12, 25], popPer: 3.2 },
+    oneroom:   { cls: 'res', name: '원룸·오피스텔', seg: 'res',  prof: 'single',  inc: 0.8,  fp: [[1, 1], [2, 1]], floors: [3, 6], popPer: 10.5 },
+    apt:       { cls: 'res', name: '아파트',        seg: 'res',  prof: 'family',  inc: 1.15, fp: [[2, 1], [2, 2], [3, 1]], floors: [4, 7], popPer: 10.5 },
     luxury:    { cls: 'res', name: '고급 주택',     seg: 'res',  prof: 'rich',    inc: 2.6,  fp: [[2, 2], [2, 1]], floors: [2, 4], popPer: 2.5 },
     shop:      { cls: 'com', name: '근린상가',      seg: 'tour', prof: 'shopper', inc: 1.0,  fp: [[1, 1]], floors: [2, 4], popPer: 4 },
     alley:     { cls: 'com', name: '먹자골목 상가', seg: 'tour', prof: 'night',   inc: 1.0,  fp: [[1, 1]], floors: [1, 2], popPer: 7 },
-    plaza:     { cls: 'com', name: '대로변 상가빌딩', seg: 'tour', prof: 'shopper', inc: 1.1, fp: [[2, 1], [2, 2]], floors: [4, 8], popPer: 3 },
-    hotel:     { cls: 'com', name: '호텔',          seg: 'tour', prof: 'tourist', inc: 1.4,  fp: [[2, 1], [2, 2]], floors: [10, 20], popPer: 2.5 },
-    office:    { cls: 'off', name: '소형 사무실',   seg: 'off',  prof: 'worker',  inc: 1.0,  fp: [[1, 1]], floors: [5, 9], popPer: 7 },
-    tower:     { cls: 'off', name: '프라임 오피스', seg: 'off',  prof: 'worker',  inc: 1.3,  fp: [[2, 2]], floors: [20, 40], popPer: 3 },
+    plaza:     { cls: 'com', name: '대로변 상가빌딩', seg: 'tour', prof: 'shopper', inc: 1.1, fp: [[2, 1], [2, 2]], floors: [3, 5], popPer: 4.8 },
+    hotel:     { cls: 'com', name: '호텔',          seg: 'tour', prof: 'tourist', inc: 1.4,  fp: [[2, 1], [2, 2]], floors: [4, 7], popPer: 6.8 },
+    office:    { cls: 'off', name: '소형 사무실',   seg: 'off',  prof: 'worker',  inc: 1.0,  fp: [[1, 1]], floors: [3, 5], popPer: 11.2 },
+    tower:     { cls: 'off', name: '프라임 오피스', seg: 'off',  prof: 'worker',  inc: 1.3,  fp: [[2, 2]], floors: [6, 9], popPer: 12 },
     cowork:    { cls: 'off', name: '공유오피스',    seg: 'off',  prof: 'young',   inc: 0.95, fp: [[1, 1], [2, 1]], floors: [3, 6], popPer: 8 },
-    knowledge: { cls: 'off', name: '지식산업센터',  seg: 'off',  prof: 'worker',  inc: 1.0,  fp: [[2, 2], [3, 2]], floors: [8, 15], popPer: 3.5 },
+    knowledge: { cls: 'off', name: '지식산업센터',  seg: 'off',  prof: 'worker',  inc: 1.0,  fp: [[2, 2], [3, 2]], floors: [4, 6], popPer: 8 },
     campus:    { cls: 'edu', name: '대학 건물',     seg: 'uni',  prof: 'student', inc: 0.7,  fp: [[2, 1], [2, 2]], floors: [3, 6], popPer: 10 },
     factory:   { cls: 'ind', name: '낡은 공장',     seg: 'off',  prof: 'worker',  inc: 0.85, fp: [[2, 1], [2, 2]], floors: [1, 2], popPer: 6 },
     park:      { cls: 'pub', name: '공원',          seg: 'tour', prof: 'tourist', inc: 1.0,  fp: [[1, 1]], floors: [0, 0], popPer: 0, fixedPop: 60 },
-    rpark:     { cls: 'pub', name: '한강공원',      seg: 'tour', prof: 'tourist', inc: 1.0,  fp: [[1, 1]], floors: [0, 0], popPer: 0, fixedPop: 25 },
+    rpark:     { cls: 'pub', name: '강변·해변 공원',      seg: 'tour', prof: 'tourist', inc: 1.0,  fp: [[1, 1]], floors: [0, 0], popPer: 0, fixedPop: 25 },
     parking:   { cls: 'pub', name: '공영주차장',    seg: 'res',  prof: 'family',  inc: 1.0,  fp: [[1, 1]], floors: [0, 0], popPer: 0, fixedPop: 0 },
     bus:       { cls: 'pub', name: '버스정류장',    seg: 'off',  prof: 'worker',  inc: 1.0,  fp: [[1, 1]], floors: [0, 0], popPer: 0, fixedPop: 140 },
   };
@@ -219,31 +219,32 @@
 
   // ---------- 랜드마크 ----------
   const LANDMARKS = {
-    palace:     { name: '은빛궁',            x: 28, y: 7,  w: 5, d: 4, seg: 'tour', prof: 'tourist', pop: 420, rent: 0.18 },
-    cityhall:   { name: '시청과 광장',       x: 44, y: 18, w: 3, d: 2, seg: 'tour', prof: 'tourist', pop: 220, rent: 0.25 },
-    tower:      { name: '달빛 타워',         x: 40, y: 3,  w: 1, d: 1, seg: 'tour', prof: 'tourist', pop: 260, rent: 0.1, mount: true },
-    univ:       { name: '푸른대학교',        x: 4,  y: 4,  w: 4, d: 4, seg: 'uni',  prof: 'student', pop: 900, rent: 0.15 },
-    market:     { name: '물레 전통시장',     x: 59, y: 16, w: 3, d: 2, seg: 'res',  prof: 'family',  pop: 380, rent: 0.12 },
+    palace:     { name: '시계탑 광장',            x: 28, y: 7,  w: 5, d: 4, seg: 'tour', prof: 'tourist', pop: 420, rent: 0.18 },
+    cityhall:   { name: '타운홀',       x: 44, y: 18, w: 3, d: 2, seg: 'tour', prof: 'tourist', pop: 220, rent: 0.25 },
+    tower:      { name: '달빛 등대',         x: 40, y: 3,  w: 1, d: 1, seg: 'tour', prof: 'tourist', pop: 260, rent: 0.1, mount: true },
+    univ:       { name: '해바라기대학교',        x: 4,  y: 4,  w: 4, d: 4, seg: 'uni',  prof: 'student', pop: 900, rent: 0.15 },
+    market:     { name: '토요 장터',     x: 59, y: 16, w: 3, d: 2, seg: 'res',  prof: 'family',  pop: 380, rent: 0.12 },
     museum:     { name: '벽돌 미술관',       x: 62, y: 31, w: 2, d: 2, seg: 'tour', prof: 'young',   pop: 260, rent: 0.2 },
-    forest:     { name: '강변 숲공원',       x: 70, y: 32, w: 3, d: 3, seg: 'tour', prof: 'young',   pop: 300, rent: 0.18 },
-    finance:    { name: '여울 파이낸스 타워', x: 21, y: 38, w: 2, d: 2, seg: 'off',  prof: 'worker',  pop: 900, rent: 0.25 },
-    convention: { name: '한별 컨벤션센터',   x: 44, y: 54, w: 3, d: 3, seg: 'tour', prof: 'shopper', pop: 600, rent: 0.25 },
-    mall:       { name: '별빛몰',            x: 60, y: 56, w: 3, d: 3, seg: 'tour', prof: 'shopper', pop: 900, rent: 0.25 },
-    amusement:  { name: '별빛랜드',          x: 56, y: 59, w: 3, d: 4, seg: 'tour', prof: 'tourist', pop: 800, rent: 0.15 },
-    stadium:    { name: '별빛 경기장',       x: 58, y: 68, w: 3, d: 3, seg: 'tour', prof: 'night',   pop: 500, rent: 0.12 },
+    forest:     { name: '숲속 놀이터',       x: 70, y: 32, w: 3, d: 3, seg: 'tour', prof: 'young',   pop: 300, rent: 0.18 },
+    finance:    { name: '등대섬 전망대', x: 21, y: 38, w: 2, d: 2, seg: 'off',  prof: 'worker',  pop: 900, rent: 0.25 },
+    convention: { name: '바람 음악당',   x: 44, y: 54, w: 3, d: 3, seg: 'tour', prof: 'shopper', pop: 600, rent: 0.25 },
+    mall:       { name: '조개 아케이드',            x: 60, y: 56, w: 3, d: 3, seg: 'tour', prof: 'shopper', pop: 900, rent: 0.25 },
+    amusement:  { name: '해변 놀이공원',          x: 56, y: 59, w: 3, d: 4, seg: 'tour', prof: 'tourist', pop: 800, rent: 0.15 },
+    stadium:    { name: '바닷가 야구장',       x: 58, y: 68, w: 3, d: 3, seg: 'tour', prof: 'night',   pop: 500, rent: 0.12 },
   };
-  // 지하철: 1호선(초록, 강북 동서) · 2호선(파랑, 강남 동서) · 3호선(주황, 남북)
-  const LINES = { g: { name: '1호선', color: '#5c9c7a' }, b: { name: '2호선', color: '#6f7fd0' }, o: { name: '3호선', color: '#e08a3c' } };
+  // 트램: 초록(강 북쪽 동서) · 파랑(강 남쪽 동서) · 주황(남북)
+  const LINES = { g: { name: '초록 트램', color: '#5c9c7a' }, b: { name: '파랑 트램', color: '#6f7fd0' }, o: { name: '주황 트램', color: '#e08a3c' } };
   const STATION_SITES = [
-    { x: 12, y: 28, name: '느티골역', line: 'g' }, { x: 26, y: 28, name: '두레역', line: 'g' }, { x: 40, y: 28, name: '중앙역', line: 'go' },
-    { x: 54, y: 28, name: '벽돌숲역', line: 'g' }, { x: 40, y: 14, name: '시청역', line: 'o' },
-    { x: 26, y: 50, name: '은행나무역', line: 'b' }, { x: 40, y: 50, name: '한별역', line: 'bo' }, { x: 54, y: 50, name: '햇살역', line: 'b' },
+    { x: 12, y: 28, name: '느티나무길역', line: 'g' }, { x: 26, y: 28, name: '빨랫줄역', line: 'g' }, { x: 40, y: 28, name: '중앙역', line: 'go' },
+    { x: 54, y: 28, name: '부두역', line: 'g' }, { x: 40, y: 14, name: '타운홀역', line: 'o' },
+    { x: 26, y: 50, name: '수국역', line: 'b' }, { x: 40, y: 50, name: '포플러역', line: 'bo' }, { x: 54, y: 50, name: '햇살정원역', line: 'b' },
   ];
   const FUTURE_STATIONS = [
-    { x: 12, y: 14, name: '푸른대입구역', line: 'g' }, { x: 68, y: 28, name: '숲공원역', line: 'g' }, { x: 68, y: 14, name: '물레골역', line: 'g' },
-    { x: 12, y: 50, name: '은행나무마을역', line: 'b' }, { x: 68, y: 50, name: '별빛호수역', line: 'b' }, { x: 40, y: 64, name: '새솔역', line: 'o' },
+    { x: 12, y: 14, name: '해바라기대역', line: 'g' }, { x: 68, y: 28, name: '숲공원역', line: 'g' }, { x: 68, y: 14, name: '고양이언덕역', line: 'g' },
+    { x: 12, y: 50, name: '수국언덕역', line: 'b' }, { x: 68, y: 50, name: '조개해변역', line: 'b' }, { x: 40, y: 64, name: '솔방울역', line: 'o' },
   ];
   const AVE_X = [12, 26, 40, 54, 68], AVE_Y = [14, 28, 50, 64];
+  const SEA_Y = 75.5;
 
   // ---------- 인테리어·건축 ----------
   const TIERS = [null, { name: '기본', perPy: 1.5e6 }, { name: '스탠다드', perPy: 2.5e6 }, { name: '프리미엄', perPy: 4e6 }, { name: '시그니처', perPy: 6.5e6 }];
@@ -463,16 +464,20 @@
     for (const t of S.tiles) {
       const mx = (t.x - 40) / 11, my = (t.y - 3) / 5.5; if (mx * mx + my * my < 1) t.t = 'mount';
       const lx = (t.x - 70) / 5.2, ly = (t.y - 68) / 4.2; if (lx * lx + ly * ly < 1) t.t = 'water';
+      // 남쪽 바다와 모래사장 (해안선이 완만하게 굽이침)
+      const coast = SEA_Y + 1.6 * Math.sin(t.x / 7) + 0.8 * Math.sin(t.x / 3.1);
+      if (t.y >= coast) { t.t = 'water'; t.sea = true; }
+      else if (t.y >= coast - 2.2) t.beach = true;
     }
     // 대로 (2칸 폭)
     const setRoad = (t, kind) => { if (!t || t.t === 'mount') return; if (t.t === 'water') { if (kind === 'ave') { t.t = 'bridge'; t.road = 'ave'; } return; } if (t.road === 'ave') return; t.t = 'road'; t.road = kind; };
-    for (const ax of AVE_X) for (let y = 0; y < H; y++) for (const x of [ax, ax + 1]) { const t = T(x, y); if (t.t === 'water' && Math.abs(t.y - riverC(t.x)) > 4.5) continue; setRoad(t, 'ave'); }
+    for (const ax of AVE_X) for (let y = 0; y < H; y++) for (const x of [ax, ax + 1]) { const t = T(x, y); if (t.beach || (t.t === 'water' && Math.abs(t.y - riverC(t.x)) > 4.5)) continue; setRoad(t, 'ave'); }
     for (const ay of AVE_Y) for (let x = 0; x < W; x++) for (const y of [ay, ay + 1]) setRoad(T(x, y), 'ave');
     // 강변: 물에 닿은 땅 한 줄은 한강공원, 그 바깥 한 줄은 강변도로
-    const isRiver = t => t && t.t === 'water' && Math.abs(t.y - riverC(t.x)) < 5;
+    const isRiver = t => t && t.t === 'water' && !t.sea && Math.abs(t.y - riverC(t.x)) < 5;
     const n8 = (t, f) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; if (f(T(t.x + dx, t.y + dy))) return true; } return false; };
     const bank = new Set();
-    for (const t of S.tiles) if (t.t !== 'water' && t.t !== 'mount' && t.road !== 'ave' && n8(t, isRiver)) { bank.add(t); t.bank = true; }
+    for (const t of S.tiles) if (t.t !== 'water' && t.t !== 'mount' && t.road !== 'ave' && (n8(t, isRiver) || t.beach)) { if (t.t === 'road') { t.t = 'land'; t.road = null; } bank.add(t); t.bank = true; }
     for (const t of S.tiles) if (!bank.has(t) && t.t === 'land' && n8(t, n => n && bank.has(n))) setRoad(t, 'st');
     // 이면도로·골목: 대로로 둘러싸인 큰 블록(슈퍼블록)마다 같은 간격으로 반듯하게 나눔
     const BLOCK = { old: 3, uni: 4, res: 4, ind: 4, tour: 5, rich: 5, off: 5 };
@@ -482,8 +487,8 @@
       const hc = regionOf(Math.round((x0 + x1) / 2), Math.round((y0 + y1) / 2));
       const kind = HOODS[hc].kind, b = hc === 11 ? 6 : (BLOCK[kind] || 4);
       const vx = cuts(x0, x1, b), vy = cuts(y0, y1, Math.max(3, b - (kind === 'old' ? 0 : 1)));
-      vx.forEach((x, i) => { for (let y = y0; y <= y1; y++) { const t = T(x, y); if (t && t.t === 'land') { t.t = 'road'; t.road = kind === 'old' && i % 2 ? 'alley' : 'st'; } } });
-      vy.forEach((y, i) => { for (let x = x0; x <= x1; x++) { const t = T(x, y); if (t && t.t === 'land') { t.t = 'road'; t.road = kind === 'old' && i % 2 ? 'alley' : (t.road === 'alley' ? 'st' : 'st'); } } });
+      vx.forEach((x, i) => { for (let y = y0; y <= y1; y++) { const t = T(x, y); if (t && t.t === 'land' && !t.beach) { t.t = 'road'; t.road = kind === 'old' && i % 2 ? 'alley' : 'st'; } } });
+      vy.forEach((y, i) => { for (let x = x0; x <= x1; x++) { const t = T(x, y); if (t && t.t === 'land' && !t.beach) { t.t = 'road'; t.road = kind === 'old' && i % 2 ? 'alley' : (t.road === 'alley' ? 'st' : 'st'); } } });
     }
     // 랜드마크 자리는 비워서 배치
     for (const k in LANDMARKS) {
@@ -492,18 +497,18 @@
     }
     fixRoads(S);
     for (const k in LANDMARKS) { const L = LANDMARKS[k]; if (fits(S, L.x, L.y, L.w, L.d)) occupy(S, L.x, L.y, L.w, L.d, { k: 'lm', kind: k, lv: 1 }); }
-    // 한강공원
-    for (const t of S.tiles) if (t.bank && isLot(t)) occupy(S, t.x, t.y, 1, 1, { k: 'rpark', lv: 1, v: Math.floor(rnd(S) * 3) });
+    // 강변 공원과 해변
+    for (const t of S.tiles) if (t.bank && isLot(t)) occupy(S, t.x, t.y, 1, 1, { k: 'rpark', lv: 1, v: Math.floor(rnd(S) * 3), beach: !!t.beach });
     // 동네별 건물 채우기
     for (const t of S.tiles) {
       if (!isLot(t)) continue;
       const hd = HOODS[t.h];
       const r = rnd(S);
       if (r < hd.dev) placeBuilding(S, t.x, t.y, wpick(S, hd.mix), t.h === 2 || t.h === 7 || t.h === 9 ? 0.3 : 0);
-      else if (r < hd.dev + 0.12) t.tree = true;
+      else if (r < hd.dev + 0.16) t.tree = true;
     }
     // 동네 공원 몇 곳
-    for (const [x, y] of [[33, 33], [9, 22], [47, 44], [62, 46], [18, 60], [35, 70]]) { const t = T(x, y); if (isLot(t)) occupy(S, x, y, 1, 1, { k: 'park', lv: 1, v: 0 }); }
+    for (const [x, y] of [[33, 33], [9, 22], [47, 44], [62, 46], [18, 60], [35, 70], [20, 18], [50, 8], [6, 46], [30, 58], [46, 68], [64, 22], [16, 32]]) { const t = T(x, y); if (isLot(t)) occupy(S, x, y, 1, 1, { k: 'park', lv: 1, v: 0 }); }
     S.hoodCenters = HOODS.map((_, i) => { const ts = S.tiles.filter(t => t.h === i && t.t !== 'water'); return { x: Math.round(ts.reduce((a, t) => a + t.x, 0) / ts.length), y: Math.round(ts.reduce((a, t) => a + t.y, 0) / ts.length) }; });
     precomputeFixed(S);
   }
@@ -716,7 +721,7 @@
   function newGame(opts) {
     opts = opts || {};
     const S = {
-      v: 4, rng: (opts.seed || 20261109) | 0, hour: 6,
+      v: 5, rng: (opts.seed || 20261109) | 0, hour: 6,
       tiles: [], stores: [], facs: [], companies: [], news: [], nextId: 1,
       hoods: HOODS.map(h => ({ hype: h.hype || 0, rentMult: 1 + (h.hype || 0) / 250, popMult: 1, offMult: 1, transit: false, festival: 0, income: h.income, age: h.age, qol: 50, displaced: 0, gentri: 0 })),
       stations: STATION_SITES.map(x => Object.assign({}, x)), hqCands: [], nextHype: null,
@@ -852,6 +857,7 @@
       else { k += eff * cat.rate * 0.5; hall += eff * HALL_RATE * 0.5; mgr = true; }
     }
     if (st._mi) k *= st._mi.complexity;
+    const ffx = st.furn ? furnFx(st) : null; if (ffx) k *= ffx.kitF;
     if (mgr) { k *= 1.08; hall *= 1.08; }
     if (hall === 0) { hall = k * 0.6; k *= 0.7; }
     const seatCap = seatCapOf(st);
@@ -861,7 +867,8 @@
   function seatCapOf(st) {
     const cat = CATS[st.cat]; let dwell = cat.dwell;
     if (cat.study && st.segDem) { const tot = SEG_KEYS.reduce((a, k) => a + st.segDem[k], 0) || 1; dwell *= 1 + 0.8 * st.segDem.uni / tot; }
-    return SIZES[st.size].py * 1.3 / dwell / (1 - cat.takeout);
+    const ffx = st.furn ? furnFx(st) : null;
+    return SIZES[st.size].py * 1.3 / dwell / (1 - cat.takeout) * (ffx ? ffx.seatF : 1);
   }
   // 가장 바빴던 시간에 좌석이 아니라 직원이 병목이었는지
   function staffBound(st) { const h = st.hourLost.indexOf(Math.max(...st.hourLost)); return st.hourCap[h] < seatCapOf(st) * 0.92; }
@@ -1021,6 +1028,134 @@
     const i = st.interior, m = STYLES[i.style].appeal[seg];
     return (0.85 + 0.15 * i.cond / 100) * (1 + (i.tier - 1) * 0.09 * (0.5 + m));
   }
+
+  // ---------- 매장 가구 배치 ----------
+  // 매장 안은 칸 격자. 왼쪽 두 줄(x<2)이 주방, 나머지가 홀, 오른쪽 앞 모서리 한 칸은 입구.
+  // zone: kitchen(주방에만) · hall(홀에만) · any. seats 좌석, kit 주방 속도, fresh 신선도(품질), deco 꾸밈 점수, segs 좋아하는 손님층
+  const ROOM = [null, [7, 5], [8, 6], [9, 7]];
+  const FURN = {
+    counter:  { name: '계산대',        icon: '🧾', grp: 'base',    zone: 'any',     w: 1, d: 2, cost: 2.5e6, need: true, desc: '주문을 받는 곳. 매장마다 하나는 꼭 있어야 해요.' },
+    stove1:   { name: '가정용 화구',   icon: '🔥', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 1.2e6, kit: 0.06, desc: '화구 2개. 기본 주방 속도.' },
+    stove2:   { name: '업소용 화구',   icon: '🔥', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 4e6,   kit: 0.11, desc: '화구 4개. 조리가 빨라져요.' },
+    stove3:   { name: '고화력 레인지', icon: '🔥', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 9e6,   kit: 0.16, fresh: 0.01, desc: '불맛이 살아나고 가장 빨라요.' },
+    fridge1:  { name: '소형 냉장고',   icon: '🧊', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 1e6,   fresh: 0.01, desc: '재료 신선도 조금 유지.' },
+    fridge2:  { name: '업소용 냉장고', icon: '🧊', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 3.5e6, fresh: 0.03, desc: '재료가 오래 신선해 품질이 올라요.' },
+    fridge3:  { name: '숙성 냉장고',   icon: '🧊', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 8e6,   fresh: 0.05, desc: '온도·습도 조절. 품질이 가장 좋아요.' },
+    espresso: { name: '에스프레소 머신', icon: '☕', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 7e6, kit: 0.12, fresh: 0.02, desc: '음료 업종은 이게 화구 역할을 해요.' },
+    oven:     { name: '오븐',          icon: '🥖', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 5e6,   kit: 0.08, desc: '빵·피자·디저트 업종에 좋아요.' },
+    sink:     { name: '개수대',        icon: '🚰', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 8e5,   kit: 0.03, desc: '설거지가 빨라져요.' },
+    showcase: { name: '쇼케이스',      icon: '🍰', grp: 'base',    zone: 'any',     w: 1, d: 1, cost: 3e6,   deco: 3, segs: { tour: 1, res: 1 }, desc: '진열된 디저트가 손님을 끌어요.' },
+    table2:   { name: '2인 원형 테이블', icon: '🪑', grp: 'seat',  zone: 'hall',    w: 1, d: 1, cost: 6e5,   seats: 2, desc: '작은 원형 테이블과 의자 둘.' },
+    table4:   { name: '4인 테이블',    icon: '🍽️', grp: 'seat',    zone: 'hall',    w: 2, d: 1, cost: 1.4e6, seats: 4, segs: { res: 1 }, desc: '가족 손님이 좋아해요.' },
+    bar:      { name: '바 테이블',     icon: '🍸', grp: 'seat',    zone: 'hall',    w: 2, d: 1, cost: 1.2e6, seats: 3, segs: { off: 1 }, desc: '혼자 온 손님이 앉기 좋아요.' },
+    sofa:     { name: '소파석',        icon: '🛋️', grp: 'seat',    zone: 'hall',    w: 2, d: 1, cost: 2.2e6, seats: 3, deco: 2, segs: { uni: 1, tour: 1 }, desc: '오래 머물고 싶어져요.' },
+    waiting:  { name: '대기 의자',     icon: '💺', grp: 'seat',    zone: 'hall',    w: 1, d: 1, cost: 4e5,   deco: 1, desc: '줄 선 손님이 덜 떠나요.' },
+    plant:    { name: '화분',          icon: '🪴', grp: 'deco',    zone: 'any',     w: 1, d: 1, cost: 2e5,   deco: 1.5, segs: { res: 1 }, desc: '초록이 있으면 편안해요.' },
+    tree:     { name: '큰 나무 화분',  icon: '🌳', grp: 'deco',    zone: 'hall',    w: 1, d: 1, cost: 7e5,   deco: 3, segs: { tour: 1, res: 1 }, desc: '사진 찍기 좋은 자리가 돼요.' },
+    shelf:    { name: '책장',          icon: '📚', grp: 'deco',    zone: 'hall',    w: 1, d: 1, cost: 9e5,   deco: 2.5, segs: { uni: 1, off: 1 }, desc: '대학생과 직장인이 좋아해요.' },
+    lamp:     { name: '스탠드 조명',   icon: '💡', grp: 'deco',    zone: 'hall',    w: 1, d: 1, cost: 5e5,   deco: 2, segs: { tour: 1 }, desc: '저녁 분위기가 좋아져요.' },
+    rug:      { name: '러그',          icon: '🟫', grp: 'deco',    zone: 'hall',    w: 2, d: 2, cost: 6e5,   deco: 2, floor: true, desc: '바닥에 깔아 다른 가구와 겹칠 수 있어요.' },
+    piano:    { name: '작은 피아노',   icon: '🎹', grp: 'deco',    zone: 'hall',    w: 2, d: 1, cost: 6e6,   deco: 6, segs: { tour: 1, res: 1 }, desc: '분위기가 확 살아나요.' },
+    radio:    { name: '레트로 라디오', icon: '📻', grp: 'deco',    zone: 'any',     w: 1, d: 1, cost: 4e5,   deco: 1.5, segs: { uni: 1 }, desc: '잔잔한 음악이 흘러요.' },
+  };
+  const FURN_KEYS = Object.keys(FURN);
+  const DRINK_CATS = ['cafe', 'bubbletea'];
+  function roomOf(st) { return ROOM[st.size]; }
+  function zoneAt(st, x, y) { const [nx, ny] = roomOf(st); if (x === nx - 1 && y === ny - 1) return 'door'; return x < 2 ? 'kitchen' : 'hall'; }
+  function furnRect(f) { const F = FURN[f.k]; return f.r ? { w: F.d, d: F.w } : { w: F.w, d: F.d }; }
+  // 업종·크기별 기본 배치
+  function defaultFurn(cat, size) {
+    const [nx, ny] = ROOM[size], L = [];
+    const heat = DRINK_CATS.includes(cat) ? 'espresso' : ['bakery', 'pizza', 'dessert'].includes(cat) ? 'oven' : 'stove1';
+    L.push({ k: 'fridge1', x: 0, y: 0 }, { k: heat, x: 0, y: 1 }, { k: 'sink', x: 0, y: 2 });
+    if (heat !== 'stove1' && cat !== 'cafe' && cat !== 'bubbletea') L.push({ k: 'stove1', x: 0, y: 3 });
+    L.push({ k: 'counter', x: 1, y: 1 });
+    if (['bakery', 'dessert', 'cafe'].includes(cat)) L.push({ k: 'showcase', x: 1, y: 3 });
+    const want = [0, 3, 5, 7][size];
+    let n = 0;
+    for (let y = 1; y < ny - 1 && n < want; y += 2) for (let x = 3; x < nx - 1 && n < want; x += 2) { L.push({ k: (n % 3 === 2 && x + 1 < nx - 1) ? 'table4' : 'table2', x, y }); n++; }
+    L.push({ k: 'plant', x: nx - 1, y: 0 });
+    if (size >= 2) L.push({ k: 'plant', x: 2, y: ny - 1 });
+    return L.filter(f => furnFits({ size, furn: L }, f, f));
+  }
+  function furnCells(f) { const r = furnRect(f), out = []; for (let j = 0; j < r.d; j++) for (let i = 0; i < r.w; i++) out.push([f.x + i, f.y + j]); return out; }
+  function furnFits(st, f, ignore) {
+    const F = FURN[f.k], [nx, ny] = ROOM[st.size]; if (!F) return false;
+    for (const [x, y] of furnCells(f)) {
+      if (x < 0 || y < 0 || x >= nx || y >= ny) return false;
+      const z = x === nx - 1 && y === ny - 1 ? 'door' : x < 2 ? 'kitchen' : 'hall';
+      if (z === 'door' && !F.floor) return false;
+      if (F.zone !== 'any' && F.zone !== z && z !== 'door') return false;
+      if (F.zone !== 'any' && z === 'door') return false;
+      for (const g of st.furn || []) {
+        if (g === ignore || (!!FURN[g.k].floor) !== (!!F.floor)) continue;
+        if (furnCells(g).some(([a, b]) => a === x && b === y)) return false;
+      }
+    }
+    return true;
+  }
+  function ensureFurn(st) { if (!st.furn) st.furn = defaultFurn(st.cat, st.size); return st.furn; }
+  // 가구 효과 (기본 배치일 때 모두 1이 되도록 기본 배치와 비교)
+  const FXC = new WeakMap(), BASEC = {};
+  function furnSum(cat, list) {
+    let seats = 0, kit = 0, fresh = 0, deco = 0, counter = 0, heat = 0; const segs = { res: 0, off: 0, uni: 0, tour: 0 };
+    for (const f of list) {
+      const F = FURN[f.k]; if (!F) continue;
+      seats += F.seats || 0; fresh += F.fresh || 0; deco += F.deco || 0; if (f.k === 'counter') counter++;
+      if (F.kit) { if (/^stove|espresso|oven/.test(f.k)) heat++; kit += F.kit * (f.k === 'espresso' && !DRINK_CATS.includes(cat) ? 0.4 : 1); }
+      if (F.segs) for (const k in F.segs) segs[k] += (F.deco || 1) * F.segs[k];
+    }
+    return { seats, kit: Math.min(kit, 0.45), fresh: Math.min(fresh, 0.08), deco, counter, heat, segs };
+  }
+  function furnFx(st) {
+    if (!st.furn) return null;
+    const key = JSON.stringify(st.furn);
+    let c = FXC.get(st); if (c && c.key === key) return c;
+    const bk = st.cat + st.size;
+    const base = BASEC[bk] || (BASEC[bk] = furnSum(st.cat, defaultFurn(st.cat, st.size)));
+    const cur = furnSum(st.cat, st.furn);
+    c = { key, sum: cur,
+      seatF: clamp(cur.seats / Math.max(1, base.seats), 0.3, 1.45),
+      kitF: (cur.counter ? 1 : 0.6) * (cur.heat ? 1 : 0.7) * (1 + cur.kit - base.kit),
+      qualF: 1 + cur.fresh - base.fresh,
+      deco: cur.deco - base.deco, segs: Object.fromEntries(Object.keys(cur.segs).map(k => [k, cur.segs[k] - base.segs[k]])), crowd: furnCrowd(st), crowd0: furnCrowd({ size: st.size, furn: defaultFurn(st.cat, st.size) }) };
+    FXC.set(st, c); return c;
+  }
+  // 홀이 가구로 너무 꽉 차면 답답해서 매력이 떨어져요
+  function furnCrowd(st) { const [nx, ny] = ROOM[st.size]; const hall = (nx - 2) * ny - 1; let used = 0; for (const f of st.furn) if (!FURN[f.k].floor) used += furnCells(f).filter(([x]) => x >= 2).length; return used / hall; }
+  function furnAppeal(st, seg) {
+    const fx = furnFx(st); if (!fx) return 1;
+    const lim = Math.max(0.62, fx.crowd0), crowd = fx.crowd > lim ? 1 - (fx.crowd - lim) * 0.8 : 1;
+    return clamp(1 + fx.deco * 0.008 + fx.segs[seg] * 0.006, 0.85, 1.25) * crowd;
+  }
+  function placeFurn(S, id, k, x, y, r) {
+    const st = S.stores.find(s => s.id === id); if (!st) return { ok: false, msg: '매장이 없어요.' };
+    const F = FURN[k]; if (!F) return { ok: false, msg: '없는 가구예요.' };
+    ensureFurn(st);
+    const f = { k, x, y }; if (r && F.w !== F.d) f.r = 1;
+    if (!furnFits(st, f)) return { ok: false, msg: F.zone === 'kitchen' ? '주방 칸(왼쪽 두 줄)의 빈 곳에만 놓을 수 있어요.' : F.zone === 'hall' ? '홀의 빈 곳에만 놓을 수 있어요. 입구는 비워 둬야 해요.' : '빈 곳에만 놓을 수 있어요.' };
+    const comp = S.companies[st.owner]; if (comp.cash < F.cost) return { ok: false, msg: '현금이 부족해요.' };
+    comp.cash -= F.cost; comp.cur.capex += F.cost; st.equip += F.cost; st.furn.push(f);
+    return { ok: true, cost: F.cost, msg: `${eul(F.name)} 놓았어요.` };
+  }
+  function resetFurn(S, id) {
+    const st = S.stores.find(s => s.id === id); if (!st) return { ok: false };
+    const L = defaultFurn(st.cat, st.size), cost = Math.round(L.reduce((a, f) => a + FURN[f.k].cost, 0) * 0.5 / 1e4) * 1e4;
+    const comp = S.companies[st.owner]; if (comp.cash < cost) return { ok: false, msg: '현금이 부족해요.' };
+    comp.cash -= cost; comp.cur.capex += cost; st.furn = L;
+    return { ok: true, msg: '기본 배치로 다시 꾸몄어요.' };
+  }
+  function eul(w) { const c = w.charCodeAt(w.length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? w + '을' : w + '를'; }
+  function removeFurn(S, id, x, y) {
+    const st = S.stores.find(s => s.id === id); if (!st) return { ok: false };
+    ensureFurn(st);
+    const hit = st.furn.filter(f => furnCells(f).some(([a, b]) => a === x && b === y)).sort((a, b) => (FURN[a.k].floor ? 1 : 0) - (FURN[b.k].floor ? 1 : 0))[0];
+    if (!hit) return { ok: false, msg: '여기엔 가구가 없어요.' };
+    if (FURN[hit.k].need && st.furn.filter(f => f.k === hit.k).length <= 1) return { ok: false, msg: '계산대는 하나는 있어야 해요.' };
+    st.furn.splice(st.furn.indexOf(hit), 1);
+    const back = Math.round(FURN[hit.k].cost * 0.4 / 1e4) * 1e4; S.companies[st.owner].cash += back; st.equip = Math.max(0, st.equip - FURN[hit.k].cost);
+    return { ok: true, msg: `${eul(FURN[hit.k].name)} 치웠어요. 중고로 ${Math.round(back / 1e4)}만원을 돌려받았어요.` };
+  }
   function archAppeal(st, seg) { return st.owned && st.arch && st.arch !== 'basic' ? 1 + 0.1 * ARCH[st.arch].appeal[seg] : 1; }
   function eventMult(S, st, seg) {
     let m = 1;
@@ -1042,7 +1177,7 @@
     const pf = clamp(Math.exp(-sens * 1.8 * (st.price / 100 - 1)), 0.05, 3);
     const rf = 0.55 + 0.15 * st.rating;
     const star = 1 + ((st._star == null ? 50 : st._star) - 50) / 100 * 0.3;
-    return quality(S, st) * (st._mi ? st._mi.appeal[seg] : 1) * (1 + comp.brand[st.cat] / 110) * pf * rf * (1 + 0.06 * st.mkt) * interiorAppeal(st, seg) * archAppeal(st, seg) * star * eventMult(S, st, seg) * strat * parkM;
+    return quality(S, st) * (st._mi ? st._mi.appeal[seg] : 1) * (1 + comp.brand[st.cat] / 110) * pf * rf * (1 + 0.06 * st.mkt) * interiorAppeal(st, seg) * furnAppeal(st, seg) * archAppeal(st, seg) * star * eventMult(S, st, seg) * strat * parkM;
   }
 
   // ---------- 하루 상황 ----------
@@ -1274,7 +1409,7 @@
     for (const [ww, dd] of nw === nd ? [[nw, nd]] : [[nw, nd], [nd, nw]]) for (let oy = 0; oy <= dd - (st.d || 1) && !fit; oy++) for (let ox = 0; ox <= ww - (st.w || 1) && !fit; ox++) if (fits(S, st.x - ox, st.y - oy, ww, dd)) fit = { x: st.x - ox, y: st.y - oy, w: ww, d: dd };
     if (!fit) { occupy(S, st.x, st.y, st.w || 1, st.d || 1, b0); return { ok: false, msg: '옆 칸이 비어 있지 않아 넓힐 수 없어요.' }; }
     st.x = fit.x; st.y = fit.y; st.w = fit.w; st.d = fit.d; occupy(S, fit.x, fit.y, fit.w, fit.d, b0);
-    const oldPy = SIZES[st.size].py; st.size++;
+    const oldPy = SIZES[st.size].py; st.size++; st.furn = null;
     const newPy = SIZES[st.size].py;
     c.cash -= cost; c.cur.capex += cost; st.interior.cost += cost - CATS[st.cat].equip * 0.3; st.equip += CATS[st.cat].equip * 0.3;
     if (!st.owned) { const add = Math.round(t.rent * (newPy - oldPy) / 1e4) * 1e4; st.rent += add; st.deposit += add * 10; c.cash -= add * 10; }
@@ -2184,7 +2319,7 @@
   }
   function serialize(S) { return JSON.stringify(S); }
   function deserialize(str) {
-    const S = JSON.parse(str); if (!S || S.v !== 4) throw new Error('예전 지도 저장이라 불러올 수 없어요');
+    const S = JSON.parse(str); if (!S || S.v !== 5) throw new Error('예전 지도 저장이라 불러올 수 없어요');
     if (S.v === 2) {
       S.v = 3; S.stations = STATION_SITES.map(x => Object.assign({}, x)); S.hqCands = []; S.nextHype = null;
       S.hoods.forEach((hd, i) => Object.assign(hd, { income: HOODS[i].income, age: HOODS[i].age, qol: 50, displaced: 0, gentri: 0 }));
@@ -2201,6 +2336,7 @@
     FAC, PUBLIC, MKT, MKT_NAME, STORE_EVENTS, CO_EVENTS, LOGO_SHAPES, ROLES, SHIFTS, WEATHER, QUESTS, BURDEN, PROFILE, SEG_HOURS,
     roadComponents, newGame, step, tile, isLot, anchorOf, hood, hoodAt, nearSources, BTYPES, CLS_NAME, PROFILE_NAME, PROFILE_MULT, LINES, buildingPop, findFit, sources, population, dateOf, seasonOf, dayOf,
     openCost, interiorCost, utilMonth, propertyPrice, archCost, researchCost, upgradeCost, interiorBook, spaceScore, keyMoney,
+    ROOM, FURN, FURN_KEYS, zoneAt, furnRect, furnCells, furnFits, ensureFurn, defaultFurn, furnFx, furnAppeal, placeFurn, removeFurn, resetFurn,
     seatCapOf, staffBound, unitCost, ticket, quality, menuInfo, menuItems, refreshMenu, setMenu, defaultMenu, inSeason, interiorAppeal, hourCap, wantAt, dayDemand, teamStats, laborDay, chemistry, compat, effStat, shiftWindow, onDuty, askWage,
     openStore, closeStore, setInterior, setArch, upgradeStore, buyProperty, setHours, runStoreEvent, runCoEvent,
     hire, fire, staffAct, autoStaff, buildFacility, upgradeFacility, removeFacility, buildPublic, facRange, facCap, assignSupply,
