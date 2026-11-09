@@ -1,7 +1,7 @@
 /* 모락모락 타운 — 화면 조작과 게임 루프 (v2: 24시간 시계, 매장 내부, 직원, 상권) */
 (function () {
   'use strict';
-  const Sim = window.Sim, Renderer = window.Renderer;
+  const Sim = window.Sim, Renderer = window.Renderer, Snd = window.GameAudio;
   const $ = id => document.getElementById(id);
   const SAVE_KEY = 'morak.save.v2';
   const HOUR_MS = 2500;                 // 1배속: 게임 1시간 = 2.5초 (하루 1분)
@@ -13,7 +13,7 @@
   let openForm = null;                  // 개설 설정 { x, y, cat, size, style, tier }
   let storeView = null;                 // { id, tab }
   let hoverStaff = null, coCat = 'cafe';
-  let newLogo = 'circle', newColor = '#f2b950';
+  let newLogo = 'circle', newColor = '#f2b950', lotAll = false, pickerOpen = false, lastQuests = 0, lastNews = 0;
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const won = v => Sim.won(v);
@@ -45,16 +45,26 @@
   // ---------- 도구 ----------
   const TOOLS = [
     { id: 'select', ic: '👆', nm: '살펴보기' }, 'sep',
-    ...Sim.CAT_KEYS.map(k => ({ id: 'store:' + k, ic: Sim.CATS[k].icon, nm: Sim.CATS[k].name })), 'sep',
+    { id: 'storepick', ic: '🏪', nm: '매장 열기' }, 'sep',
     ...Object.keys(Sim.FAC).map(k => ({ id: 'fac:' + k, ic: Sim.FAC[k].icon, nm: Sim.FAC[k].name, co: Sim.FAC[k].cost })), 'sep',
     ...Object.keys(Sim.PUBLIC).map(k => ({ id: 'pub:' + k, ic: Sim.PUBLIC[k].icon, nm: Sim.PUBLIC[k].name, co: Sim.PUBLIC[k].cost })),
   ];
   function renderTools() {
-    $('tools').innerHTML = TOOLS.map(t => t === 'sep' ? '<div class="sep"></div>' :
+    const cur = tool.startsWith('store:') ? tool.split(':')[1] : null;
+    $('tools').innerHTML = TOOLS.map(t => t === 'sep' ? '<div class="sep"></div>' : t.id === 'storepick' ?
+      `<button class="tool ${cur || pickerOpen ? 'on' : ''}" data-tool="storepick" title="업종을 골라 매장 열기"><span class="ic">${cur ? Sim.CATS[cur].icon : '🏪'}</span><span class="nm">${cur ? Sim.CATS[cur].name : '매장 열기'}</span><span class="co">${Sim.CAT_KEYS.length}개 업종</span></button>` :
       `<button class="tool ${tool === t.id ? 'on' : ''}" data-tool="${t.id}" title="${esc(t.nm)}${t.co ? ' · ' + won(t.co) : ''}">
         <span class="ic">${t.ic}</span><span class="nm">${esc(t.nm)}</span>${t.co ? `<span class="co">${short(t.co)}</span>` : t.id.startsWith('store') ? '<span class="co">1억대~</span>' : ''}</button>`).join('');
   }
+  function renderPicker() {
+    const el = $('catPicker');
+    el.hidden = !pickerOpen;
+    if (!pickerOpen) return;
+    el.innerHTML = `<div class="cp-head"><b>어떤 가게를 열까요?</b><button class="x" data-pick="close" aria-label="닫기">✕</button></div><div class="cp-grid">${Sim.CAT_KEYS.map(k => { const C = Sim.CATS[k]; return `<button class="cp ${tool === 'store:' + k ? 'on' : ''}" data-pick="${k}"><span class="ic">${C.icon}</span><b>${C.name}</b><small>객단가 ${short(C.ticket)} · ${C.hours[0]}~${C.hours[1]}시</small></button>`; }).join('')}</div>`;
+  }
   function setTool(id) {
+    if (id === 'storepick') { pickerOpen = !pickerOpen; renderPicker(); renderTools(); return; }
+    pickerOpen = false; renderPicker();
     tool = (tool === id && id !== 'select') ? 'select' : id;
     renderTools();
     $('map').classList.toggle('building', tool !== 'select');
@@ -73,19 +83,19 @@
   function toolIcon() { const [kind, k] = tool.split(':'); return kind === 'store' ? Sim.CATS[k].icon : kind === 'fac' ? Sim.FAC[k].icon : kind === 'pub' ? Sim.PUBLIC[k].icon : ''; }
   function clickBuild(x, y) {
     const [kind, k] = tool.split(':');
-    if (kind === 'store') { openForm = { x, y, cat: k, size: 2, style: 'nordic', tier: 2 }; selected = { x, y }; R.sel = selected; renderInspector(); return; }
+    if (kind === 'store') { openForm = { x, y, cat: k, size: 2, style: 'nordic', tier: 2, menu: Sim.defaultMenu(k, 2), sig: null }; selected = { x, y }; R.sel = selected; renderInspector(); return; }
     let r;
-    if (kind === 'fac') { r = Sim.buildFacility(S, 0, x, y, k); if (r.ok) { toast(`${Sim.FAC[k].icon} ${Sim.FAC[k].name}을 지었어요.`, 'good'); R.pop(x, y); } }
-    else if (kind === 'pub') { r = Sim.buildPublic(S, x, y, k); if (r.ok) R.pop(x, y); }
+    if (kind === 'fac') { r = Sim.buildFacility(S, 0, x, y, k); if (r.ok) { toast(`${Sim.FAC[k].icon} ${Sim.FAC[k].name}을 지었어요.`, 'good'); R.pop(x, y); Snd.play('build'); } }
+    else if (kind === 'pub') { r = Sim.buildPublic(S, x, y, k); if (r.ok) { R.pop(x, y); Snd.play('build'); } }
     if (r && !r.ok) toast(r.msg || '지을 수 없어요.', 'bad');
     if (r && r.ok) { refreshOverlay(); dirty = true; }
   }
   function confirmOpen() {
     const f = openForm; if (!f) return;
-    const r = Sim.openStore(S, 0, f.x, f.y, f.cat, { size: f.size, style: f.style, tier: f.tier });
+    const r = Sim.openStore(S, 0, f.x, f.y, f.cat, { size: f.size, style: f.style, tier: f.tier, menu: f.menu, sig: f.sig });
     if (!r.ok) { toast(r.msg, 'bad'); return; }
     toast(`${Sim.CATS[f.cat].icon} ${storeName(r.store)}을 열었어요! 직원 ${r.store.staff.length}명이 함께해요.`, 'good');
-    R.pop(f.x, f.y);
+    R.pop(f.x, f.y); Snd.play('build');
     openForm = null; selected = { x: f.x, y: f.y }; R.sel = selected;
     if (tool.startsWith('store:')) setTool('select');
     dirty = true;
@@ -99,7 +109,7 @@
     setTimeout(() => el.remove(), 3000);
     while ($('toasts').children.length > 3) $('toasts').firstChild.remove();
   }
-  function result(r, okText) { if (!r) return; if (r.ok) { const m = okText || r.msg; if (m) toast(m, 'good'); } else toast(r.msg || '할 수 없어요.', 'bad'); dirty = true; }
+  function result(r, okText) { if (!r) return; if (r.ok) { const m = okText || r.msg; if (m) toast(m, 'good'); } else { toast(r.msg || '할 수 없어요.', 'bad'); Snd.play('bad'); } dirty = true; }
 
   // ---------- 상단 ----------
   function hourF() { return S.hour + Math.min(0.999, acc / HOUR_MS); }
@@ -173,23 +183,28 @@
     let h = head(t.tree ? '🌳' : '🟩', '빈 땅 · 상권 분석', `${H.name} · 평당 월세 ${won(t.rent)}${hot}`);
     h += `<p class="hint" style="margin-top:0">${esc(H.desc)}</p><h4>주변 유동인구 구성</h4>${segBars(est.flow)}
       <h4>시간대별 유동인구</h4>${chart({ bars: { data: flow, color: '#bcd8ee' }, labels: flow.map((_, i) => i % 6 === 0 ? i + '시' : ''), noMax: true }, 'xs', true)}
-      <table class="t"><thead><tr><th>업종</th><th class="r">예상 손님/일</th><th class="r">근처 경쟁</th><th></th></tr></thead><tbody>`;
-    for (const k of Sim.CAT_KEYS) {
-      const e = Sim.lotEstimate(S, t.x, t.y, k, 0);
-      h += `<tr><td>${Sim.CATS[k].icon} ${Sim.CATS[k].name}</td><td class="r">${Math.round(e.cust)}명</td><td class="r">${e.rivals}곳</td><td class="r"><button class="btn" data-act="planopen" data-arg="${k}">계약 검토</button></td></tr>`;
+      <h4>업종별 예상 (월 매출 순)</h4><table class="t"><thead><tr><th>업종</th><th class="r">손님/일</th><th class="r">월 매출</th><th class="r">경쟁</th><th></th></tr></thead><tbody>`;
+    const rows = Sim.CAT_KEYS.map(k => { const e = Sim.lotEstimate(S, t.x, t.y, k, 0); return { k, e, rev: e.cust * Sim.CATS[k].ticket / 1.1 * 30 }; }).sort((a, b) => b.rev - a.rev);
+    for (const { k, e, rev } of (lotAll ? rows : rows.slice(0, 6))) {
+      h += `<tr><td>${Sim.CATS[k].icon} ${Sim.CATS[k].name}</td><td class="r">${Math.round(e.cust)}명</td><td class="r">${short(rev)}</td><td class="r">${e.rivals}곳</td><td class="r"><button class="btn sm" data-act="planopen" data-arg="${k}">계약 검토</button></td></tr>`;
     }
-    return h + '</tbody></table><p class="hint">평일 기준, 25평 스탠다드 인테리어로 열었을 때의 추정치예요. 주말·날씨·이벤트에 따라 달라져요.</p>';
+    h += `</tbody></table><button class="btn sm" data-act="lotall" style="margin-top:6px">${lotAll ? '접기' : `${rows.length}개 업종 모두 보기`}</button>`;
+    return h + '<p class="hint">평일 기준, 25평 스탠다드 인테리어로 열었을 때의 추정치예요. 주말·날씨·이벤트에 따라 달라져요.</p>';
   }
   function openFormCard(t) {
     const f = openForm, C = Sim.CATS[f.cat];
     const cost = Sim.openCost(S, f.cat, f.x, f.y, f.size, f.style, f.tier);
-    const est = Sim.lotEstimate(S, f.x, f.y, f.cat, 0, { size: f.size, style: f.style, tier: f.tier });
+    const est = Sim.lotEstimate(S, f.x, f.y, f.cat, 0, { size: f.size, style: f.style, tier: f.tier, menu: f.menu });
+    const mi = Sim.menuInfo(S, { cat: f.cat, size: f.size, menu: f.menu, sig: f.sig });
     const p = S.companies[0];
     let h = head(C.icon, `${C.name} 개설 계약`, `${Sim.HOODS[t.h].name} · 영업 ${C.hours[0]}~${C.hours[1]}시`);
     h += `<h4>매장 크기</h4><div class="seg">${[1, 2, 3].map(s => `<button class="${f.size === s ? 'on' : ''}" data-act="of" data-arg="size:${s}">${Sim.SIZES[s].name}</button>`).join('')}</div>
       <h4>인테리어 스타일</h4><div class="chips">${Sim.STYLE_KEYS.map(k => `<button class="pick ${f.style === k ? 'on' : ''}" data-act="of" data-arg="style:${k}" title="${esc(Sim.STYLES[k].desc)}"><span class="sw" style="background:${Sim.STYLES[k].floor};border-color:${Sim.STYLES[k].accent}"></span>${Sim.STYLES[k].name}</button>`).join('')}</div>
       <p class="hint" style="margin:4px 0 0">${esc(Sim.STYLES[f.style].desc)}</p>
       <h4>인테리어 등급</h4><div class="seg">${[1, 2, 3, 4].map(k => `<button class="${f.tier === k ? 'on' : ''}" data-act="of" data-arg="tier:${k}">${Sim.TIERS[k].name}</button>`).join('')}</div>
+      <h4>메뉴 <span class="chip">${f.menu.length} / ${Sim.SIZES[f.size].menu}개</span><span class="chip">객단가 약 ${won(mi.ticket)}</span><span class="chip">원가율 ${pct(mi.cost)}</span></h4>
+      <div class="chips">${C.menu.map(m => `<button class="pick sm ${f.menu.includes(m.id) ? 'on' : ''}" data-act="ofmenu" data-arg="${m.id}" title="${won(m.price)} · 원가율 ${pct(m.cost)}">${f.sig === m.id ? '⭐ ' : ''}${esc(m.name)} <small>${short(m.price)}</small>${m.season ? ' <span class="sea">제철</span>' : ''}</button>`).join('')}</div>
+      <p class="hint" style="margin:4px 0 0">누르면 넣고 빼요. 매장 안 메뉴 탭에서 대표 메뉴를 정하고 언제든 바꿀 수 있어요.</p>
       <div class="rows" style="margin-top:10px">
         <span>보증금 (돌려받음)</span><span>${won(cost.deposit)}</span>
         <span>인테리어 (평당 ${short(Sim.TIERS[f.tier].perPy * Sim.STYLES[f.style].cost)})</span><span>${won(cost.interior)}</span>
@@ -231,9 +246,9 @@
   }
 
   // ---------- 매장 안 (모달) ----------
-  const SV_TABS = [['ops', '운영'], ['staff', '직원'], ['interior', '인테리어'], ['building', '건물'], ['report', '기록']];
+  const SV_TABS = [['ops', '운영'], ['menu', '메뉴'], ['staff', '직원'], ['interior', '인테리어'], ['building', '건물'], ['report', '기록']];
   function viewStore() { return storeView ? S.stores.find(s => s.id === storeView.id) : null; }
-  function openStoreView(id) { storeView = { id, tab: 'ops' }; $('storeModal').hidden = false; renderStoreView(); }
+  function openStoreView(id) { Snd.play('door'); storeView = { id, tab: 'ops' }; $('storeModal').hidden = false; renderStoreView(); }
   function closeStoreView() { storeView = null; $('storeModal').hidden = true; hoverStaff = null; }
   function renderStoreView() {
     const st = viewStore(); if (!st) { closeStoreView(); return; }
@@ -244,7 +259,7 @@
     $('svTabs').innerHTML = tabs.map(([k, n]) => `<button class="${storeView.tab === k ? 'on' : ''}" data-svtab="${k}">${n}</button>`).join('');
     charts = charts.filter(c => !c.sv);
     const body = $('svBody'), top = body.scrollTop;
-    body.innerHTML = { ops: svOps, staff: svStaff, interior: svInterior, building: svBuilding, report: svReport }[storeView.tab](st, mine);
+    body.innerHTML = { ops: svOps, menu: svMenu, staff: svStaff, interior: svInterior, building: svBuilding, report: svReport }[storeView.tab](st, mine);
     body.scrollTop = top;
     paintLogos($('storeModal'));
     for (const c of charts.filter(c => c.sv)) { const cv = document.getElementById(c.id); if (cv) drawChart(cv, c.cfg); }
@@ -265,7 +280,7 @@
       <h4>오늘 시간대별 손님 <span class="legend inline"><span><span class="dot" style="background:#9ccf8f"></span>받은 손님</span><span><span class="dot" style="background:#f2b3bd"></span>놓친 손님</span><span><span class="dot" style="background:#7fb2d9"></span>처리 가능</span></span></h4>${hourChart(st)}`;
     if (!mine) return h + `<div class="rows"><span>가격</span><span>${won(Sim.ticket(st))}</span><span>영업시간</span><span>${st.open}~${st.close}시</span><span>인테리어</span><span>${Sim.STYLES[st.interior.style].name} ${Sim.TIERS[st.interior.tier].name}</span><span>인지도</span><span>${comp.brand[st.cat].toFixed(0)}</span></div>`;
     const armedClose = armed === 'close:' + st.id;
-    h += `<div class="ctl"><span class="lbl">객단가</span><button class="step" data-act="price" data-arg="-5">−</button><span class="val">${won(Sim.ticket(st))}</span><button class="step" data-act="price" data-arg="5">+</button><span class="chip">${C.menu} · 기준 ${won(C.ticket)}</span></div>
+    h += `<div class="ctl"><span class="lbl">객단가</span><button class="step" data-act="price" data-arg="-5">−</button><span class="val">${won(Sim.ticket(st))}</span><button class="step" data-act="price" data-arg="5">+</button><span class="chip">메뉴 ${st.menu.length}개 · 업종 평균 ${won(C.ticket)}</span></div>
       <div class="ctl"><span class="lbl">영업시간</span><button class="step" data-act="hours" data-arg="open:-1">−</button><span class="val sm">${st.open}시 오픈</span><button class="step" data-act="hours" data-arg="open:1">+</button>
         <button class="step" data-act="hours" data-arg="close:-1">−</button><span class="val sm">${st.close}시 마감</span><button class="step" data-act="hours" data-arg="close:1">+</button></div>
       <div class="ctl"><span class="lbl">홍보</span><div class="seg">${Sim.MKT_NAME.map((n, i) => `<button class="${st.mkt === i ? 'on' : ''}" data-act="mkt" data-arg="${i}" title="하루 ${won(Sim.MKT[i])}">${n}</button>`).join('')}</div></div>
@@ -279,6 +294,35 @@
       </div>
       <div class="btn-row">${st.size < 3 ? `<button class="btn" data-act="upgrade">옆 칸까지 확장 → ${Sim.SIZES[st.size + 1].name} <small>${short(Sim.upgradeCost(S, st))}</small></button>` : ''}
         <button class="btn danger ${armedClose ? 'armed' : ''}" data-act="close">${armedClose ? '정말 정리하기' : '매장 정리'} <small>보증금+권리금 ${short((st.owned ? st.propValue * 0.97 : st.deposit) + Sim.keyMoney(S, st))}</small></button></div>`;
+    return h;
+  }
+  function svMenu(st) {
+    const C = Sim.CATS[st.cat], comp = S.companies[0];
+    if (!storeView.menuSel) storeView.menuSel = { ids: st.menu.slice(), sig: st.sig };
+    const sel = storeView.menuSel, max = Sim.SIZES[st.size].menu;
+    const now = Sim.menuInfo(S, st), next = Sim.menuInfo(S, { cat: st.cat, size: st.size, menu: sel.ids, sig: sel.sig });
+    const changed = sel.ids.join() !== st.menu.join() || sel.sig !== st.sig;
+    const added = sel.ids.filter(x => !st.menu.includes(x)).length;
+    const mi = S.day.mi;
+    const dots = v => '●'.repeat(Math.max(1, Math.min(3, Math.round((v - 0.7) * 5)))) + '○'.repeat(Math.max(0, 3 - Math.max(1, Math.min(3, Math.round((v - 0.7) * 5)))));
+    const cmp = (a, b, fmt, goodUp) => `${fmt(b)}${changed && Math.abs(b - a) > 1e-6 ? ` <span class="${(b > a) === goodUp ? 'up' : 'down'}">${b > a ? '▲' : '▼'}</span>` : ''}`;
+    let h = `<div class="cards c4">
+      <div class="stat"><span class="lbl">객단가</span><b>${cmp(now.ticket, next.ticket, v => won(Math.round(v * st.price / 1e4) * 100), true)}</b><span class="d">손님 1명이 쓰는 돈</span></div>
+      <div class="stat"><span class="lbl">원가율</span><b>${cmp(now.cost, next.cost, pct, false)}</b><span class="d">식자재 비중</span></div>
+      <div class="stat"><span class="lbl">주방 속도</span><b>${cmp(now.complexity, next.complexity, v => Math.round(v * 100) + '%', true)}</b><span class="d">메뉴가 많고 복잡하면 느려요</span></div>
+      <div class="stat"><span class="lbl">메뉴 수</span><b>${sel.ids.length} / ${max}</b><span class="d">${Sim.SIZES[st.size].name}</span></div></div>
+      <h4>손님층별 메뉴 매력</h4><div class="legend">${Sim.SEG_KEYS.map(k => `<span>${Sim.SEG[k].name} ${cmp(now.appeal[k], next.appeal[k], v => v.toFixed(2), true)}</span>`).join('')}</div>
+      <p class="hint">손님층마다 좋아하는 메뉴가 달라요. 제철 메뉴는 그 계절에 더 잘 팔리고 철이 지나면 덜 팔려요. ⭐ 대표 메뉴는 두 배로 팔리고 매력이 조금 올라가요. 신메뉴는 하나에 레시피 개발비 50만원이 들어요.</p>
+      <div class="menu-list">`;
+    for (const m of C.menu) {
+      const on = sel.ids.includes(m.id), sea = Sim.inSeason(m, mi);
+      h += `<div class="mi ${on ? 'on' : ''}">
+        <button class="mi-main" data-act="mtoggle" data-arg="${m.id}"><span class="ck">${on ? '✓' : ''}</span><b>${esc(m.name)}</b><span class="price">${won(m.price)}</span></button>
+        <div class="mi-meta"><span>원가율 ${pct(m.cost)}</span>${m.diff ? '<span class="chip warn">손이 많이 감</span>' : ''}${m.season ? `<span class="chip ${sea ? 'good' : 'bad'}">${sea ? '지금 제철' : '철 지난 메뉴'}</span>` : ''}
+          <span class="segs">${Sim.SEG_KEYS.map(k => `<span title="${Sim.SEG[k].name}">${Sim.SEG[k].name.slice(0, 2)} ${dots(m.appeal[k])}</span>`).join('')}</span>
+          ${on ? `<button class="sigbtn ${sel.sig === m.id ? 'on' : ''}" data-act="msig" data-arg="${m.id}">${sel.sig === m.id ? '⭐ 대표 메뉴' : '☆ 대표로'}</button>` : ''}</div></div>`;
+    }
+    h += `</div><div class="btn-row sticky"><button class="btn primary" data-act="mapply" ${!changed || comp.cash < added * 5e5 ? 'disabled' : ''}>메뉴판 바꾸기${added ? ` <small>신메뉴 ${added}개 · ${short(added * 5e5)}</small>` : ''}</button>${changed ? '<button class="btn" data-act="mreset">되돌리기</button>' : ''}</div>`;
     return h;
   }
   function svStaff(st, mine) {
@@ -555,25 +599,32 @@
 
   function act(a, arg) {
     const st = selStore();
+    if (!['enter', 'hire', 'confirmopen', 'arch'].includes(a)) Snd.play('click');
     switch (a) {
       case 'deselect': selected = null; R.sel = null; openForm = null; break;
       case 'questmin': questMin = !questMin; break;
-      case 'planopen': openForm = { x: selected.x, y: selected.y, cat: arg, size: 2, style: 'nordic', tier: 2 }; break;
-      case 'of': { const [k, v] = arg.split(':'); openForm[k] = k === 'style' ? v : +v; break; }
+      case 'planopen': openForm = { x: selected.x, y: selected.y, cat: arg, size: 2, style: 'nordic', tier: 2, menu: Sim.defaultMenu(arg, 2), sig: null }; break;
+      case 'of': { const [k, v] = arg.split(':'); openForm[k] = k === 'style' ? v : +v; if (k === 'size') openForm.menu = openForm.menu.slice(0, Sim.SIZES[+v].menu); break; }
+      case 'ofmenu': { const L = openForm.menu, i = L.indexOf(arg); if (i >= 0) { if (L.length > 2) L.splice(i, 1); else toast('메뉴는 최소 2개가 필요해요.', 'bad'); } else if (L.length < Sim.SIZES[openForm.size].menu) L.push(arg); else toast(`${Sim.SIZES[openForm.size].name}은 메뉴를 ${Sim.SIZES[openForm.size].menu}개까지 둘 수 있어요.`, 'bad'); break; }
+      case 'lotall': lotAll = !lotAll; break;
+      case 'mtoggle': { const sel = storeView.menuSel, i = sel.ids.indexOf(arg), max = Sim.SIZES[st.size].menu; if (i >= 0) { if (sel.ids.length > 2) { sel.ids.splice(i, 1); if (sel.sig === arg) sel.sig = null; } else toast('메뉴는 최소 2개가 필요해요.', 'bad'); } else if (sel.ids.length < max) sel.ids.push(arg); else toast(`메뉴는 ${max}개까지예요. 매장을 넓히면 더 둘 수 있어요.`, 'bad'); break; }
+      case 'msig': storeView.menuSel.sig = storeView.menuSel.sig === arg ? null : arg; break;
+      case 'mreset': storeView.menuSel = null; break;
+      case 'mapply': { const r = Sim.setMenu(S, st.id, storeView.menuSel.ids, storeView.menuSel.sig); result(r, '새 메뉴판을 걸었어요!'); if (r.ok) storeView.menuSel = null; break; }
       case 'confirmopen': confirmOpen(); break;
       case 'cancelopen': openForm = null; break;
-      case 'enter': openStoreView(+arg); break;
+      case 'enter': openStoreView(+arg); Snd.play('door'); break;
       case 'price': if (st) st.price = Math.max(60, Math.min(180, st.price + +arg)); Sim.computeDemand(S); break;
       case 'hours': if (st) { const [k, d] = arg.split(':'); const o = k === 'open' ? st.open + +d : st.open, c = k === 'close' ? st.close + +d : st.close; result(Sim.setHours(S, st.id, o, c)); } break;
       case 'mkt': if (st) { st.mkt = +arg; Sim.computeDemand(S); } break;
       case 'sevent': if (st) result(Sim.runStoreEvent(S, st.id, arg)); break;
       case 'upgrade': if (st) result(Sim.upgradeStore(S, st.id), '매장을 넓혔어요. 좌석이 늘어났어요.'); break;
       case 'buyprop': if (st) result(Sim.buyProperty(S, st.id), '건물을 샀어요! 이제 월세가 들지 않고, 건축 양식을 바꿀 수 있어요.'); break;
-      case 'arch': if (st) { const r = Sim.setArch(S, st.id, arg); result(r); if (r.ok) R.pop(st.x, st.y); } break;
+      case 'arch': if (st) { const r = Sim.setArch(S, st.id, arg); result(r); if (r.ok) { R.pop(st.x, st.y); Snd.play('build'); } } break;
       case 'ipick': if (arg === 'reset') storeView.pick = null; else { const [k, v] = arg.split(':'); storeView.pick[k] = k === 'style' ? v : +v; } break;
       case 'interior': if (st && storeView.pick) { result(Sim.setInterior(S, st.id, storeView.pick.style, storeView.pick.tier)); storeView.pick = null; } break;
       case 'close': if (st) { if (armed === 'close:' + st.id) { armed = null; result(Sim.closeStore(S, st.id)); closeStoreView(); selected = null; R.sel = null; } else arm('close:' + st.id); } break;
-      case 'hire': if (st) result(Sim.hire(S, st.id, +arg)); break;
+      case 'hire': if (st) { const r = Sim.hire(S, st.id, +arg); result(r); if (r.ok) Snd.play('hire'); } break;
       case 'sshift': { const [id, v] = arg.split(':'); result(Sim.staffAct(S, st.id, +id, 'shift', v)); break; }
       case 'srole': { const [id, v] = arg.split(':'); result(Sim.staffAct(S, st.id, +id, 'role', v)); break; }
       case 'strain': result(Sim.staffAct(S, st.id, +arg, 'train')); break;
@@ -666,12 +717,18 @@
     cv.addEventListener('contextmenu', e => { e.preventDefault(); if (tool !== 'select') setTool('select'); });
     $('tools').addEventListener('click', e => { const b = e.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); });
     document.querySelector('.speed').addEventListener('click', e => { const b = e.target.closest('[data-speed]'); if (b) { speedIdx = +b.dataset.speed; renderTop(); } });
-    $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; $('tabBody').scrollTop = 0; renderTabs(); renderPanel(); } });
-    $('svTabs').addEventListener('click', e => { const b = e.target.closest('[data-svtab]'); if (b) { storeView.tab = b.dataset.svtab; storeView.pick = null; $('svBody').scrollTop = 0; renderStoreView(); } });
+    $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { Snd.play('tab'); tab = b.dataset.tab; $('tabBody').scrollTop = 0; renderTabs(); renderPanel(); } });
+    $('svTabs').addEventListener('click', e => { const b = e.target.closest('[data-svtab]'); if (b) { Snd.play('tab'); storeView.tab = b.dataset.svtab; storeView.pick = null; storeView.menuSel = null; $('svBody').scrollTop = 0; renderStoreView(); } });
     for (const id of ['tabBody', 'inspector', 'quest', 'banner', 'tabs', 'svBody']) $(id).addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) act(b.dataset.act, b.dataset.arg); });
     $('svBody').addEventListener('mouseover', e => { const c = e.target.closest('[data-staff]'); hoverStaff = c ? +c.dataset.staff : null; });
     $('svClose').addEventListener('click', closeStoreView);
     $('storeModal').addEventListener('click', e => { if (e.target.id === 'storeModal') closeStoreView(); });
+    $('catPicker').addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if (!b) return; Snd.play('click'); if (b.dataset.pick === 'close') { pickerOpen = false; renderPicker(); renderTools(); } else setTool('store:' + b.dataset.pick); });
+    document.addEventListener('pointerdown', () => Snd.start(), { capture: true });
+    const paintSnd = () => { const st = Snd.state; $('btnMusic').classList.toggle('on', st.music); $('btnSfx').classList.toggle('on', st.sfx); $('btnMusic').setAttribute('aria-pressed', st.music); $('btnSfx').setAttribute('aria-pressed', st.sfx); };
+    $('btnMusic').addEventListener('click', () => { Snd.start(); Snd.toggleMusic(); paintSnd(); });
+    $('btnSfx').addEventListener('click', () => { Snd.start(); Snd.toggleSfx(); paintSnd(); Snd.play('click'); });
+    paintSnd();
     $('btnFit').addEventListener('click', () => R.fit());
     $('btnHood').addEventListener('click', () => { R.showHoods = !R.showHoods; $('btnHood').classList.toggle('on', R.showHoods); });
     $('btnLogi').addEventListener('click', () => { $('btnLogi').classList.toggle('on'); refreshOverlay(); if (tab === 'logi') renderPanel(); });
@@ -718,7 +775,7 @@
     renderTop();
   }
   function start() {
-    modalOpen = false; $('modal').hidden = true; closeStoreView();
+    modalOpen = false; $('modal').hidden = true; closeStoreView(); lastQuests = Object.keys(S.quests).length; lastNews = S.news[0];
     selected = null; tool = 'select'; armed = null; openForm = null; acc = 0;
     R.setState(S); R.sel = null; R.overlay = null; R.fit();
     speedIdx = 1; renderTabs(); renderTools(); dirty = true; renderUi(true);
@@ -738,13 +795,21 @@
         acc -= HOUR_MS; n++;
         const ev = Sim.step(S);
         R.onStep(ev);
+        if (ev.money.length && SPEEDS[speedIdx] <= 3) Snd.play('coin');
         if (ev.newDay) { dirty = true; if (Sim.dateOf(S).day === 1) writeSave(true); if (tool.startsWith('store:')) refreshOverlay(); }
       }
       if (n) dirty = true;
     } else nightSkip = false;
-    R.hourF = S ? hourF() : 12;
+    R.hourF = S ? hourF() % 24 : 12;
     R.draw(dt, modalOpen ? 1 : SPEEDS[speedIdx]);
-    if (S) renderClock();
+    if (S) {
+      renderClock();
+      Snd.setMood(Math.floor(hourF()) % 24, S.weather.kind);
+      const q = Object.keys(S.quests).length;
+      if (q > lastQuests && lastQuests) Snd.play('fanfare');
+      lastQuests = q;
+      if (S.news.length && S.news[0] !== lastNews) { if (lastNews && S.news[0].kind === 'good') Snd.play('news'); lastNews = S.news[0]; }
+    }
     renderUi();
     if (storeView) { const st = viewStore(); sceneT += dt; if (st) Renderer.drawInterior($('svScene'), S, st, { hour: Math.floor(hourF()) % 24, t: sceneT, hoverStaff }); }
     requestAnimationFrame(frame);

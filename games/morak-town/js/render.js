@@ -321,7 +321,7 @@
     drawLogo(ctx, comp, cx + 9, sy + 2, 6.5);
     if (st.franchise) { ctx.fillStyle = comp.color; ctx.font = 'bold 7.5px "Gowun Dodum",sans-serif'; ctx.fillText('가맹', cx - 5, sy - 15); }
     if (!open) { ctx.fillStyle = 'rgba(80,80,80,0.7)'; ctx.font = 'bold 7px sans-serif'; ctx.fillText('CLOSED', cx, cy - 4); }
-    if ((st.cat === 'cafe' || st.cat === 'noodle') && !REDUCED && open && st.served > 0) this.steam(ctx, cx + 10, cy - h - roofTop, st.id);
+    if (['cafe', 'noodle', 'hansik', 'japanese', 'chinese', 'snack', 'chicken'].includes(st.cat) && !REDUCED && open && st.served > 0) this.steam(ctx, cx + 10, cy - h - roofTop, st.id);
     if (glow) this._glows.push({ x: cx, y: cy - h * 0.25, r: 34, a: 0.55 });
   };
 
@@ -698,9 +698,10 @@
       ctx.fillStyle = top; ctx.beginPath(); ctx.moveTo(a.x, a.y - ch); ctx.lineTo(b.x, b.y - ch); ctx.lineTo(c.x, c.y - ch); ctx.lineTo(e.x, e.y - ch); ctx.fill();
       // 업종 장비
       const m = P(0.7, (cy0 + cy1) / 2 - 0.6), m2 = P(0.7, (cy0 + cy1) / 2 + 0.7);
-      if (st.cat === 'cafe') { ctx.fillStyle = '#9aa3aa'; ctx.fillRect(m.x - tw * 0.22, m.y - ch - tw * 0.38, tw * 0.44, tw * 0.3); ctx.fillStyle = '#5f676d'; ctx.fillRect(m.x - tw * 0.16, m.y - ch - tw * 0.12, tw * 0.08, tw * 0.06); ctx.fillStyle = '#ffffff'; ctx.fillRect(m2.x - 3, m2.y - ch - 7, 6, 7); ctx.fillRect(m2.x + 5, m2.y - ch - 7, 6, 7); }
-      else if (st.cat === 'bakery' || st.cat === 'dessert') { ctx.fillStyle = 'rgba(210,235,245,0.7)'; ctx.fillRect(m.x - tw * 0.3, m.y - ch - tw * 0.3, tw * 0.6, tw * 0.3); const col = st.cat === 'bakery' ? ['#d9a05b', '#c8874a', '#e8bd7a'] : ['#f6c6d6', '#fff1d6', '#c98b6b']; for (let i = 0; i < 4; i++) { ctx.fillStyle = col[i % 3]; ctx.beginPath(); ctx.ellipse(m.x - tw * 0.2 + i * tw * 0.13, m.y - ch - tw * 0.08, tw * 0.06, tw * 0.04, 0, 0, 7); ctx.fill(); } }
-      else if (st.cat === 'noodle') { ctx.fillStyle = '#7d858a'; ctx.beginPath(); ctx.ellipse(m.x, m.y - ch - tw * 0.12, tw * 0.2, tw * 0.09, 0, 0, 7); ctx.fill(); ctx.fillRect(m.x - tw * 0.2, m.y - ch - tw * 0.12, tw * 0.4, tw * 0.1); if (open) for (let i = 0; i < 3; i++) { const ph = (t / 1500 + i / 3) % 1; ctx.fillStyle = `rgba(255,255,255,${0.7 * (1 - ph)})`; ctx.beginPath(); ctx.arc(m.x + Math.sin(ph * 5 + i) * 4, m.y - ch - tw * 0.2 - ph * 20, 3 + ph * 4, 0, 7); ctx.fill(); } }
+      const eq = ({ cafe: 'machine', bubbletea: 'machine', bakery: 'case', dessert: 'case', brunch: 'case', salad: 'case', noodle: 'pot', hansik: 'pot', japanese: 'pot', chinese: 'pot', snack: 'pot' })[st.cat] || 'grill';
+      if (eq === 'machine') { ctx.fillStyle = '#9aa3aa'; ctx.fillRect(m.x - tw * 0.22, m.y - ch - tw * 0.38, tw * 0.44, tw * 0.3); ctx.fillStyle = '#5f676d'; ctx.fillRect(m.x - tw * 0.16, m.y - ch - tw * 0.12, tw * 0.08, tw * 0.06); ctx.fillStyle = '#ffffff'; ctx.fillRect(m2.x - 3, m2.y - ch - 7, 6, 7); ctx.fillRect(m2.x + 5, m2.y - ch - 7, 6, 7); }
+      else if (eq === 'case') { ctx.fillStyle = 'rgba(210,235,245,0.7)'; ctx.fillRect(m.x - tw * 0.3, m.y - ch - tw * 0.3, tw * 0.6, tw * 0.3); const col = st.cat === 'bakery' || st.cat === 'brunch' ? ['#d9a05b', '#c8874a', '#e8bd7a'] : st.cat === 'salad' ? ['#8cc084', '#e9a05f', '#f3e7a0'] : ['#f6c6d6', '#fff1d6', '#c98b6b']; for (let i = 0; i < 4; i++) { ctx.fillStyle = col[i % 3]; ctx.beginPath(); ctx.ellipse(m.x - tw * 0.2 + i * tw * 0.13, m.y - ch - tw * 0.08, tw * 0.06, tw * 0.04, 0, 0, 7); ctx.fill(); } }
+      else if (eq === 'pot') { ctx.fillStyle = '#7d858a'; ctx.beginPath(); ctx.ellipse(m.x, m.y - ch - tw * 0.12, tw * 0.2, tw * 0.09, 0, 0, 7); ctx.fill(); ctx.fillRect(m.x - tw * 0.2, m.y - ch - tw * 0.12, tw * 0.4, tw * 0.1); if (open) for (let i = 0; i < 3; i++) { const ph = (t / 1500 + i / 3) % 1; ctx.fillStyle = `rgba(255,255,255,${0.7 * (1 - ph)})`; ctx.beginPath(); ctx.arc(m.x + Math.sin(ph * 5 + i) * 4, m.y - ch - tw * 0.2 - ph * 20, 3 + ph * 4, 0, 7); ctx.fill(); } }
       else { ctx.fillStyle = '#5a5f63'; ctx.fillRect(m.x - tw * 0.26, m.y - ch - tw * 0.1, tw * 0.52, tw * 0.1); ctx.fillStyle = '#c87a4a'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.ellipse(m.x - tw * 0.15 + i * tw * 0.15, m.y - ch - tw * 0.11, tw * 0.05, tw * 0.025, 0, 0, 7); ctx.fill(); } }
     } });
     // 테이블

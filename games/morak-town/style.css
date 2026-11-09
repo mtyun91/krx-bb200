@@ -299,6 +299,37 @@ h4 { font-size: 12.5px; color: var(--muted); font-weight: 400; margin: 12px 0 5p
 }
 @media (max-width: 480px) { .evgrid, .style-grid { grid-template-columns: 1fr; } .cards.c3 { grid-template-columns: 1fr 1fr; } .clockbox #weather { display: none; } }
 
+/* v3: 소리·업종 고르기·메뉴 */
+.sound { display: flex; gap: 2px; background: var(--paper); border-radius: 12px; padding: 3px; }
+.sound button { border: 0; background: transparent; width: 34px; height: 30px; border-radius: 9px; font-size: 15px; opacity: 0.45; }
+.sound button.on { opacity: 1; background: var(--card); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+.cat-picker { position: absolute; left: 98px; top: 12px; width: min(440px, calc(100% - 120px)); max-height: calc(100% - 24px); overflow-y: auto; background: var(--card); border-radius: 18px; box-shadow: var(--shadow); padding: 12px; z-index: 6; animation: pop 0.2s ease-out; }
+.cp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cp-head b { font-family: var(--f-display); font-weight: 400; font-size: 17px; }
+.cp-head .x { border: 0; background: var(--paper); border-radius: 50%; width: 28px; height: 28px; }
+.cp-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.cp { border: 1px solid var(--line); background: var(--card); border-radius: 14px; padding: 9px 6px 8px; display: grid; justify-items: center; gap: 2px; text-align: center; }
+.cp .ic { font-size: 26px; line-height: 1.1; }
+.cp b { font-weight: 400; font-family: var(--f-display); font-size: 14px; }
+.cp small { font-size: 10.5px; color: var(--muted); }
+.cp:hover { border-color: var(--butter); transform: translateY(-1px); }
+.cp.on { border-color: var(--butter); background: var(--butter-soft); }
+.pick small { color: var(--muted); }
+.menu-list { display: grid; gap: 6px; }
+.mi { border: 1px solid var(--line); border-radius: 12px; padding: 7px 10px; }
+.mi.on { border-color: var(--leaf); background: var(--leaf-soft); }
+.mi-main { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; padding: 0; text-align: left; }
+.mi-main .ck { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; font-size: 12px; color: #fff; flex: none; }
+.mi.on .mi-main .ck { background: var(--leaf); border-color: var(--leaf); }
+.mi-main b { font-weight: 400; font-family: var(--f-display); font-size: 15px; flex: 1; }
+.mi-main .price { font-variant-numeric: tabular-nums; }
+.mi-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 11.5px; color: var(--muted); margin: 4px 0 0 28px; }
+.mi-meta .segs { display: flex; gap: 8px; flex-wrap: wrap; }
+.sigbtn { border: 1px solid var(--line); background: var(--card); border-radius: 999px; font-size: 11.5px; padding: 2px 9px; margin-left: auto; }
+.sigbtn.on { border-color: var(--butter); background: var(--butter-soft); color: #8a6210; }
+.btn-row.sticky { position: sticky; bottom: -24px; background: var(--card); padding: 10px 0; margin-bottom: -10px; }
+@media (max-width: 760px) { .cat-picker { left: 8px; right: 8px; width: auto; top: 8px; bottom: 92px; } .cp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .sound button { width: 30px; } }
+
 /* 태블릿 */
 @media (max-width: 1100px) {
   .app { grid-template-columns: minmax(0, 1fr) 330px; }
@@ -329,3 +360,4 @@ h4 { font-size: 12.5px; color: var(--muted); font-weight: 400; margin: 12px 0 5p
 @media (prefers-reduced-motion: reduce) {
   .toast, .panel { animation: none; transition: none; }
 }
+.pick .sea { font-size: 10px; color: var(--leaf); }

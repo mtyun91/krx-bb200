@@ -14,16 +14,53 @@
   const MKT_NAME = ['없음', '전단·SNS', '지역 광고', '인플루언서'];
   const BASE_MIN_WAGE = 10600;   // 2027년 최저시급 (게임 설정값)
 
-  // ---------- 업종 ----------
+  // ---------- 업종·메뉴 ----------
+  // 메뉴: [이름, 가격(원, 부가세 포함), 원가율, 손님층 선호('r주민 o직장인 u대학생 t관광객', 기본 1), 옵션]
+  // 옵션: s=제철(sum/win/spr/dec), d=손이 많이 감, def=기본 메뉴
+  function parseAppeal(str) { const a = { res: 1, off: 1, uni: 1, tour: 1 }; const map = { r: 'res', o: 'off', u: 'uni', t: 'tour' }; (str || '').split(' ').filter(Boolean).forEach(p => { a[map[p[0]]] = parseFloat(p.slice(1)); }); return a; }
+  const SEASON_MONTHS = { sum: [5, 6, 7], win: [11, 0, 1], spr: [2, 3, 4], dec: [11] };
+  function M(cat, list) { return list.map((m, i) => ({ id: cat + i, name: m[0], price: m[1], cost: m[2], appeal: parseAppeal(m[3]), season: m[4] && m[4].s ? SEASON_MONTHS[m[4].s] : null, diff: !!(m[4] && m[4].d), def: !!(m[4] && m[4].def) })); }
   const CATS = {
-    cafe:    { name: '카페',     icon: '☕', ticket: 6500,  cogs: 0.28, recipe: { bean: 0.45, milk: 0.35, etc: 0.2 },             food: false, equip: 35e6, rate: 32, takeout: 0.5,  dwell: 0.9, hours: [7, 22],  menu: '아메리카노·라테' },
-    bakery:  { name: '베이커리', icon: '🥐', ticket: 8500,  cogs: 0.33, recipe: { flour: 0.45, milk: 0.2, etc: 0.35 },            food: true,  equip: 60e6, rate: 40, takeout: 0.7,  dwell: 0.6, hours: [7, 21],  menu: '소금빵·식빵' },
-    noodle:  { name: '국수집',   icon: '🍜', ticket: 9500,  cogs: 0.33, recipe: { flour: 0.3, veg: 0.3, meat: 0.3, etc: 0.1 },   food: true,  equip: 40e6, rate: 22, takeout: 0.08, dwell: 0.6, hours: [10, 21], menu: '잔치국수·칼국수' },
-    burger:  { name: '버거',     icon: '🍔', ticket: 11000, cogs: 0.35, recipe: { meat: 0.45, flour: 0.2, veg: 0.2, etc: 0.15 }, food: true,  equip: 55e6, rate: 22, takeout: 0.4,  dwell: 0.5, hours: [10, 23], menu: '수제버거 세트' },
-    dessert: { name: '디저트',   icon: '🍰', ticket: 9000,  cogs: 0.30, recipe: { milk: 0.4, flour: 0.25, etc: 0.35 },            food: true,  equip: 30e6, rate: 26, takeout: 0.3,  dwell: 1.0, hours: [11, 22], menu: '케이크·빙수' },
+    cafe: { name: '카페', icon: '☕', pattern: 'morning', per: 1.25, recipe: { bean: 0.45, milk: 0.35, etc: 0.2 }, food: false, equip: 35e6, rate: 32, takeout: 0.5, dwell: 0.9, hours: [7, 22],
+      menu: M('cafe', [['아메리카노', 4500, 0.2, 'o1.3 u1.1 r.9 t.9', { def: 1 }], ['카페라테', 5000, 0.28, '', { def: 1 }], ['바닐라라테', 5500, 0.3, 'u1.3 t1.1', { def: 1 }], ['콜드브루', 5500, 0.2, 'o1.2', { s: 'sum' }], ['아인슈페너', 6000, 0.3, 't1.3 u1.2', { def: 1 }], ['녹차라테', 5500, 0.32, 'r1.1 t1.1'], ['핸드드립', 7000, 0.25, 'o1.1 t1.3 u.8', { d: 1 }], ['크로플', 6500, 0.3, 'u1.4 t1.2', { d: 1 }], ['치즈케이크', 6500, 0.35, 'r1.1 t1.1'], ['딸기라테', 6500, 0.35, 'u1.4 t1.1', { s: 'spr' }], ['뱅쇼', 7000, 0.3, 't1.2 u1.1', { s: 'win' }]]) },
+    bakery: { name: '베이커리', icon: '🥐', pattern: 'bakery', per: 1.7, recipe: { flour: 0.45, milk: 0.2, etc: 0.35 }, food: true, equip: 60e6, rate: 40, takeout: 0.7, dwell: 0.6, hours: [7, 21],
+      menu: M('bakery', [['소금빵', 3500, 0.3, 'u1.2 t1.2', { def: 1 }], ['우유식빵', 5500, 0.28, 'r1.5 o.8', { def: 1 }], ['크루아상', 4500, 0.33, 'o1.1 t1.1', { def: 1 }], ['단팥빵', 3000, 0.3, 'r1.3 u.8', { def: 1 }], ['베이글', 4000, 0.28, 'o1.3'], ['소시지빵', 4500, 0.35, 'u1.3 r1.1'], ['롤케이크', 8000, 0.32, 't1.3 r1.1'], ['마늘바게트', 5000, 0.3, 'u1.2'], ['샌드위치', 7500, 0.38, 'o1.5', { d: 1 }], ['슈톨렌', 18000, 0.35, 'r1.2 t1.3', { s: 'dec' }]]) },
+    noodle: { name: '국수집', icon: '🍜', pattern: 'meal', per: 1.15, recipe: { flour: 0.3, veg: 0.3, meat: 0.3, etc: 0.1 }, food: true, equip: 40e6, rate: 22, takeout: 0.08, dwell: 0.6, hours: [10, 21],
+      menu: M('noodle', [['잔치국수', 7000, 0.3, 'r1.2 o1.1', { def: 1 }], ['비빔국수', 8000, 0.32, 'u1.2', { def: 1 }], ['칼국수', 9000, 0.33, 'r1.2 o1.2', { def: 1 }], ['콩국수', 10000, 0.35, 'r1.2 o1.1', { s: 'sum' }], ['수제비', 8500, 0.32, 'r1.3'], ['고기만두', 6000, 0.35, 'u1.2 o1.1', { def: 1 }], ['들기름막국수', 11000, 0.33, 't1.4 o1.1', { d: 1 }], ['김치말이국수', 8500, 0.32, 'u1.1', { s: 'sum' }], ['어묵우동', 8000, 0.3, '', { s: 'win' }]]) },
+    burger: { name: '버거', icon: '🍔', pattern: 'burger', per: 1.35, recipe: { meat: 0.45, flour: 0.2, veg: 0.2, etc: 0.15 }, food: true, equip: 55e6, rate: 22, takeout: 0.4, dwell: 0.5, hours: [10, 23],
+      menu: M('burger', [['클래식버거', 8900, 0.35, '', { def: 1 }], ['치즈버거', 9500, 0.36, 'u1.2', { def: 1 }], ['베이컨버거', 11000, 0.38, 'o1.1 u1.1', { def: 1 }], ['더블패티', 13500, 0.4, 'u1.4 o1.1', { d: 1 }], ['치킨버거', 9000, 0.36, 'u1.2 r1.1'], ['감자튀김', 4000, 0.22, 'u1.2', { def: 1 }], ['밀크셰이크', 5500, 0.3, 'u1.3 t1.1'], ['트러플버거', 15000, 0.42, 't1.3 o1.2 u.8', { d: 1 }]]) },
+    dessert: { name: '디저트', icon: '🍰', pattern: 'afternoon', per: 1.3, recipe: { milk: 0.4, flour: 0.25, etc: 0.35 }, food: true, equip: 30e6, rate: 26, takeout: 0.3, dwell: 1.0, hours: [11, 22],
+      menu: M('dessert', [['조각케이크', 7500, 0.32, 't1.2', { def: 1 }], ['마카롱', 3000, 0.35, 'u1.5', { def: 1 }], ['눈꽃빙수', 13000, 0.3, 't1.5 u1.2', { s: 'sum' }], ['과일타르트', 7000, 0.35, 't1.2 r1.1', { def: 1 }], ['티라미수', 8000, 0.32, 'o1.1 u1.1', { def: 1 }], ['크레페', 8500, 0.3, 'u1.3', { d: 1 }], ['생과일주스', 6500, 0.38, 'r1.1', { s: 'sum' }], ['수제쿠키', 3500, 0.3, 'u1.2 r1.1'], ['딸기케이크', 9000, 0.38, 't1.3 u1.2', { s: 'spr' }]]) },
+    snack: { name: '분식', icon: '🍢', pattern: 'snack', per: 1.6, recipe: { flour: 0.3, veg: 0.3, etc: 0.4 }, food: true, equip: 25e6, rate: 30, takeout: 0.5, dwell: 0.4, hours: [10, 22],
+      menu: M('snack', [['떡볶이', 5000, 0.28, 'u1.5 r1.1', { def: 1 }], ['순대', 5000, 0.35, 'r1.1', { def: 1 }], ['김밥', 4000, 0.35, 'o1.4', { def: 1 }], ['모둠튀김', 4000, 0.3, 'u1.2', { def: 1 }], ['라볶이', 6500, 0.3, 'u1.3'], ['어묵', 3000, 0.28, '', { s: 'win' }], ['쫄면', 6500, 0.3, 'u1.2', { s: 'sum' }], ['로제떡볶이', 7500, 0.32, 'u1.5 t1.2', { d: 1 }]]) },
+    chicken: { name: '치킨', icon: '🍗', pattern: 'evening', per: 1.15, recipe: { meat: 0.6, flour: 0.1, etc: 0.3 }, food: true, equip: 45e6, rate: 12, takeout: 0.65, dwell: 1.2, hours: [15, 24], fri: 1.35,
+      menu: M('chicken', [['후라이드', 20000, 0.42, '', { def: 1 }], ['양념치킨', 21000, 0.43, 'u1.2', { def: 1 }], ['간장치킨', 21000, 0.43, 'r1.1'], ['반반치킨', 21000, 0.43, '', { def: 1 }], ['순살치킨', 23000, 0.45, 'o1.2'], ['생맥주', 5000, 0.25, 'o1.5 u1.2', { def: 1 }], ['치즈볼', 6000, 0.3, 'u1.3'], ['마늘치킨', 22000, 0.44, 't1.1', { d: 1 }]]) },
+    pizza: { name: '피자', icon: '🍕', pattern: 'pizza', per: 1.2, recipe: { flour: 0.3, milk: 0.3, meat: 0.2, etc: 0.2 }, food: true, equip: 50e6, rate: 14, takeout: 0.6, dwell: 0.8, hours: [11, 23],
+      menu: M('pizza', [['페퍼로니', 22000, 0.32, 'u1.2', { def: 1 }], ['콤비네이션', 24000, 0.34, 'r1.2', { def: 1 }], ['고르곤졸라', 18000, 0.3, 'u1.1 t1.1', { def: 1 }], ['불고기피자', 25000, 0.36, 'r1.2'], ['마르게리타', 19000, 0.3, 't1.3 o1.1'], ['크림파스타', 15000, 0.3, 'o1.1 t1.1', { d: 1 }], ['시저샐러드', 9000, 0.35, 'o1.2']]) },
+    hansik: { name: '한식당', icon: '🍚', pattern: 'meal', per: 1.1, recipe: { meat: 0.3, veg: 0.4, etc: 0.3 }, food: true, equip: 45e6, rate: 18, takeout: 0.1, dwell: 0.7, hours: [10, 21],
+      menu: M('hansik', [['김치찌개', 9000, 0.35, 'o1.4 r1.1', { def: 1 }], ['된장찌개', 9000, 0.34, 'o1.3 r1.2', { def: 1 }], ['제육볶음', 11000, 0.38, 'o1.3 u1.2', { def: 1 }], ['불고기정식', 15000, 0.4, 't1.5 r1.1', { d: 1 }], ['돌솥비빔밥', 11000, 0.35, 't1.5', { def: 1 }], ['순두부찌개', 9500, 0.34, 'o1.2'], ['갈비탕', 15000, 0.42, 'r1.3 o1.1', { d: 1 }], ['물냉면', 11000, 0.33, 'o1.2 t1.2', { s: 'sum' }], ['삼계탕', 17000, 0.42, 'r1.2 o1.2 t1.2', { s: 'sum' }]]) },
+    japanese: { name: '일식', icon: '🍣', pattern: 'meal', per: 1.1, recipe: { meat: 0.3, flour: 0.2, veg: 0.1, etc: 0.4 }, food: true, equip: 50e6, rate: 16, takeout: 0.15, dwell: 0.7, hours: [11, 22],
+      menu: M('japanese', [['돈카츠', 12000, 0.36, 'o1.2 u1.2', { def: 1 }], ['돈코츠라멘', 11000, 0.33, 'u1.4', { def: 1 }], ['모둠초밥', 18000, 0.45, 'o1.2 t1.3', { d: 1, def: 1 }], ['냉우동', 9000, 0.3, '', { s: 'sum' }], ['규동', 10000, 0.36, 'o1.3', { def: 1 }], ['사케동', 16000, 0.45, 't1.2 o1.1'], ['냉소바', 10000, 0.3, 'o1.2', { s: 'sum' }], ['카레우동', 10000, 0.3, 'u1.2', { s: 'win' }]]) },
+    chinese: { name: '중식', icon: '🥟', pattern: 'meal', per: 1.3, recipe: { flour: 0.35, meat: 0.25, veg: 0.25, etc: 0.15 }, food: true, equip: 45e6, rate: 20, takeout: 0.35, dwell: 0.5, hours: [11, 21],
+      menu: M('chinese', [['짜장면', 7500, 0.28, 'r1.1 u1.1', { def: 1 }], ['짬뽕', 9000, 0.32, 'o1.2', { def: 1 }], ['탕수육', 18000, 0.38, 'u1.1 r1.1', { def: 1 }], ['볶음밥', 8500, 0.3, 'o1.1', { def: 1 }], ['마라탕', 12000, 0.35, 'u1.6 t.9'], ['군만두', 7000, 0.3, 'u1.1'], ['깐풍기', 22000, 0.38, 'o1.2', { d: 1 }], ['중국냉면', 10000, 0.32, '', { s: 'sum' }]]) },
+    salad: { name: '샐러드', icon: '🥗', pattern: 'lunch', per: 1.1, recipe: { veg: 0.5, meat: 0.2, etc: 0.3 }, food: true, equip: 25e6, rate: 28, takeout: 0.55, dwell: 0.5, hours: [8, 20],
+      menu: M('salad', [['닭가슴살 샐러드', 9900, 0.38, 'o1.5', { def: 1 }], ['연어 포케', 13500, 0.42, 'o1.3 t1.2', { def: 1 }], ['그릭요거트볼', 7500, 0.35, 'u1.2 r1.1', { def: 1 }], ['클럽 샌드위치', 8500, 0.36, 'o1.3'], ['콥샐러드', 11000, 0.38, 'o1.2', { def: 1 }], ['그린 스무디', 6500, 0.35, 'o1.1', { s: 'sum' }], ['단호박 수프', 6500, 0.3, 'r1.1', { s: 'win' }]]) },
+    bubbletea: { name: '버블티', icon: '🧋', pattern: 'afternoon', per: 1.1, recipe: { milk: 0.4, etc: 0.6 }, food: false, equip: 30e6, rate: 40, takeout: 0.8, dwell: 0.4, hours: [11, 22],
+      menu: M('bubbletea', [['흑당버블티', 5500, 0.25, 'u1.5', { def: 1 }], ['타로밀크티', 5000, 0.25, 'u1.3', { def: 1 }], ['망고스무디', 6000, 0.32, 't1.2', { s: 'sum' }], ['클래식밀크티', 4500, 0.22, 'o1.1', { def: 1 }], ['치즈폼그린티', 5500, 0.27, 'u1.2 t1.2', { def: 1 }], ['자몽티', 5000, 0.3, 'o1.1 r1.1'], ['딸기요거트', 6000, 0.32, 'u1.3', { s: 'spr' }]]) },
+    brunch: { name: '브런치', icon: '🥞', pattern: 'brunch', per: 1.4, weekend: 1.6, recipe: { flour: 0.2, milk: 0.3, meat: 0.2, veg: 0.1, etc: 0.2 }, food: true, equip: 40e6, rate: 14, takeout: 0.05, dwell: 1.2, hours: [9, 17],
+      menu: M('brunch', [['에그베네딕트', 16000, 0.36, 't1.4 u1.1', { def: 1, d: 1 }], ['프렌치토스트', 14000, 0.32, 'u1.3', { def: 1 }], ['리코타 팬케이크', 13000, 0.32, 'u1.3 t1.1', { def: 1 }], ['리코타샐러드', 13500, 0.36, 'o1.1'], ['브런치 플레이트', 18000, 0.38, 't1.3 r1.1', { def: 1 }], ['치즈 오믈렛', 12000, 0.32, 'r1.1'], ['자몽에이드', 6500, 0.3, '', { s: 'sum' }]]) },
+    pub: { name: '이자카야', icon: '🍶', pattern: 'evening', per: 2.2, fri: 1.4, recipe: { meat: 0.35, veg: 0.2, etc: 0.45 }, food: true, equip: 40e6, rate: 18, takeout: 0, dwell: 1.8, hours: [17, 24],
+      menu: M('pub', [['하이볼', 7000, 0.2, 'o1.3 u1.3', { def: 1 }], ['생맥주', 5000, 0.22, 'o1.4', { def: 1 }], ['모둠꼬치', 18000, 0.38, 'o1.2 t1.1', { def: 1, d: 1 }], ['오뎅탕', 17000, 0.32, 'o1.2', { s: 'win' }], ['가라아게', 16000, 0.35, 'u1.2', { def: 1 }], ['감바스', 19000, 0.38, 't1.3'], ['소주', 5000, 0.25, 'o1.5 r1.1', { def: 1 }], ['계란말이', 13000, 0.28, 'r1.1']]) },
   };
   const CAT_KEYS = Object.keys(CATS);
-  const SIZES = [null, { py: 15, name: '소형 15평' }, { py: 25, name: '중형 25평' }, { py: 40, name: '대형 40평' }];
+  const SIZES = [null, { py: 15, name: '소형 15평', menu: 5 }, { py: 25, name: '중형 25평', menu: 7 }, { py: 40, name: '대형 40평', menu: 9 }];
+  function defaultMenu(cat, size) { const M2 = CATS[cat].menu; let L = M2.filter(m => m.def).map(m => m.id); if (L.length > SIZES[size || 2].menu) L = L.slice(0, SIZES[size || 2].menu); return L; }
+  for (const k of CAT_KEYS) {
+    const def = CATS[k].menu.filter(m => m.def);
+    const avg = def.reduce((a, m) => a + m.price, 0) / def.length;
+    CATS[k].ticket = Math.round(avg * CATS[k].per / 100) * 100;
+    CATS[k].cogs = def.reduce((a, m) => a + m.cost, 0) / def.length;
+  }
 
   const INGR = {
     bean:  { name: '원두',     unit: 'kg', base: 18000 },
@@ -47,6 +84,16 @@
     noodle:  { res: 0.10, off: 0.18, uni: 0.18, tour: 0.15 },
     burger:  { res: 0.07, off: 0.10, uni: 0.20, tour: 0.15 },
     dessert: { res: 0.11, off: 0.08, uni: 0.18, tour: 0.38 },
+    snack:     { res: 0.07, off: 0.07, uni: 0.16, tour: 0.08 },
+    chicken:   { res: 0.07, off: 0.05, uni: 0.07, tour: 0.04 },
+    pizza:     { res: 0.05, off: 0.03, uni: 0.06, tour: 0.05 },
+    hansik:    { res: 0.07, off: 0.20, uni: 0.08, tour: 0.14 },
+    japanese:  { res: 0.04, off: 0.10, uni: 0.09, tour: 0.09 },
+    chinese:   { res: 0.07, off: 0.10, uni: 0.09, tour: 0.05 },
+    salad:     { res: 0.03, off: 0.11, uni: 0.04, tour: 0.03 },
+    bubbletea: { res: 0.04, off: 0.05, uni: 0.20, tour: 0.13 },
+    brunch:    { res: 0.04, off: 0.03, uni: 0.06, tour: 0.11 },
+    pub:       { res: 0.04, off: 0.09, uni: 0.09, tour: 0.06 },
   };
   const SEG_HOURS = {
     off:  [0, 0, 0, 0, 0, 0, 0.5, 4, 10, 6, 4, 7, 18, 14, 5, 6, 5, 5, 9, 5, 2, 1, 0.5, 0],
@@ -55,10 +102,16 @@
     tour: [0, 0, 0, 0, 0, 0, 0, 0.5, 1, 3, 6, 9, 11, 11, 10, 10, 9, 8, 8, 6, 4, 2, 1, 0.3],
   };
   function catHourMult(cat, h) {
-    if (cat === 'cafe') return h >= 7 && h <= 10 ? 1.7 : h === 11 ? 1 : h <= 13 && h >= 12 ? 1.3 : h >= 14 && h <= 17 ? 1.5 : h >= 18 && h <= 19 ? 0.8 : h >= 20 ? 0.6 : 0.3;
-    if (cat === 'bakery') return h >= 7 && h <= 9 ? 2 : h <= 11 && h >= 10 ? 1.2 : h <= 13 && h >= 12 ? 0.9 : h >= 14 && h <= 16 ? 1 : h >= 17 && h <= 19 ? 1.4 : h >= 20 ? 0.6 : 0.3;
-    if (cat === 'noodle') return h >= 11 && h <= 13 ? 2 : h >= 14 && h <= 16 ? 0.5 : h >= 17 && h <= 20 ? 1.6 : h >= 21 ? 0.7 : 0.3;
-    if (cat === 'burger') return h >= 11 && h <= 13 ? 1.7 : h >= 14 && h <= 16 ? 0.8 : h >= 17 && h <= 20 ? 1.4 : h >= 21 ? 1.1 : 0.4;
+    const p = CATS[cat].pattern;
+    if (p === 'morning') return h >= 7 && h <= 10 ? 1.7 : h === 11 ? 1 : h <= 13 && h >= 12 ? 1.3 : h >= 14 && h <= 17 ? 1.5 : h >= 18 && h <= 19 ? 0.8 : h >= 20 ? 0.6 : 0.3;
+    if (p === 'bakery') return h >= 7 && h <= 9 ? 2 : h <= 11 && h >= 10 ? 1.2 : h <= 13 && h >= 12 ? 0.9 : h >= 14 && h <= 16 ? 1 : h >= 17 && h <= 19 ? 1.4 : h >= 20 ? 0.6 : 0.3;
+    if (p === 'meal') return h >= 11 && h <= 13 ? 2 : h >= 14 && h <= 16 ? 0.5 : h >= 17 && h <= 20 ? 1.6 : h >= 21 ? 0.7 : 0.3;
+    if (p === 'burger') return h >= 11 && h <= 13 ? 1.7 : h >= 14 && h <= 16 ? 0.8 : h >= 17 && h <= 20 ? 1.4 : h >= 21 ? 1.1 : 0.4;
+    if (p === 'snack') return h >= 11 && h <= 13 ? 1.4 : h >= 14 && h <= 18 ? 1.6 : h >= 19 && h <= 21 ? 1 : h >= 22 ? 0.7 : 0.2;
+    if (p === 'evening') return h >= 19 && h <= 22 ? 2.2 : h === 23 ? 1.5 : h >= 17 && h <= 18 ? 0.9 : h <= 1 ? 0.8 : h >= 12 && h <= 16 ? 0.25 : 0.1;
+    if (p === 'pizza') return h >= 11 && h <= 13 ? 1.3 : h >= 17 && h <= 21 ? 1.8 : h >= 22 ? 1 : h >= 14 && h <= 16 ? 0.6 : 0.2;
+    if (p === 'lunch') return h >= 11 && h <= 13 ? 2.6 : h >= 8 && h <= 10 ? 0.8 : h >= 14 && h <= 16 ? 0.6 : h >= 17 && h <= 19 ? 0.7 : 0.1;
+    if (p === 'brunch') return h >= 10 && h <= 14 ? 2 : h === 9 || h === 15 ? 0.9 : h === 16 ? 0.6 : 0.15;
     return h >= 13 && h <= 17 ? 1.7 : h === 18 ? 1 : h >= 19 && h <= 22 ? 1.3 : h === 12 ? 0.7 : 0.35;
   }
   const PROFILE = {};
@@ -76,6 +129,16 @@
     noodle:  [1.25, 1.2, 1.05, 0.95, 0.9, 0.85, 0.85, 0.85, 0.95, 1.05, 1.15, 1.25],
     burger:  [0.95, 0.95, 1, 1, 1.05, 1.05, 1.1, 1.1, 1, 1, 0.95, 1],
     dessert: [0.85, 0.9, 1, 1.05, 1.15, 1.25, 1.3, 1.25, 1.05, 0.95, 0.9, 1.15],
+    snack:     [1.1, 1.05, 1, 1, 1, 0.95, 0.9, 0.9, 1, 1, 1.05, 1.1],
+    chicken:   [1, 1, 1, 1, 1.05, 1.1, 1.15, 1.15, 1, 1, 1, 1.05],
+    pizza:     [1.05, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.15],
+    hansik:    [1.1, 1.05, 1, 1, 1, 0.95, 0.95, 0.95, 1, 1.05, 1.05, 1.1],
+    japanese:  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    chinese:   [1.05, 1.05, 1, 1, 1, 0.95, 0.95, 0.95, 1, 1, 1.05, 1.05],
+    salad:     [0.85, 0.9, 1.05, 1.1, 1.15, 1.1, 1.05, 1.05, 1.05, 1, 0.9, 0.85],
+    bubbletea: [0.85, 0.9, 1, 1.05, 1.15, 1.2, 1.25, 1.25, 1.05, 0.95, 0.9, 0.85],
+    brunch:    [0.95, 0.95, 1.05, 1.1, 1.1, 1, 0.95, 0.95, 1.05, 1.1, 1, 1],
+    pub:       [1.1, 1, 1, 1, 1, 1.05, 1.1, 1.1, 1, 1.05, 1.1, 1.2],
   };
 
   // ---------- 동네(상권) ----------
@@ -144,9 +207,9 @@
   // ---------- 회사 ----------
   const LOGO_SHAPES = ['circle', 'square', 'leaf', 'cloud', 'heart', 'star'];
   const AI_PROFILES = [
-    { name: '구름커피',       color: '#7fa7d6', logo: 'cloud', focus: ['cafe', 'dessert'], pricing: 1.0,  aggr: 1.0,  style: 'nordic' },
-    { name: '보리밭베이커리', color: '#e3a07f', logo: 'leaf',  focus: ['bakery', 'cafe'],  pricing: 0.95, aggr: 0.85, style: 'wood' },
-    { name: '한그릇푸드',     color: '#86b98f', logo: 'square', focus: ['noodle', 'burger'], pricing: 1.05, aggr: 1.1, style: 'industrial' },
+    { name: '구름커피',       color: '#7fa7d6', logo: 'cloud', focus: ['cafe', 'dessert', 'bubbletea'], pricing: 1.0,  aggr: 1.0,  style: 'nordic' },
+    { name: '보리밭베이커리', color: '#e3a07f', logo: 'leaf',  focus: ['bakery', 'cafe', 'brunch'], pricing: 0.95, aggr: 0.85, style: 'wood' },
+    { name: '한그릇푸드',     color: '#86b98f', logo: 'square', focus: ['noodle', 'hansik', 'chinese'], pricing: 1.05, aggr: 1.1, style: 'industrial' },
   ];
 
   // ---------- 직원 ----------
@@ -383,12 +446,16 @@
       else if (s.role === 'hall') hall += eff * HALL_RATE;
       else { k += eff * cat.rate * 0.5; hall += eff * HALL_RATE * 0.5; mgr = true; }
     }
+    if (st._mi) k *= st._mi.complexity;
     if (mgr) { k *= 1.08; hall *= 1.08; }
     if (hall === 0) { hall = k * 0.6; k *= 0.7; }
     const seats = SIZES[st.size].py * 1.3;
     const seatCap = seats / cat.dwell / (1 - cat.takeout);
     return Math.max(0, Math.min(k, hall, seatCap) * st._chem);
   }
+  function seatCapOf(st) { const cat = CATS[st.cat]; return SIZES[st.size].py * 1.3 / cat.dwell / (1 - cat.takeout); }
+  // 가장 바빴던 시간에 좌석이 아니라 직원이 병목이었는지
+  function staffBound(st) { const h = st.hourLost.indexOf(Math.max(...st.hourLost)); return st.hourCap[h] < seatCapOf(st) * 0.92; }
   function teamStats(st) {
     const L = st.staff;
     const avg = (arr, k) => arr.length ? arr.reduce((a, s) => a + effStat(s, k), 0) / arr.length : 0;
@@ -478,7 +545,7 @@
 
   function unitCost(S, comp, st) {
     const cat = CATS[st.cat];
-    const base = cat.ticket / VAT * cat.cogs;
+    const base = (st._mi ? st._mi.ticket * st._mi.cost : cat.ticket * cat.cogs) / VAT;
     let idx = 0;
     for (const k in cat.recipe) {
       if (k === 'etc') { idx += cat.recipe[k]; continue; }
@@ -493,7 +560,43 @@
     let ev = 1; for (const e of st.ev) if (e.until > S.hour && STORE_EVENTS[e.kind].cogs) ev *= STORE_EVENTS[e.kind].cogs;
     return base * idx * m * waste * ev;
   }
-  function ticket(st) { return Math.round(CATS[st.cat].ticket * st.price / 1e4) * 100; }
+  function menuItems(st) { const C = CATS[st.cat]; const ids = st.menu && st.menu.length ? st.menu : defaultMenu(st.cat, st.size); return C.menu.filter(m => ids.includes(m.id)); }
+  function inSeason(m, mi) { return m.season ? m.season.includes(mi) : null; }
+  function menuInfo(S, st) {
+    const C = CATS[st.cat], items = menuItems(st), mi = S.day ? S.day.mi : 2;
+    let wsum = 0, psum = 0, csum = 0, diff = 0;
+    const segA = { res: [], off: [], uni: [], tour: [] };
+    for (const m of items) {
+      const sea = inSeason(m, mi);
+      let w = (st.sig === m.id ? 2 : 1) * (sea === true ? 1.3 : sea === false ? 0.4 : 1);
+      const af = sea === true ? 1.2 : sea === false ? 0.6 : 1;
+      wsum += w; psum += m.price * w; csum += m.cost * m.price * w; if (m.diff) diff++;
+      for (const k of SEG_KEYS) segA[k].push(m.appeal[k] * af * (st.sig === m.id ? 1.08 : 1));
+    }
+    const n = items.length, appeal = {};
+    for (const k of SEG_KEYS) {
+      const a = segA[k].slice().sort((x, y) => y - x);
+      const top = a.slice(0, 3), mean = x => x.reduce((p, q) => p + q, 0) / Math.max(1, x.length);
+      appeal[k] = (0.7 * mean(top) + 0.3 * mean(a)) * (0.9 + 0.025 * Math.min(n, 9));
+    }
+    const avg = psum / Math.max(1, wsum);
+    return { n, avg, ticket: avg * C.per, cost: csum / Math.max(1, psum), appeal, complexity: clamp(1.12 - 0.03 * n - 0.04 * diff, 0.7, 1.1), diff };
+  }
+  function refreshMenu(S, st) { st._mi = menuInfo(S, st); return st._mi; }
+  function ticket(st) { const base = st._mi ? st._mi.ticket : CATS[st.cat].ticket; return Math.round(base * st.price / 1e4) * 100; }
+  function setMenu(S, id, ids, sig) {
+    const st = S.stores.find(s => s.id === id); if (!st) return { ok: false };
+    const max = SIZES[st.size].menu;
+    if (ids.length < 2) return { ok: false, msg: '메뉴는 최소 2개가 필요해요.' };
+    if (ids.length > max) return { ok: false, msg: `${SIZES[st.size].name} 매장은 메뉴를 ${max}개까지 둘 수 있어요.` };
+    const added = ids.filter(x => !(st.menu || []).includes(x)).length;
+    const cost = added * 5e5, c = S.companies[st.owner];
+    if (c.cash < cost) return { ok: false, msg: '자금이 부족해요.' };
+    c.cash -= cost; c.cur.other -= cost;
+    st.menu = ids.slice(); st.sig = ids.includes(sig) ? sig : null;
+    refreshMenu(S, st); computeDemand(S);
+    return { ok: true, cost };
+  }
 
   function quality(S, st) {
     const comp = S.companies[st.owner];
@@ -525,7 +628,7 @@
     const pf = clamp(Math.exp(-sens * 1.8 * (st.price / 100 - 1)), 0.05, 3);
     const rf = 0.55 + 0.15 * st.rating;
     const star = 1 + ((st._star == null ? 50 : st._star) - 50) / 100 * 0.3;
-    return quality(S, st) * (1 + comp.brand[st.cat] / 110) * pf * rf * (1 + 0.06 * st.mkt) * interiorAppeal(st, seg) * archAppeal(st, seg) * star * eventMult(S, st, seg);
+    return quality(S, st) * (st._mi ? st._mi.appeal[seg] : 1) * (1 + comp.brand[st.cat] / 110) * pf * rf * (1 + 0.06 * st.mkt) * interiorAppeal(st, seg) * archAppeal(st, seg) * star * eventMult(S, st, seg);
   }
 
   // ---------- 하루 상황 ----------
@@ -593,7 +696,7 @@
         log(S, `💢 ${hoodName(S, st)} ${CATS[st.cat].name}에서 직원끼리 다툼이 있었어요. 성향이 잘 맞는 사람으로 팀을 꾸려 보세요.`, 'warn');
       }
       if ((comp.ai || st.franchise) && rnd(S) < 0.05) autoStaff(S, st, comp.ai ? 50 : 46);
-      else if (comp.isPlayer && S.autoHire && st.staff.length < 16 && st.dayLost * ticket(st) / VAT * (1 - CATS[st.cat].cogs) * 0.7 > S.minWage * 5 * BURDEN * 2 && rnd(S) < 0.25) {
+      else if (comp.isPlayer && S.autoHire && st.staff.length < 16 && staffBound(st) && st.dayLost * ticket(st) / VAT * (1 - CATS[st.cat].cogs) * 0.7 > S.minWage * 5 * BURDEN * 2 && rnd(S) < 0.25) {
         const kit = st.staff.filter(s => s.role !== 'hall').length, hall = st.staff.filter(s => s.role === 'hall').length;
         const n = makeStaff(S, kit * CATS[st.cat].rate <= hall * HALL_RATE ? 'kitchen' : 'hall', 46);
         const busiest = st.hourLost.indexOf(Math.max(...st.hourLost));
@@ -619,6 +722,7 @@
     const d = S.day; const srcs = sources(S);
     const parks = S.tiles.filter(t => t.b && t.b.k === 'park');
     for (const st of S.stores) {
+      refreshMenu(S, st);
       const ts = teamStats(st); st._skill = ts.skill; st._clean = ts.clean; st._star = ts.star;
       st.segDem = { res: 0, off: 0, uni: 0, tour: 0 };
       st._attr = {}; for (const seg of SEG_KEYS) st._attr[seg] = attraction(S, st, seg);
@@ -629,7 +733,8 @@
       const list = S.stores.filter(s => s.cat === cat);
       if (!list.length) continue;
       const w = WEATHER[S.weather.kind];
-      const catM = SEASON[cat][d.mi] * (w.cat && w.cat[cat] || 1) * (S.trends[cat] && S.trends[cat].until > S.hour ? S.trends[cat].mult : 1);
+      const C = CATS[cat];
+      const catM = (d.weekend || d.holiday ? C.weekend || 1 : 1) * (d.wd === 5 || d.wd === 6 ? C.fri || 1 : 1) * SEASON[cat][d.mi] * (w.cat && w.cat[cat] || 1) * (S.trends[cat] && S.trends[cat].until > S.hour ? S.trends[cat].mult : 1);
       for (const src of srcs) {
         const hd = S.hoods[src.h];
         const hype = 1 + hd.hype / 100 * (src.seg === 'tour' || src.seg === 'uni' ? 0.8 : 0.15) + (hd.festival > S.hour ? 0.5 : 0);
@@ -672,11 +777,13 @@
       mkt: comp.ai ? 1 : 0, owned: false, propValue: 0, arch: 'basic',
       interior: { style, tier, cond: 100, cost: cost.interior, day: dayOf(S) },
       equip: cost.equip, deposit: cost.deposit, rent: cost.rent, leaseDay: dayOf(S), opened: dayOf(S),
+      menu: opt.menu && opt.menu.length ? opt.menu.slice(0, SIZES[size].menu) : defaultMenu(cat, size), sig: opt.sig || null,
       staff: [], ev: [], buzz: [], segDem: null, _chem: 1,
       hourly: new Array(24).fill(0), hourLost: new Array(24).fill(0), hourCap: new Array(24).fill(0),
       served: 0, lost: 0, rev: 0, profit: 0, dayServed: 0, dayLost: 0, dayRev: 0, dayCost: 0,
       profitAvg: 0, lossDays: 0, rating: 3.2, m: { rev: 0, profit: 0, cust: 0 }, lm: null, supply: 'direct', facId: null,
     };
+    refreshMenu(S, st);
     S.stores.push(st);
     t.b = { k: 'store', id: st.id }; t.tree = false;
     assignSupply(S);
@@ -886,15 +993,16 @@
   }
 
   // ---------- 입지 평가 ----------
-  function fakeStore(S, cat, compId, x, y, size, style, tier) {
+  function fakeStore(S, cat, compId, x, y, size, style, tier, opt8) {
     const comp = S.companies[compId];
     return { cat, owner: compId, x, y, size: size || 2, price: 100 * (comp.ai ? comp.ai.pricing : 1), rating: 3.2, mkt: comp.ai ? 1 : 0, owned: false, arch: 'basic',
-      interior: { style: style || (comp.ai ? comp.ai.style : 'wood'), tier: tier || 2, cond: 100 }, supply: 'direct', ev: [], buzz: [], opened: -99, _skill: 50, _star: 50 };
+      interior: { style: style || (comp.ai ? comp.ai.style : 'wood'), tier: tier || 2, cond: 100 }, supply: 'direct', ev: [], buzz: [], opened: -99, _skill: 50, _star: 50, menu: (opt8 && opt8.menu) || defaultMenu(cat, size || 2), sig: null };
   }
   function lotEstimate(S, x, y, cat, compId, opt) {
     opt = opt || {};
     const d = S.day; const srcs = sources(S).filter(s => Math.abs(s.x - x) + Math.abs(s.y - y) <= REACH);
-    const fake = fakeStore(S, cat, compId, x, y, opt.size, opt.style, opt.tier);
+    const fake = fakeStore(S, cat, compId, x, y, opt.size, opt.style, opt.tier, opt);
+    refreshMenu(S, fake);
     const attr = {}; for (const seg of SEG_KEYS) attr[seg] = attraction(S, fake, seg);
     const pb = S.tiles.some(t => t.b && t.b.k === 'park' && Math.abs(t.x - x) + Math.abs(t.y - y) <= 2) ? 1.1 : 1;
     const list = S.stores.filter(s => s.cat === cat);
@@ -1276,6 +1384,13 @@
         runCoEvent(S, c.id, kind, cat);
         log(S, kind === 'collab' ? `🎁 ${c.name}이(가) ${CATS[cat].name} 콜라보 굿즈를 출시했어요. 3주간 손님이 몰릴 거예요.` : `📺 ${c.name}이(가) ${CATS[cat].name} 광고 캠페인을 시작했어요.`, 'info');
       }
+      for (const st of S.stores.filter(s => s.owner === c.id)) {
+        const mi = S.day.mi, C2 = CATS[st.cat];
+        const sea = C2.menu.filter(m => m.season && m.season.includes(mi) && !st.menu.includes(m.id));
+        st.menu = st.menu.filter(id => { const m = C2.menu.find(x => x.id === id); return !m.season || m.season.includes(mi); });
+        for (const m of sea) if (st.menu.length < SIZES[st.size].menu) st.menu.push(m.id);
+        if (st.menu.length < 2) st.menu = defaultMenu(st.cat, st.size);
+      }
       if (rnd(S) < 0.15) {
         const ss = S.stores.filter(s => s.owner === c.id);
         if (ss.length) { const st = pick(S, ss); st.ev.push({ kind: 'season', until: S.hour + 30 * 24 }); if (rnd(S) < 0.4) log(S, `🍓 ${c.name}이(가) 시즌 한정 메뉴를 내놓았어요.`, 'info'); }
@@ -1475,14 +1590,19 @@
     return s + Math.round(v).toLocaleString('ko-KR') + '원';
   }
   function serialize(S) { return JSON.stringify(S); }
-  function deserialize(str) { const S = JSON.parse(str); if (!S || S.v !== 2) throw new Error('저장 형식이 달라요'); return S; }
+  function deserialize(str) {
+    const S = JSON.parse(str); if (!S || S.v !== 2) throw new Error('저장 형식이 달라요');
+    for (const c of S.companies) for (const k of CAT_KEYS) { if (c.brand[k] == null) c.brand[k] = 0; if (c.recipe[k] == null) c.recipe[k] = 1; if (!c.fr[k]) c.fr[k] = { on: false, royalty: 0.04 }; }
+    for (const st of S.stores) { if (!st.menu) { st.menu = defaultMenu(st.cat, st.size); st.sig = null; } refreshMenu(S, st); }
+    return S;
+  }
 
   const api = {
     W, H, ROAD_EVERY, REACH, HOOD, CATS, CAT_KEYS, SIZES, INGR, SEG, SEG_KEYS, HOODS, TIERS, STYLES, STYLE_KEYS, ARCH, ARCH_KEYS,
     FAC, PUBLIC, MKT, MKT_NAME, STORE_EVENTS, CO_EVENTS, LOGO_SHAPES, ROLES, SHIFTS, WEATHER, QUESTS, BURDEN, PROFILE, SEG_HOURS,
     newGame, step, tile, isLot, hood, hoodOf, sources, population, dateOf, seasonOf, dayOf,
     openCost, interiorCost, utilMonth, propertyPrice, archCost, researchCost, upgradeCost, interiorBook, spaceScore, keyMoney,
-    unitCost, ticket, quality, interiorAppeal, hourCap, wantAt, dayDemand, teamStats, laborDay, chemistry, compat, effStat, shiftWindow, onDuty, askWage,
+    seatCapOf, staffBound, unitCost, ticket, quality, menuInfo, menuItems, refreshMenu, setMenu, defaultMenu, inSeason, interiorAppeal, hourCap, wantAt, dayDemand, teamStats, laborDay, chemistry, compat, effStat, shiftWindow, onDuty, askWage,
     openStore, closeStore, setInterior, setArch, upgradeStore, buyProperty, setHours, runStoreEvent, runCoEvent,
     hire, fire, staffAct, autoStaff, buildFacility, upgradeFacility, removeFacility, buildPublic, facRange, facCap, assignSupply,
     lotEstimate, lotPotentials, hourlyFlow, bestLot, valuation, bookValue, marketCap, loanLimit, ledgerNI,

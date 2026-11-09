@@ -31,6 +31,10 @@
       <div class="kpi hide-sm"><span class="lbl">매장</span><b id="kStores">0</b></div>
       <div class="kpi hide-sm"><span class="lbl">직원</span><b id="kStaff">0</b></div>
     </div>
+    <div class="sound" role="group" aria-label="소리">
+      <button id="btnMusic" title="배경 음악" aria-pressed="true">🎵</button>
+      <button id="btnSfx" title="효과음" aria-pressed="true">🔔</button>
+    </div>
     <div class="speed" role="group" aria-label="게임 속도">
       <button data-speed="0" title="일시정지 (Space)">❚❚</button>
       <button data-speed="1" title="보통: 하루 1분 (1)">▶</button>
@@ -42,6 +46,7 @@
   <main class="stage" id="stage">
     <canvas id="map" aria-label="도시 지도"></canvas>
     <nav class="tools" id="tools" aria-label="건설 도구"></nav>
+    <section class="cat-picker" id="catPicker" hidden></section>
     <section class="quest" id="quest" aria-label="목표"></section>
     <section class="inspector" id="inspector" hidden></section>
     <div class="map-ctl">
@@ -98,6 +103,7 @@
 
 <script src="js/sim.js"></script>
 <script src="js/render.js"></script>
+<script src="js/audio.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>
