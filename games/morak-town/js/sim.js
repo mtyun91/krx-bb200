@@ -245,7 +245,7 @@
   ];
   const AVE_X = [12, 26, 40, 54, 68], AVE_Y = [14, 28, 50, 64];
   const SEA_Y = 75.5;
-  const MAP_VERSION = 'bay-2';
+  const MAP_VERSION = 'bay-3';
   // 해안선은 연속 곡선이 원본이다. 칸(바다·모래사장)은 이 곡선을 칸 중심에서 칠한 결과.
   function coastY(x) { return SEA_Y + 1.6 * Math.sin(x / 7) + 0.8 * Math.sin(x / 3.1); }
   const BEACH_W = 2.2, PROM_IN = 0.45, PROM_OUT = 0.95;   // 모래사장 폭, 산책로가 모래 쪽·땅 쪽으로 걸치는 폭(칸)
@@ -400,7 +400,7 @@
 
   // ---------- 지도 ----------
   function tile(S, x, y) { return (x < 0 || y < 0 || x >= W || y >= H) ? null : S.tiles[y * W + x]; }
-  function isLot(t) { return !!t && t.t === 'land' && !t.b && t.ref == null; }
+  function isLot(t) { return !!t && t.t === 'land' && !t.b && t.ref == null && !t.open; }
   function anchorOf(S, t) { return t && t.ref != null ? S.tiles[t.ref] : t; }
   function hoodAt(S, x, y) { const t = tile(S, x, y); return t ? t.h : 0; }
   function hood(S, t) { return S.hoods[t.h]; }
@@ -519,6 +519,8 @@
     }
     fixRoads(S);
     for (const k in LANDMARKS) { const L = LANDMARKS[k]; if (fits(S, L.x, L.y, L.w, L.d)) occupy(S, L.x, L.y, L.w, L.d, { k: 'lm', kind: k, lv: 1 }); }
+    // 랜드마크 둘레 한 칸은 비워 앞마당(광장·잔디)으로 둠: 건물에 둘러싸여 안 보이지 않게
+    for (const k in LANDMARKS) { const L = LANDMARKS[k]; if (L.mount) continue; for (let y = L.y - 1; y <= L.y + L.d; y++) for (let x = L.x - 1; x <= L.x + L.w; x++) { const t = T(x, y); if (t && t.t === 'land' && !t.b && t.ref == null && !t.bank) { t.open = k === 'forest' || k === 'univ' ? 'lawn' : 'plaza'; t.tree = false; } } }
     // 강변 공원과 해변
     for (const t of S.tiles) if (t.bank && isLot(t)) occupy(S, t.x, t.y, 1, 1, { k: 'rpark', lv: 1, v: Math.floor(rnd(S) * 3), beach: !!t.beach });
     // 동네 공원: 건물보다 먼저 자리를 잡고, 자리가 막혔으면 가까운 빈 땅으로
@@ -1217,7 +1219,9 @@
     else if (r < rainP + 0.25) kind = 'cloud';
     if (kind !== 'rain' && kind !== 'snow' && temp >= 31) kind = 'heat';
     if (kind !== 'snow' && temp <= -8) kind = 'cold';
-    return { kind, temp };
+    // 비·눈의 세기(0.15 이슬비 ~ 1 장대비). 소리와 빗줄기 양에 쓰고, 수요 계산은 아직 종류만 씀
+    const amt = kind === 'rain' || kind === 'snow' ? +(0.15 + 0.85 * Math.pow(rnd(S), 1.3)).toFixed(2) : 0;
+    return { kind, temp, amt };
   }
   const WEATHER = {
     sun:   { name: '맑음', icon: '☀️', all: 1.03 },
@@ -2360,7 +2364,7 @@
   }
 
   const api = {
-    coastY, MAP_VERSION, REF_AREA, BEACH_W,
+    coastY, riverC, MAP_VERSION, REF_AREA, BEACH_W, AVE_X, AVE_Y,
     W, H, ROAD_EVERY, REACH, HOOD, congestion, parkingScore, computeTraffic, TRAFFIC_HOURS, ARCHETYPES, DIFFICULTY, loanRate, LANDMARKS, DEPTS, DEPT_KEYS, landFactors, deptPower, hqHire, hqAct, hqSalaryAsk, rentalIncome, facCost, facValue, computeQol, hourParts, CATS, CAT_KEYS, SIZES, INGR, SEG, SEG_KEYS, HOODS, TIERS, STYLES, STYLE_KEYS, ARCH, ARCH_KEYS,
     FAC, PUBLIC, MKT, MKT_NAME, STORE_EVENTS, CO_EVENTS, LOGO_SHAPES, ROLES, SHIFTS, WEATHER, QUESTS, BURDEN, PROFILE, SEG_HOURS,
     roadComponents, newGame, step, tile, isLot, anchorOf, hood, hoodAt, nearSources, BTYPES, CLS_NAME, PROFILE_NAME, PROFILE_MULT, LINES, buildingPop, findFit, sources, population, dateOf, seasonOf, dayOf,

@@ -129,7 +129,8 @@
     const seasonIc = { spring: '🌸', summer: '🌿', autumn: '🍁', winter: '❄️' }[Sim.seasonOf(S)];
     $('date').innerHTML = `${seasonIc} ${d.year}.${d.month}.${d.day} (${d.wdName})${d.holiday ? ' <span class="chip bad">휴일</span>' : ''}`;
     $('clock').textContent = clockText(hourF());
-    $('weather').textContent = `${w.icon} ${S.weather.temp}°`;
+    const amt = S.weather.amt || 0, wn = S.weather.kind === 'rain' ? (amt < 0.4 ? ' 이슬비' : amt > 0.75 ? ' 장대비' : ' 비') : S.weather.kind === 'snow' ? (amt < 0.4 ? ' 싸락눈' : amt > 0.75 ? ' 함박눈' : ' 눈') : '';
+    $('weather').textContent = `${w.icon}${wn} ${S.weather.temp}°`;
     $('weather').title = w.name;
     $('nightSkip').hidden = !nightSkip;
   }
@@ -939,7 +940,7 @@
     R.draw(dt, modalOpen ? 1 : SPEEDS[speedIdx]);
     if (S) {
       renderClock();
-      Snd.setMood(Math.floor(hourF()) % 24, S.weather.kind);
+      Snd.setMood(Math.floor(hourF()) % 24, S.weather.kind, Sim.seasonOf(S), S.weather.amt != null ? S.weather.amt : 0.6);
       const q = Object.keys(S.quests).length;
       if (q > lastQuests && lastQuests) Snd.play('fanfare');
       lastQuests = q;
