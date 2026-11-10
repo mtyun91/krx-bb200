@@ -1,7 +1,7 @@
 # 모락모락 타운
 
 작은 가게 하나로 시작해 직원을 키우고, 공간을 꾸미고, 뜨는 동네를 찾아 프랜차이즈를 늘리고 코스닥에 상장하는 힐링 경영 게임입니다.
-개발 기준은 [DEVELOPMENT.md](DEVELOPMENT.md), 계획은 [ROADMAP.md](ROADMAP.md), 현재 상태는 [P0_STATUS.md](P0_STATUS.md), 기준 장면 검수는 [P1_REVIEW.md](P1_REVIEW.md), 그래픽 에셋 명세는 [ASSETS.md](ASSETS.md)에 있습니다.
+개발 기준은 [DEVELOPMENT.md](DEVELOPMENT.md), 계획은 [ROADMAP.md](ROADMAP.md), 현재 상태는 [P0_STATUS.md](P0_STATUS.md), 기준 장면 검수는 [P1_REVIEW.md](P1_REVIEW.md), 그래픽 에셋 명세는 [ASSETS.md](ASSETS.md), 짓기·꾸미기 에셋 주문서는 [ASSET_ORDER.md](ASSET_ORDER.md), 제미나이 주문 문구는 [ASSET_PROMPTS_GEMINI.md](ASSET_PROMPTS_GEMINI.md)에 있습니다.
 
 도시 건설과 비즈니스 시뮬레이션 장르를 참고한 오리지널 게임이며, 빌드 도구나 외부 라이브러리 없이 브라우저에서 바로 실행됩니다.
 
