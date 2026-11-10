@@ -1038,6 +1038,10 @@
 
 
   R.drawWalkerAt = function (ctx, p, w, fx, rain, paused) {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1.2, 1.2); ctx.translate(-p.x, -p.y);   // 레퍼런스 비례: 사람을 조금 더 크게
+    this._walkerBody(ctx, p, w, fx, rain, paused); ctx.restore();
+  };
+  R._walkerBody = function (ctx, p, w, fx, rain, paused) {
     const run = w.kind === 'run';
     const bob = REDUCED || paused || w.wait ? 0 : Math.abs(Math.sin(this.t / (run ? 80 : 140) + fx * 3)) * (run ? 2.2 : 1.2);
     walker(ctx, p.x, p.y, w.c, w.hair, bob, rain && w.umb && !run, paused || w.wait ? 0 : this.t / (run ? 60 : 110) + w.sp * 10);
@@ -2301,8 +2305,8 @@
   Renderer.interiorCell = function (canvas, sx, sy) {
     const L = canvas._lay; if (!L) return null;
     const dx = sx - L.ox, dy = sy - L.oy, a = dx / (L.tw / 2), b = dy / (L.th / 2);
-    const x = Math.floor((a + b) / 2), y = Math.floor((b - a) / 2);
-    return x >= 0 && y >= 0 && x < L.nx && y < L.ny ? { x, y } : null;
+    const fx = (a + b) / 2, fy = (b - a) / 2, x = Math.floor(fx), y = Math.floor(fy);
+    return fx >= 0 && fy >= 0 && fx < L.nx && fy < L.ny ? { x, y, fx, fy } : null;
   };
 
 

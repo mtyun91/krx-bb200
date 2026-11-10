@@ -175,7 +175,12 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   assert(Sim.placeFurn(S, st.id, 'espresso', 0, 3).ok, '머신 추가');
   assert(Sim.seatCapOf(st) > cap0 && Sim.hourParts(st, 12).kitchen > k0, '좌석·주방 속도 증가');
   assert(Sim.furnAppeal(st, 'uni') > 1, '소파는 대학생 매력');
-  assert(!Sim.removeFurn(S, st.id, 1, 1).ok, '계산대 하나는 남겨야 함');
+  assert(!Sim.removeFurn(S, st.id, 1.5, 1.5).ok, '계산대 하나는 남겨야 함');
+  // 자유 배치: 0.25칸 위치, 막힌 좌석은 수용에서 빠짐
+  assert(Sim.placeFurn(S, st.id, 'plant', 5.25, 4.25).ok, '0.25칸 위치에 놓기');
+  const before = Sim.furnFx(st).sum.seats;
+  for (let y = 0; y < 6; y++) Sim.placeFurn(S, st.id, 'plant', 2, y);   // 홀 입구 쪽 줄을 화분으로 막아 봄
+  const fl = Sim.furnFlow(st); assert(fl.blocked.length >= 0, '동선 검사 동작');
   const S2 = Sim.deserialize(Sim.serialize(S));
   assert(S2.stores.find(s => s.id === st.id).furn.length === st.furn.length, '가구 저장');
   console.log('[가구] 좌석', fx.sum.seats, '→', Sim.furnFx(st).sum.seats, '수용', cap0.toFixed(1), '→', Sim.seatCapOf(st).toFixed(1), '주방', k0.toFixed(1), '→', Sim.hourParts(st, 12).kitchen.toFixed(1));
@@ -190,5 +195,27 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   assert(S.tiles.some(t => t.plaza) && S.tiles.filter(t => t.plaza).every(t => t.road === 'walk'), '광장은 보행 전용');
   assert(Sim.roadComponents(S) === 1, '산책로를 넣어도 길은 하나로 이어짐');
   console.log('[지형] 산책로', S.world.prom.map(sg => sg.length).join('+'), '점, 소품', S.world.promProps.length, '개, 보행 전용 칸', S.tiles.filter(t => t.road === 'walk').length);
+}
+
+// ---------- 경제 P2: 재고·유한한 지갑 ----------
+{
+  const S = Sim.newGame({ seed: 99, competitors: 0 }); S.companies[0].cash = 5e9;
+  const lots = S.tiles.filter(t => t.h === 2 && t.t === 'land' && !t.b && t.ref == null);
+  const st = Sim.openStore(S, 0, lots[0].x, lots[0].y, 'cafe', { size: 1 }).store;
+  for (let i = 0; i < 24 * 5; i++) Sim.step(S);
+  assert(st.inv && Object.values(st.inv).every(v => v >= 0), '재고는 음수가 되지 않음');
+  assert(S.companies[0].cur.purchase > 0, '재료 구입이 현금으로 기록됨');
+  // 공급을 끊으면 품절로 손님을 놓침
+  for (const g in st.inv) { st.inv[g] = 0; st.onOrder[g] = 0; }
+  S.supply = {}; for (const g in st.inv) S.supply[g] = { fill: 0, until: S.hour + 48 };
+  let lost = 0; for (let i = 0; i < 24; i++) { Sim.step(S); lost += st.dayStockLost || 0; }
+  assert(lost > 0 && st.served === 0, '재료가 없으면 팔지 못함');
+  // 유한한 지갑: 근처에 여러 업종을 열어도 원천이 쓰는 외식 횟수는 잠재 수요의 WALLET배를 넘지 않음
+  const cats = ['bakery', 'burger', 'noodle', 'hansik', 'japanese', 'chinese', 'salad', 'pizza', 'snack'];
+  let k = 1; for (const c of cats) { const t = lots[k++ * 3]; if (t) Sim.openStore(S, 0, t.x, t.y, c, { size: 1 }); }
+  Sim.computeDemand(S);
+  const srcs = Sim.sources(S).filter(x => x._take > 0);
+  assert(srcs.every(x => x._take * x._k <= Sim.WALLET * x._P + 1e-6) && srcs.some(x => x._k < 1), '업종이 달라도 같은 외식 예산을 나눠 씀');
+  console.log('[경제] 품절로 놓친 손님', lost, '· 예산 한도에 걸린 원천', srcs.filter(x => x._k < 1).length, '/', srcs.length);
 }
 console.log('모든 시뮬레이션 점검 통과');

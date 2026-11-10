@@ -329,6 +329,8 @@
       <div class="ctl"><span class="lbl">홍보</span><div class="seg">${Sim.MKT_NAME.map((n, i) => `<button class="${st.mkt === i ? 'on' : ''}" data-act="mkt" data-arg="${i}" title="하루 ${won(Sim.MKT[i])}">${n}</button>`).join('')}</div></div>
       ${C.dlv > 0 ? `<div class="ctl"><span class="lbl">배달앱</span><div class="seg" style="max-width:170px"><button class="${st.delivery ? 'on' : ''}" data-act="dlv" data-arg="1">입점</button><button class="${!st.delivery ? 'on' : ''}" data-act="dlv" data-arg="0">안 함</button></div><span class="chip">업종 배달 비중 ${Math.round(C.dlv * 100)}%</span></div>
       <p class="hint" style="margin-top:0">배달 주문은 좌석 없이 주방만 쓰지만 주문마다 수수료 9.8%와 배달비 3,000원이 들어요. 어제 배달 ${st.dayDlv || 0}건 · 수수료 ${won(st.dayDlvFee || 0)}${st.dlvMin != null ? ` · 평균 도착 ${Math.round(st.dlvMin)}분${st.dlvLate > 0.05 ? ` <span class="down">(지연 ${Math.round(st.dlvLate * 100)}%: 환불·평점 하락)</span>` : ''}` : ''}</p>` : ''}
+      ${st.inv ? (() => { const days = Math.min(...Object.keys(st.inv).map(g => st.invUse[g] > 0 ? st.inv[g] / st.invUse[g] : 9)); return `<div class="row"><span class="lbl">재고</span><div class="seg">${[1, 2, 3, 4, 5].map(d => `<button class="${st.invDays === d ? 'on' : ''}" data-act="invdays" data-arg="${d}">${d}일치</button>`).join('')}</div></div>
+      <p class="hint" style="margin-top:0">남은 재고 약 ${days.toFixed(1)}일치 (${won(st.invValue || 0)}) · 어제 품절로 놓친 손님 ${st.dayStockLost || 0}명 · 상한 재료 ${won(st.dayWaste || 0)}. 재고를 많이 두면 품절은 줄지만 우유·고기·채소가 더 상해요.</p>${st.lossWhy && st.lossWhy.length ? `<p class="hint" style="margin-top:0">어제 손해 원인: ${st.lossWhy.map(([k, v]) => `<b>${k} ${k.includes('원') ? won(v) : v + '명'}</b>`).join(' · ')}</p>` : ''}`; })() : ''}
       <h4>${C.icon} ${C.name}의 특징</h4><ul class="traits">${(C.traits || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
       <h4>매장 이벤트</h4><div class="evgrid">${Object.entries(Sim.STORE_EVENTS).map(([k, E]) => { const on = st.ev.find(e => e.kind === k && e.until > S.hour); return `<button class="evbtn ${on ? 'on' : ''}" data-act="sevent" data-arg="${k}" ${on ? 'disabled' : ''}><b>${E.name}</b><span>${E.desc}</span><small>${on ? `진행 중 · ${Math.ceil((on.until - S.hour) / 24)}일 남음` : E.cost ? won(E.cost) : '무료'}</small></button>`; }).join('')}</div>
       <div class="rows">
@@ -432,6 +434,8 @@
       <div class="btn-row"><button class="btn primary" data-act="interior" ${comp.cash < cost ? 'disabled' : ''}>${same ? '리뉴얼 (상태 100%로)' : '새로 시공하기'} <small>${won(cost)}</small></button>${!same ? '<button class="btn" data-act="ipick" data-arg="reset">지금 그대로</button>' : ''}</div>`;
     return h;
   }
+  // 마우스 위치를 가구 중심으로 두고 0.5칸(또는 0.25칸) 격자에 맞춤
+  function furnPos(tl, c) { const F = Sim.FURN[tl.k], odd = (tl.r || 0) % 2, w = odd ? F.d : F.w, d = odd ? F.w : F.d, st2 = storeView.snap || 0.5; return { x: Math.round((c.fx - w / 2) / st2) * st2, y: Math.round((c.fy - d / 2) / st2) * st2 }; }
   const FGRP = [['base', '계산·진열'], ['kitchen', '주방 장비'], ['seat', '좌석'], ['deco', '꾸미기']];
   function svDeco(st) {
     Sim.ensureFurn(st);
@@ -441,10 +445,10 @@
     let h = `<div class="cards c3">
       <div class="stat"><span class="lbl">좌석</span><b>${fx.sum.seats}석</b><span class="d">수용 ${pct(fx.seatF - 1)}</span></div>
       <div class="stat"><span class="lbl">주방 속도</span><b class="${fx.kitF < 0.95 ? 'down' : ''}">${pct(fx.kitF - 1)}</b><span class="d">화구·머신·오븐 등급</span></div>
-      <div class="stat"><span class="lbl">꾸밈 점수</span><b>${Math.round(fx.sum.deco)}</b><span class="d">홀 ${Math.round(fx.crowd * 100)}% 사용${fx.crowd > 0.62 ? ' · 답답해요' : ''}</span></div></div>
-      <p class="hint">왼쪽 그림에서 칸을 눌러 가구를 놓아요. 왼쪽 두 줄은 <b>주방</b>, 나머지는 <b>홀</b>이고, 오른쪽 앞 모서리는 <b>입구</b>라 비워 둬야 해요. 좌석이 많으면 손님을 더 받지만 홀이 62%보다 꽉 차면 답답해서 손님이 덜 와요. 좋은 냉장고는 품질을, 좋은 화구는 조리 속도를 올려요.</p>
+      <div class="stat"><span class="lbl">꾸밈 점수</span><b>${Math.round(fx.sum.deco)}</b><span class="d">홀 ${Math.round(fx.crowd * 100)}% 사용${fx.crowd > 0.62 ? ' · 답답해요' : ''}${fx.flow.blockedSeats ? ` · <b class="down">길이 막힌 좌석 ${fx.flow.blockedSeats}석</b>` : ''}${!fx.flow.counterOk ? ' · <b class="down">계산대에 갈 수 없어요</b>' : ''}</span></div></div>
+      <p class="hint">왼쪽 그림에서 원하는 자리를 눌러 가구를 놓아요(0.5칸·0.25칸 격자, 4방향 회전). 입구에서 걸어갈 수 없는 좌석은 손님을 받지 못해요. 왼쪽 두 줄은 <b>주방</b>, 나머지는 <b>홀</b>이고, 오른쪽 앞 모서리는 <b>입구</b>라 비워 둬야 해요. 좌석이 많으면 손님을 더 받지만 홀이 62%보다 꽉 차면 답답해서 손님이 덜 와요. 좋은 냉장고는 품질을, 좋은 화구는 조리 속도를 올려요.</p>
       <p class="hint" style="margin-top:0">손님층별 매력: ${segApp}</p>
-      <div class="btn-row"><button class="btn ${tool && tool.k === 'erase' ? 'primary' : ''}" data-act="ftool" data-arg="erase">🧹 치우기</button><button class="btn ${tool && tool.r ? 'primary' : ''}" data-act="frot" ${!tool || tool.k === 'erase' ? 'disabled' : ''}>↻ 돌리기</button><button class="btn" data-act="ftool" data-arg="">선택 해제</button><button class="btn" data-act="freset">기본 배치로</button></div>`;
+      <div class="btn-row"><button class="btn ${tool && tool.k === 'erase' ? 'primary' : ''}" data-act="ftool" data-arg="erase">🧹 치우기</button><button class="btn ${tool && tool.r ? 'primary' : ''}" data-act="frot" ${!tool || tool.k === 'erase' ? 'disabled' : ''}>↻ 돌리기</button><button class="btn" data-act="fsnap">격자 ${storeView.snap === 0.25 ? '0.25칸' : '0.5칸'}</button><button class="btn" data-act="ftool" data-arg="">선택 해제</button><button class="btn" data-act="freset">기본 배치로</button></div>`;
     for (const [g, gn] of FGRP) {
       h += `<h4>${gn}</h4><div class="furn-grid">`;
       for (const k of Sim.FURN_KEYS) {
@@ -717,6 +721,7 @@
       case 'hours': if (st) { const [k, d] = arg.split(':'); const o = k === 'open' ? st.open + +d : st.open, c = k === 'close' ? st.close + +d : st.close; result(Sim.setHours(S, st.id, o, c)); } break;
       case 'mkt': if (st) { st.mkt = +arg; Sim.computeDemand(S); } break;
       case 'dlv': if (st) st.delivery = arg === '1'; break;
+      case 'invdays': if (st) result(Sim.setInvDays(S, st.id, +arg)); break;
       case 'tab': tab = arg; renderTabs(); $('panel').classList.add('open'); break;
       case 'hqhire': { const r = Sim.hqHire(S, +arg); result(r); if (r.ok) Snd.play('hire'); break; }
       case 'hqdept': { const [id, d] = arg.split(':'); result(Sim.hqAct(S, +id, 'dept', d)); break; }
@@ -729,7 +734,8 @@
       case 'buyprop': if (st) result(Sim.buyProperty(S, st.id), '건물을 샀어요! 이제 월세가 들지 않고, 건축 양식을 바꿀 수 있어요.'); break;
       case 'arch': if (st) { const r = Sim.setArch(S, st.id, arg); result(r); if (r.ok) { R.pop(st.x, st.y); Snd.play('build'); } } break;
       case 'ftool': storeView.ftool = arg ? { k: arg, r: 0 } : null; break;
-      case 'frot': if (storeView.ftool) storeView.ftool.r = storeView.ftool.r ? 0 : 1; break;
+      case 'frot': if (storeView.ftool) storeView.ftool.r = ((storeView.ftool.r || 0) + 1) % 4; break;
+      case 'fsnap': storeView.snap = storeView.snap === 0.25 ? 0.5 : 0.25; break;
       case 'freset': if (st) { if (armed === 'freset') { armed = null; result(Sim.resetFurn(S, st.id)); } else arm('freset'); } break;
       case 'ipick': if (arg === 'reset') storeView.pick = null; else { const [k, v] = arg.split(':'); storeView.pick[k] = k === 'style' ? v : +v; } break;
       case 'interior': if (st && storeView.pick) { result(Sim.setInterior(S, st.id, storeView.pick.style, storeView.pick.tier)); storeView.pick = null; } break;
@@ -844,10 +850,11 @@
       if (!storeView || storeView.tab !== 'deco' || !storeView.ftool) return;
       const st = viewStore(), c = Renderer.interiorCell(sc, e.offsetX, e.offsetY); if (!st || !c) return;
       const tl = storeView.ftool;
-      const r = tl.k === 'erase' ? Sim.removeFurn(S, st.id, c.x, c.y) : Sim.placeFurn(S, st.id, tl.k, c.x, c.y, tl.r);
+      const gp = furnPos(tl, c);
+      const r = tl.k === 'erase' ? Sim.removeFurn(S, st.id, c.fx, c.fy) : Sim.placeFurn(S, st.id, tl.k, gp.x, gp.y, tl.r);
       result(r); if (r.ok) Snd.play(tl.k === 'erase' ? 'click' : 'build'); renderStoreView();
     });
-    sc.addEventListener('contextmenu', e => { if (storeView && storeView.tab === 'deco') { e.preventDefault(); if (storeView.ftool && storeView.ftool.k !== 'erase') { storeView.ftool.r = storeView.ftool.r ? 0 : 1; renderStoreView(); } } });
+    sc.addEventListener('contextmenu', e => { if (storeView && storeView.tab === 'deco') { e.preventDefault(); if (storeView.ftool && storeView.ftool.k !== 'erase') { storeView.ftool.r = ((storeView.ftool.r || 0) + 1) % 4; renderStoreView(); } } });
     $('svClose').addEventListener('click', closeStoreView);
     $('storeModal').addEventListener('click', e => { if (e.target.id === 'storeModal') closeStoreView(); });
     $('catPicker').addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if (!b) return; Snd.play('click'); if (b.dataset.pick === 'close') { pickerOpen = false; renderPicker(); renderTools(); } else setTool('store:' + b.dataset.pick); });
@@ -947,7 +954,7 @@
       if (S.news.length && S.news[0] !== lastNews) { if (lastNews && S.news[0].kind === 'good') Snd.play('news'); lastNews = S.news[0]; }
     }
     renderUi();
-    if (storeView) { const st = viewStore(); sceneT += dt; if (st) { const ed = storeView.tab === 'deco', tl = storeView.ftool, fc = storeView.fcell; Renderer.drawInterior($('svScene'), S, st, { hour: Math.floor(hourF()) % 24, t: sceneT, hoverStaff, edit: ed, ghost: ed && tl && fc && tl.k !== 'erase' ? { k: tl.k, x: fc.x, y: fc.y, r: tl.r } : null, erase: ed && tl && fc && tl.k === 'erase' ? fc : null }); } }
+    if (storeView) { const st = viewStore(); sceneT += dt; if (st) { const ed = storeView.tab === 'deco', tl = storeView.ftool, fc = storeView.fcell; Renderer.drawInterior($('svScene'), S, st, { hour: Math.floor(hourF()) % 24, t: sceneT, hoverStaff, edit: ed, ghost: ed && tl && fc && tl.k !== 'erase' ? Object.assign({ k: tl.k, r: tl.r }, furnPos(tl, fc)) : null, erase: ed && tl && fc && tl.k === 'erase' ? fc : null }); } }
     requestAnimationFrame(frame);
   }
 

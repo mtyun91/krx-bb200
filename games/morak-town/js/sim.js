@@ -6,7 +6,7 @@
 
   const W = 80, H = 80, ROAD_EVERY = 4, REACH = 7, HOOD = 11;
   const START = Date.UTC(2027, 2, 1);
-  const OUTSIDE = 0.65;
+  const OUTSIDE = 0.65, WALLET = 0.14;
   const BURDEN = 1.18;          // 4대보험·주휴수당 등 사업주 부담 포함 배율
   const VAT = 1.1, CARD_FEE = 0.011;
   const HALL_RATE = 36;          // 홀 직원 1명이 1시간에 응대하는 손님
@@ -184,15 +184,15 @@
     house:     { cls: 'res', name: '단독주택',      seg: 'res',  prof: 'family',  inc: 1.0,  fp: [[1, 1]], floors: [1, 2], popPer: 6 },
     hanok:     { cls: 'res', name: '타운하우스',    seg: 'res',  prof: 'family',  inc: 1.15, fp: [[1, 1], [2, 1]], floors: [2, 3], popPer: 2.5, tourPop: 12 },
     villa:     { cls: 'res', name: '다세대 빌라',   seg: 'res',  prof: 'family',  inc: 0.85, fp: [[1, 1]], floors: [3, 5], popPer: 7 },
-    oneroom:   { cls: 'res', name: '원룸·오피스텔', seg: 'res',  prof: 'single',  inc: 0.8,  fp: [[1, 1], [2, 1]], floors: [3, 6], popPer: 10.5 },
-    apt:       { cls: 'res', name: '아파트',        seg: 'res',  prof: 'family',  inc: 1.15, fp: [[2, 1], [2, 2], [3, 1]], floors: [4, 7], popPer: 10.5 },
+    oneroom:   { cls: 'res', name: '원룸·오피스텔', seg: 'res',  prof: 'single',  inc: 0.8,  fp: [[1, 1], [2, 1]], floors: [3, 6], popPer: 7.5 },
+    apt:       { cls: 'res', name: '아파트',        seg: 'res',  prof: 'family',  inc: 1.15, fp: [[2, 1], [2, 2], [3, 1]], floors: [4, 7], popPer: 7.5 },
     luxury:    { cls: 'res', name: '고급 주택',     seg: 'res',  prof: 'rich',    inc: 2.6,  fp: [[2, 2], [2, 1]], floors: [2, 4], popPer: 2.5 },
     shop:      { cls: 'com', name: '근린상가',      seg: 'tour', prof: 'shopper', inc: 1.0,  fp: [[1, 1]], floors: [2, 4], popPer: 4 },
     alley:     { cls: 'com', name: '먹자골목 상가', seg: 'tour', prof: 'night',   inc: 1.0,  fp: [[1, 1]], floors: [1, 2], popPer: 7 },
     plaza:     { cls: 'com', name: '대로변 상가빌딩', seg: 'tour', prof: 'shopper', inc: 1.1, fp: [[2, 1], [2, 2]], floors: [3, 5], popPer: 4.8 },
     hotel:     { cls: 'com', name: '호텔',          seg: 'tour', prof: 'tourist', inc: 1.4,  fp: [[2, 1], [2, 2]], floors: [4, 7], popPer: 6.8 },
-    office:    { cls: 'off', name: '소형 사무실',   seg: 'off',  prof: 'worker',  inc: 1.0,  fp: [[1, 1]], floors: [3, 5], popPer: 11.2 },
-    tower:     { cls: 'off', name: '프라임 오피스', seg: 'off',  prof: 'worker',  inc: 1.3,  fp: [[2, 2]], floors: [6, 9], popPer: 12 },
+    office:    { cls: 'off', name: '소형 사무실',   seg: 'off',  prof: 'worker',  inc: 1.0,  fp: [[1, 1]], floors: [3, 5], popPer: 8.5 },
+    tower:     { cls: 'off', name: '프라임 오피스', seg: 'off',  prof: 'worker',  inc: 1.3,  fp: [[2, 2]], floors: [6, 9], popPer: 9 },
     cowork:    { cls: 'off', name: '공유오피스',    seg: 'off',  prof: 'young',   inc: 0.95, fp: [[1, 1], [2, 1]], floors: [3, 6], popPer: 8 },
     knowledge: { cls: 'off', name: '지식산업센터',  seg: 'off',  prof: 'worker',  inc: 1.0,  fp: [[2, 2], [3, 2]], floors: [4, 6], popPer: 8 },
     campus:    { cls: 'edu', name: '대학 건물',     seg: 'uni',  prof: 'student', inc: 0.7,  fp: [[2, 1], [2, 2]], floors: [3, 6], popPer: 10 },
@@ -523,6 +523,8 @@
     for (const k in LANDMARKS) { const L = LANDMARKS[k]; if (L.mount) continue; for (let y = L.y - 1; y <= L.y + L.d; y++) for (let x = L.x - 1; x <= L.x + L.w; x++) { const t = T(x, y); if (t && t.t === 'land' && !t.b && t.ref == null && !t.bank) { t.open = k === 'forest' || k === 'univ' ? 'lawn' : 'plaza'; t.tree = false; } } }
     // 강변 공원과 해변
     for (const t of S.tiles) if (t.bank && isLot(t)) occupy(S, t.x, t.y, 1, 1, { k: 'rpark', lv: 1, v: Math.floor(rnd(S) * 3), beach: !!t.beach });
+    // 기준 구역 블록 안 중정: 길에 닿지 않은 빈 땅 일부를 작은 정원으로 남김(계획서 1.2-7 여백)
+    for (const t of S.tiles) { if (t.h !== 12 || !isLot(t)) continue; const nearRoad = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const n = T(t.x + dx, t.y + dy); return n && n.t === 'road'; }); if (!nearRoad && rnd(S) < 0.35) { t.open = 'lawn'; t.tree = rnd(S) < 0.6; } }
     // 동네 공원: 건물보다 먼저 자리를 잡고, 자리가 막혔으면 가까운 빈 땅으로
     for (const [x, y] of [[33, 33], [9, 22], [47, 44], [62, 46], [18, 60], [35, 70], [20, 18], [50, 8], [6, 46], [30, 58], [46, 68], [64, 22], [16, 32], [58, 40], [24, 44], [44, 24]]) {
       let done = false;
@@ -623,8 +625,11 @@
     }
     for (const s2 of S.stations) {
       const h = hoodAt(S, s2.x, s2.y), m = S.hoods[h].popMult, inc = S.hoods[h].income;
-      out.push({ x: s2.x, y: s2.y, seg: 'off', prof: 'worker', pop: 220 * m, income: inc, h, _s: {} }, { x: s2.x, y: s2.y, seg: 'uni', prof: 'student', pop: 80 * m, income: inc * 0.7, h, _s: {} }, { x: s2.x, y: s2.y, seg: 'tour', prof: 'shopper', pop: 60 * m, income: inc, h, _s: {} });
+      out.push({ x: s2.x, y: s2.y, seg: 'off', prof: 'worker', pop: 520 * m, income: inc, h, _s: {}, ext: 1 }, { x: s2.x, y: s2.y, seg: 'uni', prof: 'student', pop: 160 * m, income: inc * 0.7, h, _s: {}, ext: 1 }, { x: s2.x, y: s2.y, seg: 'tour', prof: 'shopper', pop: 140 * m, income: inc, h, _s: {}, ext: 1 });
     }
+    // 외곽 생활권(결정 (가)): 지도 밖 주거·직장 인구가 대로 진입로로 들어옴
+    for (const ax of AVE_X) for (const y of [0, H - 1]) { const t = tile(S, ax, y); if (t && t.t === 'road') out.push({ x: ax, y: y ? y - 2 : 2, seg: 'off', prof: 'worker', pop: 380, income: 420, h: t.h, _s: {}, ext: 1 }, { x: ax, y: y ? y - 2 : 2, seg: 'res', prof: 'family', pop: 260, income: 380, h: t.h, _s: {}, ext: 1 }); }
+    for (const ay of AVE_Y) for (const x of [0, W - 1]) { const t = tile(S, x, ay); if (t && t.t === 'road') out.push({ x: x ? x - 2 : 2, y: ay, seg: 'off', prof: 'young', pop: 380, income: 400, h: t.h, _s: {}, ext: 1 }, { x: x ? x - 2 : 2, y: ay, seg: 'res', prof: 'single', pop: 260, income: 330, h: t.h, _s: {}, ext: 1 }); }
     const G = 8, gw = Math.ceil(W / G), grid = new Array(gw * Math.ceil(H / G)).fill(null).map(() => []);
     for (const s of out) grid[Math.floor(s.y / G) * gw + Math.floor(s.x / G)].push(s);
     S._srcs = out; S._grid = { G, gw, cells: grid }; S._srcDirty = false;
@@ -1089,7 +1094,10 @@
   const DRINK_CATS = ['cafe', 'bubbletea'];
   function roomOf(st) { return ROOM[st.size]; }
   function zoneAt(st, x, y) { const [nx, ny] = roomOf(st); if (x === nx - 1 && y === ny - 1) return 'door'; return x < 2 ? 'kitchen' : 'hall'; }
-  function furnRect(f) { const F = FURN[f.k]; return f.r ? { w: F.d, d: F.w } : { w: F.w, d: F.d }; }
+  function furnRect(f) { const F = FURN[f.k]; return (f.r || 0) % 2 ? { w: F.d, d: F.w } : { w: F.w, d: F.d }; }
+  // 자유 배치(계획서 2.4): 위치는 0.25칸 단위 실수, 회전 4방향. 충돌은 사각형 겹침으로 검사
+  function fbox(f) { const r = furnRect(f); return { x0: f.x, y0: f.y, x1: f.x + r.w, y1: f.y + r.d }; }
+  const ovl = (a, b) => a.x0 < b.x1 - 1e-6 && b.x0 < a.x1 - 1e-6 && a.y0 < b.y1 - 1e-6 && b.y0 < a.y1 - 1e-6;
   // 업종·크기별 기본 배치
   function defaultFurn(cat, size) {
     const [nx, ny] = ROOM[size], L = [];
@@ -1105,21 +1113,28 @@
     if (size >= 2) L.push({ k: 'plant', x: 2, y: ny - 1 });
     return L.filter(f => furnFits({ size, furn: L }, f, f));
   }
-  function furnCells(f) { const r = furnRect(f), out = []; for (let j = 0; j < r.d; j++) for (let i = 0; i < r.w; i++) out.push([f.x + i, f.y + j]); return out; }
+  function furnCells(f) { const B = fbox(f), out = []; for (let y = Math.floor(B.y0); y < Math.ceil(B.y1 - 1e-6); y++) for (let x = Math.floor(B.x0); x < Math.ceil(B.x1 - 1e-6); x++) out.push([x, y]); return out; }
   function furnFits(st, f, ignore) {
     const F = FURN[f.k], [nx, ny] = ROOM[st.size]; if (!F) return false;
-    for (const [x, y] of furnCells(f)) {
-      if (x < 0 || y < 0 || x >= nx || y >= ny) return false;
-      const z = x === nx - 1 && y === ny - 1 ? 'door' : x < 2 ? 'kitchen' : 'hall';
-      if (z === 'door' && !F.floor) return false;
-      if (F.zone !== 'any' && F.zone !== z && z !== 'door') return false;
-      if (F.zone !== 'any' && z === 'door') return false;
-      for (const g of st.furn || []) {
-        if (g === ignore || (!!FURN[g.k].floor) !== (!!F.floor)) continue;
-        if (furnCells(g).some(([a, b]) => a === x && b === y)) return false;
-      }
-    }
+    const B = fbox(f);
+    if (B.x0 < -1e-6 || B.y0 < -1e-6 || B.x1 > nx + 1e-6 || B.y1 > ny + 1e-6) return false;
+    if (!F.floor && ovl(B, { x0: nx - 1, y0: ny - 1, x1: nx, y1: ny })) return false;      // 입구
+    if (F.zone === 'kitchen' && B.x1 > 2 + 1e-6) return false;
+    if (F.zone === 'hall' && B.x0 < 2 - 1e-6) return false;
+    for (const g of st.furn || []) { if (g === ignore || (!!FURN[g.k].floor) !== (!!F.floor)) continue; if (ovl(B, fbox(g))) return false; }
     return true;
+  }
+  // 동선 검사: 입구에서 0.25칸 격자로 걸어 갈 수 있는 곳을 찾아, 닿지 않는 좌석·계산대를 골라냄
+  function furnFlow(st) {
+    const [nx, ny] = ROOM[st.size], R2 = 4, gw = nx * R2, gh = ny * R2, block = new Uint8Array(gw * gh);
+    const solid = (st.furn || []).filter(f => !FURN[f.k].floor);
+    for (const f of solid) { const B = fbox(f); for (let y = Math.floor(B.y0 * R2); y < Math.ceil(B.y1 * R2 - 1e-6); y++) for (let x = Math.floor(B.x0 * R2); x < Math.ceil(B.x1 * R2 - 1e-6); x++) if (x >= 0 && y >= 0 && x < gw && y < gh) block[y * gw + x] = 1; }
+    const seen = new Uint8Array(gw * gh), q = [];
+    for (let y = gh - R2; y < gh; y++) for (let x = gw - R2; x < gw; x++) if (!block[y * gw + x]) { seen[y * gw + x] = 1; q.push(x, y); }
+    while (q.length) { const y = q.pop(), x = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= gw || Y >= gh) continue; const i = Y * gw + X; if (!seen[i] && !block[i]) { seen[i] = 1; q.push(X, Y); } } }
+    const reach = f => { const B = fbox(f); for (let y = Math.floor(B.y0 * R2) - 1; y <= Math.ceil(B.y1 * R2); y++) for (let x = Math.floor(B.x0 * R2) - 1; x <= Math.ceil(B.x1 * R2); x++) { if (x < 0 || y < 0 || x >= gw || y >= gh) continue; const inside = x >= B.x0 * R2 && x < B.x1 * R2 && y >= B.y0 * R2 && y < B.y1 * R2; if (!inside && seen[y * gw + x]) return true; } return false; };
+    const blocked = solid.filter(f => (FURN[f.k].seats || f.k === 'counter') && !reach(f));
+    return { blocked, blockedSeats: blocked.reduce((a, f) => a + (FURN[f.k].seats || 0), 0), counterOk: !blocked.some(f => f.k === 'counter') };
   }
   function ensureFurn(st) { if (!st.furn) st.furn = defaultFurn(st.cat, st.size); return st.furn; }
   // 가구 효과 (기본 배치일 때 모두 1이 되도록 기본 배치와 비교)
@@ -1140,10 +1155,10 @@
     let c = FXC.get(st); if (c && c.key === key) return c;
     const bk = st.cat + st.size;
     const base = BASEC[bk] || (BASEC[bk] = furnSum(st.cat, defaultFurn(st.cat, st.size)));
-    const cur = furnSum(st.cat, st.furn);
+    const cur = furnSum(st.cat, st.furn), flow = furnFlow(st); cur.seats -= flow.blockedSeats;
     c = { key, sum: cur,
       seatF: clamp(cur.seats / Math.max(1, base.seats), 0.3, 1.45),
-      kitF: (cur.counter ? 1 : 0.6) * (cur.heat ? 1 : 0.7) * (1 + cur.kit - base.kit),
+      flow, kitF: (cur.counter && flow.counterOk ? 1 : 0.6) * (cur.heat ? 1 : 0.7) * (1 + cur.kit - base.kit),
       qualF: 1 + cur.fresh - base.fresh,
       deco: cur.deco - base.deco, segs: Object.fromEntries(Object.keys(cur.segs).map(k => [k, cur.segs[k] - base.segs[k]])), crowd: furnCrowd(st), crowd0: furnCrowd({ size: st.size, furn: defaultFurn(st.cat, st.size) }) };
     FXC.set(st, c); return c;
@@ -1159,7 +1174,7 @@
     const st = S.stores.find(s => s.id === id); if (!st) return { ok: false, msg: '매장이 없어요.' };
     const F = FURN[k]; if (!F) return { ok: false, msg: '없는 가구예요.' };
     ensureFurn(st);
-    const f = { k, x, y }; if (r && F.w !== F.d) f.r = 1;
+    const f = { k, x: Math.round(x * 4) / 4, y: Math.round(y * 4) / 4 }; if (r) f.r = r % 4;
     if (!furnFits(st, f)) return { ok: false, msg: F.zone === 'kitchen' ? '주방 칸(왼쪽 두 줄)의 빈 곳에만 놓을 수 있어요.' : F.zone === 'hall' ? '홀의 빈 곳에만 놓을 수 있어요. 입구는 비워 둬야 해요.' : '빈 곳에만 놓을 수 있어요.' };
     const comp = S.companies[st.owner]; if (comp.cash < F.cost) return { ok: false, msg: '현금이 부족해요.' };
     comp.cash -= F.cost; comp.cur.capex += F.cost; st.equip += F.cost; st.furn.push(f);
@@ -1176,7 +1191,7 @@
   function removeFurn(S, id, x, y) {
     const st = S.stores.find(s => s.id === id); if (!st) return { ok: false };
     ensureFurn(st);
-    const hit = st.furn.filter(f => furnCells(f).some(([a, b]) => a === x && b === y)).sort((a, b) => (FURN[a.k].floor ? 1 : 0) - (FURN[b.k].floor ? 1 : 0))[0];
+    const hit = st.furn.filter(f => { const B = fbox(f); return x >= B.x0 && x < B.x1 && y >= B.y0 && y < B.y1; }).sort((a, b) => (FURN[a.k].floor ? 1 : 0) - (FURN[b.k].floor ? 1 : 0))[0];
     if (!hit) return { ok: false, msg: '여기엔 가구가 없어요.' };
     if (FURN[hit.k].need && st.furn.filter(f => f.k === hit.k).length <= 1) return { ok: false, msg: '계산대는 하나는 있어야 해요.' };
     st.furn.splice(st.furn.indexOf(hit), 1);
@@ -1314,7 +1329,8 @@
   }
   function computeDemand(S) {
     const d = S.day; const srcs = sources(S);
-    for (const src of srcs) src._s = {};
+    for (const src of srcs) { src._s = {}; src._take = 0; src._k = 1; }
+    const contrib = [];
     for (const st of S.stores) {
       refreshMenu(S, st);
       const ts = teamStats(st); st._skill = ts.skill; st._clean = ts.clean; st._star = ts.star;
@@ -1337,9 +1353,13 @@
       for (let i = 0; i < pairs.length; i += 3) {
         const st = pairs[i], src = pairs[i + 1], a = pairs[i + 2];
         let D = Dc.get(src); if (D == null) { D = srcDemand(S, src, cat, segM, catM); Dc.set(src, D); }
-        st.segDem[src.seg] += D * a / (src._s[cat] + OUTSIDE);
+        const v = D * a / (src._s[cat] + OUTSIDE);
+        contrib.push(st, src, v); src._take += v;
       }
     }
+    // 유한한 지갑(계획서 3.2): 한 원천이 모든 업종에서 쓰는 외식 횟수는 잠재 수요의 WALLET배를 넘지 못함.
+    for (const src of srcs) if (src._take) { let P = 0; for (const cat of CAT_KEYS) P += srcDemand(S, src, cat, segM, catDayMult(S, d, cat)); src._P = P; src._k = Math.min(1, WALLET * P / src._take); }
+    for (let i = 0; i < contrib.length; i += 3) contrib[i].segDem[contrib[i + 1].seg] += contrib[i + 2] * contrib[i + 1]._k;
   }
   function wantAt(S, st, h) {
     if (!st.segDem) return 0;
@@ -1659,12 +1679,49 @@
   }
 
   // ---------- 1시간 진행 ----------
+
+  // ---------- 재고 (계획서 3.3·3.4) ----------
+  // 식재료 묶음별 금액(원). 손님마다 레시피 비율만큼 쓰고, 모자라면 품절. 매일 밤 어제 주문분이 도착(이때 현금 지급)하고
+  // 목표 재고 일수만큼 다시 주문. 신선 재료는 하루 쓰는 양을 넘는 부분 일부가 상함(좋은 냉장고는 덜 상함).
+  const SPOIL = { milk: 0.22, meat: 0.25, veg: 0.28, bean: 0.01, flour: 0.015, etc: 0.04 };
+  function invNeed(S, comp, st) { const u = unitCost(S, comp, st), r = CATS[st.cat].recipe, o = {}; for (const g in r) o[g] = u * r[g]; return o; }
+  function ensureInv(S, st) {
+    if (st.inv || st.franchise) return;
+    const comp = S.companies[st.owner], need = invNeed(S, comp, st), guess = 60 + st.size * 25;
+    st.invDays = st.invDays || 2; st.inv = {}; st.onOrder = {}; st.invUse = {}; let cost = 0;
+    for (const g in need) { st.inv[g] = need[g] * guess * st.invDays; st.invUse[g] = need[g] * guess; cost += st.inv[g]; }
+    comp.cash -= cost; comp.cur.purchase = (comp.cur.purchase || 0) + cost; st.invValue = cost;
+  }
+  function stockCap(st, need) { let m = Infinity; for (const g in need) if (need[g] > 0) m = Math.min(m, (st.inv[g] || 0) / need[g]); return m; }
+  function useStock(st, need, n) { st._use = st._use || {}; for (const g in need) { st.inv[g] = Math.max(0, (st.inv[g] || 0) - need[g] * n); st._use[g] = (st._use[g] || 0) + need[g] * n; } }
+  function restock(S, st) {
+    if (!st.inv) return 0;
+    const comp = S.companies[st.owner], fx = st.furn ? furnFx(st) : null, keep = fx ? clamp(1 - (fx.qualF - 1) * 4, 0.6, 1) : 1;
+    let waste = 0, paid = 0;
+    for (const g in st.inv) {
+      st.invUse[g] = (st.invUse[g] || 0) * 0.65 + ((st._use && st._use[g]) || 0) * 0.35;
+      const over = Math.max(0, st.inv[g] - st.invUse[g]), sp = over * (SPOIL[g] || 0.03) * keep;
+      st.inv[g] -= sp; waste += sp;
+      const fill = (S.supply && S.supply[g] && S.supply[g].until > S.hour) ? S.supply[g].fill : 1;
+      const got = (st.onOrder[g] || 0) * fill; st.inv[g] += got; paid += got;
+      st.onOrder[g] = Math.max(0, (st.invDays + 1) * st.invUse[g] - st.inv[g]);
+    }
+    st._use = {};
+    comp.cash -= paid; comp.cur.purchase = (comp.cur.purchase || 0) + paid;
+    st.dayWaste = waste; st.invValue = Object.values(st.inv).reduce((a, b) => a + b, 0);
+    return waste;
+  }
+  function setInvDays(S, id, d) { const st = S.stores.find(s => s.id === id); if (!st) return { ok: false }; st.invDays = clamp(Math.round(d), 1, 5); return { ok: true, msg: `발주 기준을 ${st.invDays}일치 재고로 바꿨어요.` }; }
+  function supplyShock(S) {
+    S.supply = S.supply || {};
+    if (rnd(S) < 0.012) { const gs = ['milk', 'meat', 'veg', 'bean', 'flour'], g = gs[Math.floor(rnd(S) * gs.length)]; S.supply[g] = { fill: 0.5, until: S.hour + 24 * 7 }; log(S, `📦 ${INGR[g].name} 공급이 한 주 동안 절반으로 줄어요. 발주 기준 일수를 늘리거나 메뉴를 바꿔 대비하세요.`, 'bad'); }
+  }
   function step(S) {
     if (S.gameOver) return { money: [], trucks: [] };
     const ev = { money: [], trucks: [], newDay: false };
     const h = S.hour % 24;
     for (const st of S.stores) {
-      if (h === 0) { st.hourly.fill(0); st.hourLost.fill(0); st.hourCap.fill(0); if (st.hourDlv) st.hourDlv.fill(0); st.dayServed = 0; st.dayLost = 0; st.dayRev = 0; st.dayCost = 0; st.dayDlv = 0; st.dayDlvFee = 0; }
+      if (h === 0) { st.hourly.fill(0); st.hourLost.fill(0); st.hourCap.fill(0); if (st.hourDlv) st.hourDlv.fill(0); st.dayServed = 0; st.dayLost = 0; st.dayRev = 0; st.dayCost = 0; st.dayDlv = 0; st.dayDlvFee = 0; st.dayStockLost = 0; }
       const comp = S.companies[st.owner];
       const isOpen = h >= st.open && h < st.close;
       const C = CATS[st.cat];
@@ -1675,9 +1732,13 @@
       const wantDine = base * (1 - C.dlv) + (st.queue || 0);
       const parts = hourParts(st, h), cap = parts.dine;
       const rnd2 = v => Math.floor(v) + (rnd(S) < v % 1 ? 1 : 0);
-      const servedDine = rnd2(Math.min(wantDine, cap));
-      const servedD = rnd2(Math.min(wantD, Math.max(0, parts.kitchen - servedDine)));
+      let servedDine = rnd2(Math.min(wantDine, cap));
+      let servedD = rnd2(Math.min(wantD, Math.max(0, parts.kitchen - servedDine)));
+      ensureInv(S, st);
+      const need = st.inv ? invNeed(S, comp, st) : null;
+      if (need) { const sc = Math.floor(stockCap(st, need)); if (servedDine + servedD > sc) { const cut = servedDine + servedD - sc; st.dayStockLost = (st.dayStockLost || 0) + cut; const cd = Math.min(servedD, cut); servedD -= cd; servedDine = Math.max(0, servedDine - (cut - cd)); } }
       const served = servedDine + servedD;
+      if (need) useStock(st, need, served);
       const lostDine = Math.max(0, wantDine - servedDine);
       st.queue = C.queue ? lostDine * 0.3 : 0;
       st.hourly[h] = served; st.hourLost[h] = lostDine * (C.queue ? 0.7 : 1) + Math.max(0, wantD - servedD); st.hourCap[h] = cap;
@@ -1712,7 +1773,7 @@
         comp.cash += royalty + margin; comp.cur.royalty += royalty + margin; comp.cur.served += served;
         st.dayCost += cogs + margin + card + wage + royalty + dlvFee;
       } else {
-        comp.cash += rev - cogs - card - wage - dlvFee;
+        comp.cash += rev - (st.inv ? 0 : cogs) - card - wage - dlvFee;   // 재고 매장은 재료값을 입고 때 냈음
         const L = comp.cur; L.rev += rev; L.cogs += cogs; L.card += card; L.wage += wage; L.dlv += dlvFee; L.served += served;
         st.dayCost += cogs + card + wage + dlvFee;
       }
@@ -1733,6 +1794,7 @@
     const d = dateOf(S, S.hour - 1);
     const dim = new Date(Date.UTC(d.year, d.month, 0)).getUTCDate();
     updateIngredients(S);
+    supplyShock(S);
     const servedBy = S.companies.map(() => { const o = {}; for (const k of CAT_KEYS) o[k] = 0; return o; });
     for (const st of S.stores) {
       const comp = S.companies[st.owner];
@@ -1742,6 +1804,9 @@
       let waste = 0;
       if (CATS[st.cat].waste && st._prod) waste = Math.max(0, st._prod - st.dayServed) * unitCost(S, comp, st) * 0.7;
       st._prod = Math.max(20, st.dayServed * 1.1);
+      const spoil = restock(S, st);
+      st.lossWhy = [['품절', st.dayStockLost || 0], ['자리·직원 부족', Math.round(st.dayLost || 0)], ['상한 재료(원)', Math.round(spoil + waste)]].filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      if (spoil && !st.franchise) comp.cur.cogs += spoil;
       const fixed = rent + util + mkt + waste;
       if (waste && !st.franchise) { comp.cur.cogs += waste; comp.cur.mkt -= 0; }
       if (st.franchise) st.dayCost += fixed;
@@ -2369,7 +2434,7 @@
     FAC, PUBLIC, MKT, MKT_NAME, STORE_EVENTS, CO_EVENTS, LOGO_SHAPES, ROLES, SHIFTS, WEATHER, QUESTS, BURDEN, PROFILE, SEG_HOURS,
     roadComponents, newGame, step, tile, isLot, anchorOf, hood, hoodAt, nearSources, BTYPES, CLS_NAME, PROFILE_NAME, PROFILE_MULT, LINES, buildingPop, findFit, sources, population, dateOf, seasonOf, dayOf,
     openCost, interiorCost, utilMonth, propertyPrice, archCost, researchCost, upgradeCost, interiorBook, spaceScore, keyMoney,
-    ROOM, FURN, FURN_KEYS, zoneAt, furnRect, furnCells, furnFits, ensureFurn, defaultFurn, furnFx, furnAppeal, placeFurn, removeFurn, resetFurn,
+    ROOM, FURN, FURN_KEYS, zoneAt, furnRect, furnCells, furnFits, ensureFurn, defaultFurn, furnFx, furnAppeal, placeFurn, removeFurn, resetFurn, furnFlow, fbox, setInvDays, invNeed, stockCap, WALLET,
     seatCapOf, staffBound, unitCost, ticket, quality, menuInfo, menuItems, refreshMenu, setMenu, defaultMenu, inSeason, interiorAppeal, hourCap, wantAt, dayDemand, teamStats, laborDay, chemistry, compat, effStat, shiftWindow, onDuty, askWage,
     openStore, closeStore, setInterior, setArch, upgradeStore, buyProperty, setHours, runStoreEvent, runCoEvent,
     hire, fire, staffAct, autoStaff, buildFacility, upgradeFacility, removeFacility, buildPublic, facRange, facCap, assignSupply,
