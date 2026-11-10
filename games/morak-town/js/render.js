@@ -6,14 +6,14 @@
   const TW = 64, TH = 32, HW = TW / 2, HH = TH / 2;
   const REDUCED = root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-  const INK = '#5e1f2b';
+  const INK = '#6b2427';
   const LW = 1.25;
 
-  const GRASS = { spring: '#b7c17a', summer: '#a3b466', autumn: '#cdad5c', winter: '#f4eeec' };
-  const GRASS2 = { spring: '#a9b56c', summer: '#94a85a', autumn: '#bf9d4f', winter: '#e9e1df' };
+  const GRASS = { spring: '#b9cf7c', summer: '#a9c66c', autumn: '#d4b465', winter: '#f4eeec' };
+  const GRASS2 = { spring: '#adc571', summer: '#9dba61', autumn: '#c8a758', winter: '#e9e1df' };
   const PAVE = '#efdcd6', ROAD = '#d8bfbe', ROAD_W = '#efe7e6';
   const TREE = {
-    spring: ['#f2b3c4', '#e895ad', '#86a35a'], summer: ['#7f9c55', '#93ad62', '#6d8a49'],
+    spring: ['#93bb62', '#f2b3c4', '#86a35a'], summer: ['#86ad58', '#9cc06a', '#6d8a49'],
     autumn: ['#e39a4a', '#d97b3f', '#c9a14a'], winter: ['#fbf8f8', '#efe9ea', '#7d9a6a'],
   };
   const WALLS = ['#a99bd9', '#e58ba3', '#e46b5f', '#e3a63c', '#d9677e', '#9ea7de', '#f0b6a8', '#8fb38a'];
@@ -335,10 +335,34 @@
     ctx.beginPath();
     for (let i = 0; i < n; i++) { const p = fpt(g, side, u0 + (u1 - u0) * (i + 0.5) / n); const ox = side === 'L' ? -1.5 : 1.5; ctx.moveTo(p.x + ox + 3, p.y + 1); ctx.arc(p.x + ox, p.y + 1, 3, 0, 7); }
     ctx.fillStyle = col; ctx.fill(); ink(ctx, 0.8);
+    if (season === 'winter') return;
+    const fl = season === 'autumn' ? ['#e46b5f', '#e3a63c'] : ['#e58ba3', '#fff8ee', '#f2d36b', '#b49be0'];
+    for (let i = 0; i < n * 2; i++) { const p = fpt(g, side, u0 + (u1 - u0) * (i + 0.3) / (n * 2)); const ox = side === 'L' ? -1.5 : 1.5; ctx.beginPath(); ctx.arc(p.x + ox + (i % 2 ? 1 : -1), p.y - 1 - (i % 3), 1.1, 0, 7); ctx.fillStyle = fl[i % fl.length]; ctx.fill(); }
+  }
+  // 덩굴: 건물 모서리를 타고 오르는 잎
+  function ivy(ctx, g, side, u, h, season) {
+    if (season === 'winter') return;
+    const p = fpt(g, side, u), col = season === 'autumn' ? '#c96a3c' : '#7d9c55', top = h * (0.55 + 0.3 * u);
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); for (let y = 0; y < top; y += 4) ctx.lineTo(p.x + Math.sin(y * 0.5) * 1.6, p.y - y); ctx.strokeStyle = '#6a7d45'; ctx.lineWidth = 0.9; ctx.stroke();
+    for (let y = 2; y < top; y += 3) { ctx.beginPath(); ctx.ellipse(p.x + Math.sin(y * 0.5) * 1.6 + (y % 2 ? 2 : -2), p.y - y, 2, 1.3, 0, 0, 7); ctx.fillStyle = y % 6 ? col : shade(col, 0.2); ctx.fill(); }
+    ctx.beginPath(); ctx.ellipse(p.x, p.y - top, 3.5, 2.4, 0, 0, 7); ctx.fillStyle = col; ctx.fill(); ink(ctx, 0.6);
   }
   // 평지붕 위 생활: 채광창, 실외기, 화분, 선베드, 비둘기
   function roofLife(R0, ctx, g, h, seed, season, night) {
     const c = up(g.c, h + 3), k = hash(seed, 5, 1);
+    // 옥상 테라스(시안): 앞 두 변 난간, 파라솔과 테이블, 화분, 빨랫줄
+    if (hash(seed, 11) < 0.55) {
+      const gi = geo(g.ax + 0.12, g.ay + 0.12, g.w - 0.24, g.d - 0.24, g.m), hh = h + 3;
+      for (const [a, b] of [[gi.L, gi.B], [gi.B, gi.R]]) { ctx.beginPath(); ctx.moveTo(a.x, a.y - hh - 4); ctx.lineTo(b.x, b.y - hh - 4); ink(ctx, 0.9); for (let i = 0; i <= 5; i++) { const x = a.x + (b.x - a.x) * i / 5, y = a.y + (b.y - a.y) * i / 5; ctx.beginPath(); ctx.moveTo(x, y - hh); ctx.lineTo(x, y - hh - 4); ink(ctx, 0.6); } }
+      if (season !== 'winter' && night < 0.5) {
+        const pc = [c[0] - 2, c[1] + 2], col = ['#e46b5f', '#b49be0', '#f2d36b', '#7fa392'][Math.floor(hash(seed, 12) * 4)];
+        ctx.beginPath(); ctx.ellipse(pc[0], pc[1] - 3, 3.6, 1.8, 0, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.6);
+        ctx.beginPath(); ctx.moveTo(pc[0], pc[1] - 3); ctx.lineTo(pc[0], pc[1] - 15); ink(ctx, 0.8);
+        ctx.beginPath(); ctx.moveTo(pc[0] - 8, pc[1] - 13); ctx.quadraticCurveTo(pc[0], pc[1] - 20, pc[0] + 8, pc[1] - 13); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); ink(ctx, 0.8);
+        for (const dx of [-5, 5]) { ctx.beginPath(); ctx.rect(pc[0] + dx - 1.2, pc[1] - 3, 2.4, 3); ctx.fillStyle = '#e3a63c'; ctx.fill(); ink(ctx, 0.5); }
+      }
+      if (hash(seed, 13) < 0.35) { const a = up(gi.T, hh + 9), b = up(gi.R, hh + 9); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.quadraticCurveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 3, b[0], b[1]); ink(ctx, 0.5); for (let i = 1; i < 5; i++) { const x = a[0] + (b[0] - a[0]) * i / 5, y = a[1] + (b[1] - a[1]) * i / 5 + 2.5; ctx.beginPath(); ctx.rect(x - 1.5, y, 3, 4); ctx.fillStyle = ['#fff8ee', '#9ea7de', '#e58ba3', '#fff8ee'][i - 1]; ctx.fill(); ink(ctx, 0.4); } }
+    }
     const gs = geo(g.ax + g.w * 0.25, g.ay + g.d * 0.25, g.w * 0.45, g.d * 0.45, 0.05);
     if (k < 0.35) { fbox(ctx, gs, h + 6, '#f6ead6', '#e9c9d6', h + 3); }
     else if (k < 0.6) { ctx.beginPath(); ctx.rect(c[0] - 7, c[1] - 6, 8, 6); ctx.fillStyle = '#efe2d0'; ctx.fill(); ink(ctx, 0.8); ctx.beginPath(); ctx.arc(c[0] - 3, c[1] - 3, 2, 0, 7); ink(ctx, 0.6); }
@@ -406,7 +430,7 @@
   function inRef(t) { const R0 = Sim.REF_AREA; return R0 && t.x >= R0.x0 && t.x <= R0.x1 && t.y >= R0.y0 && t.y <= R0.y1; }
   function roofAny(R0, ctx, g, h, col, seed, lit, snow, t, wall, season, night, def, rh) {
     let mode = def;
-    if (inRef(t)) { const r = hash(t.x, t.y, 91); mode = r < 0.6 ? 'flat' : r < 0.85 ? 'gable' : 'mansard'; }
+    { const r = hash(t.x, t.y, 91), ref = inRef(t); mode = r < (ref ? 0.6 : 0.5) ? 'flat' : r < (ref ? 0.85 : 0.82) ? 'gable' : 'mansard'; }   // 시안: 평지붕 테라스·박공 위주, 망사르드는 일부
     if (mode === 'flat') { ledgeG(ctx, g, h, snow ? '#fbf7f7' : shade(wall, 0.32)); if (hash(t.x, t.y, 92) < 0.55) scallop(ctx, g, h, '#fff4ea'); roofLife(R0, ctx, g, h, seed, season, night); }
     else if (mode === 'gable') gable(ctx, g, h, rh || 12, col, shade(wall, -0.08), snow);
     else mansard(ctx, g, h, col, seed, lit, snow);
@@ -480,7 +504,7 @@
     for (const [x, y] of [[4, 2], [12, 2], [0, 6], [8, 6], [16, 6]]) { g.beginPath(); g.ellipse(x, y, 3.4, 1.7, 0, 0, 7); g.stroke(); }
     COBBLE = ctx.createPattern(c, 'repeat'); return COBBLE;
   }
-  const ROADC = { ave: '#8e7d84', st: '#a3939a', bridge: '#8e7d84' };
+  const ROADC = { ave: '#a99ca1', st: '#ddcbc4', bridge: '#a99ca1' };   // 시안: 밝은 길(대로는 차분한 회색, 이면도로는 연한 포장)
   R.roadTile = function (ctx, t, season, edges) {
     const S = this.S, p = iso(t.x, t.y), cx = p.x, cy = p.y, winter = season === 'winter';
     const ave = t.road === 'ave', alley = t.road === 'alley', bridge = t.t === 'bridge';
@@ -522,7 +546,7 @@
       }
     }
     // 인도: 땅과 맞닿은 변을 따라 띠 + 연석, 교차로 모서리는 둥글게
-    const SW = 0.32, swCol = winter ? '#f7f1f0' : '#efe0d8';
+    const SW = 0.32, swCol = winter ? '#f7f1f0' : '#f6e7df';
     const side = { '0,-1': [-0.5, 0.5, -0.5, -0.5 + SW], '1,0': [0.5 - SW, 0.5, -0.5, 0.5], '0,1': [-0.5, 0.5, 0.5 - SW, 0.5], '-1,0': [-0.5, -0.5 + SW, -0.5, 0.5] };
     for (const [dx, dy, a, b] of edges) {
       const n = nbT(dx, dy);
@@ -637,6 +661,7 @@
         ctx.restore();
       } else {
         diamond(ctx, cx, cy, 1, hash(t.x, t.y) < 0.5 ? GRASS[season] : GRASS2[season]);
+        if (!winter) { const fl = season === 'autumn' ? ['#e46b5f', '#e3a63c', '#fff8ee'] : ['#e58ba3', '#fff8ee', '#f2d36b', '#b49be0']; for (let i = 0; i < 7; i++) { if (hash(t.x, t.y, 200 + i) > 0.55) continue; const fx = cx - 14 + hash(t.x, t.y, 210 + i) * 28, fy = cy - 6 + hash(t.x, t.y, 220 + i) * 12; for (let j = 0; j < 3; j++) { ctx.beginPath(); ctx.arc(fx + j * 2 - 2, fy - (j % 2), 1.1, 0, 7); ctx.fillStyle = fl[(i + j) % fl.length]; ctx.fill(); } } if (hash(t.x, t.y, 230) < 0.3) { const bx = cx - 8 + hash(t.x, t.y, 231) * 16, by = cy - 2 + hash(t.x, t.y, 232) * 4; ctx.beginPath(); ctx.arc(bx - 3, by, 3.2, 0, 7); ctx.arc(bx + 2, by - 1, 3.6, 0, 7); ctx.fillStyle = season === 'autumn' ? '#b5964a' : '#7fa35a'; ctx.fill(); ink(ctx, 0.8); } }
         ctx.strokeStyle = 'rgba(94,31,43,0.35)'; ctx.lineWidth = 0.8;
         for (let i = 0; i < 2; i++) { const gx = cx - 12 + hash(t.x, t.y, 10 + i) * 24, gy = cy - 5 + hash(t.x, t.y, 20 + i) * 10; ctx.beginPath(); ctx.moveTo(gx - 1.5, gy); ctx.lineTo(gx - 0.5, gy - 2.5); ctx.moveTo(gx + 0.5, gy); ctx.lineTo(gx + 1.5, gy - 2.5); ctx.stroke(); }
       }
@@ -646,7 +671,19 @@
   // ---------- 건물 ----------
   const GLASS = '#dcdcf4';
   const SHOP_SIGNS = ['약국', '편의점', '꽃집', '부동산', '미용실', '세탁소', '안경', '문구', '빵', '정육점', '서점', '은행'];
+  // 시안: 보이는 건물은 1~3층(일부 4층). 인구·경제는 실제 층수를 그대로 씀
+  const VCAP = { house: 2, hanok: 3, villa: 3, oneroom: 3, apt: 4, shop: 3, alley: 2, plaza: 3, hotel: 4, office: 4, tower: 4, cowork: 3, knowledge: 3, campus: 3, factory: 2 };
   R.drawBuilding = function (ctx, t, season, night, lod) {
+    const b = t.b, cap = b && VCAP[b.k];
+    if (!cap || b.lv <= cap) { this._drawBuilding(ctx, t, season, night, lod); if (cap && !lod) this.decorate(ctx, t, season); return; }
+    const lv = b.lv; b.lv = cap; try { this._drawBuilding(ctx, t, season, night, lod); if (!lod) this.decorate(ctx, t, season); } finally { b.lv = lv; }
+  };
+  R.decorate = function (ctx, t, season) {
+    const b = t.b, g = geo(t.x, t.y, b.w || 1, b.d || 1), h = fh(b.lv);
+    if (hash(t.x, t.y, 81) < 0.4) ivy(ctx, g, hash(t.x, t.y, 82) < 0.5 ? 'L' : 'R', hash(t.x, t.y, 83) < 0.5 ? 0.04 : 0.96, h, season);
+    if (hash(t.x, t.y, 84) < 0.6) hedge(ctx, g, 'R', 0.08, 0.6, season);
+  };
+  R._drawBuilding = function (ctx, t, season, night, lod) {
     const S = this.S, b = t.b, k = b.k;
     const w = b.w || 1, d = b.d || 1;
     const g = geo(t.x, t.y, w, d);
@@ -811,7 +848,7 @@
         for (let i = 1; i < 9; i++) fq(ctx, g, 'L', 0, 1, h * i / 9, h * i / 9, null, 0.4);
         winBoxes(ctx, g, 'L', 3, h - 3, b.lv, 1.6, seed, lit, '#f6ead6');
         winBoxes(ctx, g, 'R', 3, h - 3, b.lv, 1.2, seed + 2, lit, '#f6ead6');
-        ledgeG(ctx, g, h, roofSnow('#3b2228'));
+        ledgeG(ctx, g, h, roofSnow('#d9a08a'));
         roofLife(this, ctx, g, h, seed, season, night);
         break;
       }
@@ -846,13 +883,14 @@
   const FRONT_SIGNS = ['꽃집', '빵', '책방', '젤라또', '와인', '치즈', '안경', '자전거', '문구', '찻집', '레코드', '공방'];
   R.groundShop = function (ctx, g, t, hv, night) {
     const S = this.S, w = t.b.w || 1, d = t.b.d || 1;
-    if (hash(t.x, t.y, 95) > (inRef(t) ? 0.65 : 0.22)) return;
+    if (hash(t.x, t.y, 95) > (inRef(t) ? 0.75 : 0.45)) return;
     let side = null; for (let i = 0; i < w; i++) { const n = Sim.tile(S, t.x + i, t.y + d); if (n && n.t === 'road') side = 'L'; }
     if (!side) for (let j = 0; j < d; j++) { const n = Sim.tile(S, t.x + w, t.y + j); if (n && n.t === 'road') side = 'R'; }
     if (!side) return;
     const col = ['#e46b5f', '#7fa392', '#9ea7de', '#e3a63c', '#a8647a'][Math.floor(hash(t.x, t.y, 96) * 5)], glow = night > 0.3;
     fq(ctx, g, side, 0.03, 0.97, 0, 11.5, '#fff4ea', 0.8);
-    fq(ctx, g, side, 0.08, 0.6, 1.2, 9.2, glow ? '#ffe2a0' : GLASS, 0.8);
+    fq(ctx, g, side, 0.08, 0.6, 1.2, 9.2, glow ? '#ffe2a0' : '#f8deaa', 0.8);   // 시안: 낮에도 따뜻하게 들여다보이는 가게 안
+    for (let i = 0; i < 2; i++) { const q = fpt(g, side, 0.2 + i * 0.25); ctx.beginPath(); ctx.ellipse(q.x, q.y - 3.2, 2.2, 1, 0, 0, 7); ctx.fillStyle = '#e3a63c'; ctx.fill(); ctx.beginPath(); ctx.moveTo(q.x, q.y - 9); ctx.lineTo(q.x, q.y - 7.4); ctx.strokeStyle = 'rgba(107,36,39,0.6)'; ctx.lineWidth = 0.5; ctx.stroke(); ctx.beginPath(); ctx.arc(q.x, q.y - 7, 1, 0, Math.PI); ctx.fillStyle = '#e46b5f'; ctx.fill(); }
     for (let i = 1; i < 3; i++) fq(ctx, g, side, 0.08 + 0.52 * i / 3 - 0.004, 0.08 + 0.52 * i / 3 + 0.004, 1.2, 9.2, '#fff4ea', 0);
     fq(ctx, g, side, 0.68, 0.86, 0, 9.4, shade(col, -0.25), 0.8);
     fq(ctx, g, side, 0.72, 0.82, 4.5, 8.2, glow ? '#ffd88a' : GLASS, 0.5);
@@ -1117,7 +1155,7 @@
     if (top.length > 1) {
       poly2([...top, ...bot.slice().reverse()], water, 0);
       line2(top.map(([x, y]) => [x, y + 0.14]), 'rgba(255,255,255,0.6)', 1.2); line2(bot.map(([x, y]) => [x, y - 0.14]), 'rgba(255,255,255,0.6)', 1.2);
-      line2(top, INK, 1.5); line2(bot, INK, 1.5);
+      line2(top, '#efe2d6', 4); line2(bot, '#efe2d6', 4); line2(top.map(([x, y]) => [x, y - 0.06]), INK, 1.5); line2(bot.map(([x, y]) => [x, y + 0.06]), INK, 1.5); line2(top.map(([x, y]) => [x, y + 0.07]), 'rgba(107,36,39,0.4)', 0.8); line2(bot.map(([x, y]) => [x, y - 0.07]), 'rgba(107,36,39,0.4)', 0.8);
       // 섬 (여울·등대섬)
       const isl = []; for (let x = 16.7; x <= 30.3; x += 0.25) { const hi = 1.75 * Math.sqrt(Math.max(0, 1 - Math.pow((x - 23.5) / 6.8, 6))); isl.push([x, Sim.riverC(x) - hi]); }
       for (let x = 30.3; x >= 16.7; x -= 0.25) { const hi = 1.75 * Math.sqrt(Math.max(0, 1 - Math.pow((x - 23.5) / 6.8, 6))); isl.push([x, Sim.riverC(x) + hi]); }

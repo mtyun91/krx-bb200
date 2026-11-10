@@ -129,6 +129,13 @@
     const seasonIc = { spring: '🌸', summer: '🌿', autumn: '🍁', winter: '❄️' }[Sim.seasonOf(S)];
     $('date').innerHTML = `${seasonIc} ${d.year}.${d.month}.${d.day} (${d.wdName})${d.holiday ? ' <span class="chip bad">휴일</span>' : ''}`;
     $('clock').textContent = clockText(hourF());
+    { // 장면 이름(시안 상단 띠): 계절 + 때 + 그때 동네에서 일어나는 일
+      const hh = Math.floor(hourF()) % 24, se = Sim.seasonOf(S), wk = S.weather.kind, dd = Sim.dateOf(S);
+      const sn = { spring: '봄날', summer: '여름', autumn: '가을', winter: '겨울' }[se];
+      const tod = hh < 6 ? '새벽' : hh < 11 ? '아침' : hh < 14 ? '점심' : hh < 17 ? '오후' : hh < 21 ? '저녁' : '밤';
+      const act = wk === 'rain' && hh >= 16 ? '배달과 실내 손님' : wk === 'snow' ? '눈 오는 거리' : hh < 11 ? '개점 준비' : hh < 14 ? '점심 피크' : hh < 17 ? (se === 'summer' && (dd.weekend || dd.holiday) ? '해변 나들이' : '느긋한 오후') : hh < 21 ? (se === 'winter' ? '따뜻한 저녁 장사' : '저녁 손님') : (se === 'winter' ? '연말 야경' : '야경');
+      const sc = $('scene'); if (sc) sc.textContent = `${sn} ${tod} · ${act}`;
+    }
     const amt = S.weather.amt || 0, wn = S.weather.kind === 'rain' ? (amt < 0.4 ? ' 이슬비' : amt > 0.75 ? ' 장대비' : ' 비') : S.weather.kind === 'snow' ? (amt < 0.4 ? ' 싸락눈' : amt > 0.75 ? ' 함박눈' : ' 눈') : '';
     $('weather').textContent = `${w.icon}${wn} ${S.weather.temp}°`;
     $('weather').title = w.name;

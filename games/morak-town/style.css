@@ -364,7 +364,7 @@ h4 { font-size: 12.5px; color: var(--muted); font-weight: 400; margin: 12px 0 5p
 
 /* ===== v4 그림체: 자주색 잉크 선 + 크림 종이 + 따뜻한 색면 ===== */
 :root {
-  --paper: #f3ddd6; --card: #fff8ee; --ink: #5e1f2b; --muted: #9a6b6f; --line: #ecd0c8;
+  --paper: #f3ddd6; --card: #fff8ee; --ink: #6b2427; --muted: #9a6b6f; --line: #ecd0c8;
   --butter: #e3a63c; --butter-soft: #fbe6bd; --sky: #9ea7de; --sky-soft: #e8e8f7;
   --leaf: #4f7f3f; --leaf-soft: #e3ecd2; --berry: #c94f6d; --berry-soft: #f9dde2;
   --shadow: 0 4px 0 rgba(94, 31, 43, 0.22);
@@ -512,3 +512,6 @@ svg.ic { width: 1.2em; height: 1.2em; vertical-align: -0.24em; fill: none; strok
 .btn, .step, .pick, .evbtn, .style-card, .sigbtn, .seg button, .tabs button, .sv-tabs button, .toast, .modal-actions button, .furn-card b, .tool .nm, .style-card b, .cp b { font-family: var(--f-body); }
 .kpi b, .stat b, table.t td, .rows span, .bar + span { font-family: var(--f-body); font-variant-numeric: tabular-nums; }
 .kpi b, .stat b { font-weight: 700; }
+
+.scene { font-family: var(--f-display); color: var(--ink); font-size: 14px; padding-right: 10px; margin-right: 6px; border-right: 1px solid rgba(107,36,39,.25); white-space: nowrap; }
+@media (max-width: 760px) { .scene { display: none; } }
