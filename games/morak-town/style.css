@@ -507,3 +507,8 @@ svg.ic { width: 1.2em; height: 1.2em; vertical-align: -0.24em; fill: none; strok
 .tabs button svg.ic, .sv-tabs button svg.ic { width: 16px; height: 16px; }
 .modal-card h1 { text-shadow: none; }
 .ticker svg.ic { width: 15px; height: 15px; }
+
+/* 글꼴: 손글씨체(Jua)는 제목·간판에만, 숫자·버튼·표는 읽기 쉬운 본문 글꼴 */
+.btn, .step, .pick, .evbtn, .style-card, .sigbtn, .seg button, .tabs button, .sv-tabs button, .toast, .modal-actions button, .furn-card b, .tool .nm, .style-card b, .cp b { font-family: var(--f-body); }
+.kpi b, .stat b, table.t td, .rows span, .bar + span { font-family: var(--f-body); font-variant-numeric: tabular-nums; }
+.kpi b, .stat b { font-weight: 700; }

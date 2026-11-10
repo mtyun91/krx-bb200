@@ -724,7 +724,7 @@
   function newGame(opts) {
     opts = opts || {};
     const S = {
-      v: 5, rng: (opts.seed || 20261109) | 0, hour: 6,
+      v: 5, schemaVersion: 5, mapVersion: 'bay-1', contentVersion: 1, rng: (opts.seed || 20261109) | 0, hour: 6,
       tiles: [], stores: [], facs: [], companies: [], news: [], nextId: 1,
       hoods: HOODS.map(h => ({ hype: h.hype || 0, rentMult: 1 + (h.hype || 0) / 250, popMult: 1, offMult: 1, transit: false, festival: 0, income: h.income, age: h.age, qol: 50, displaced: 0, gentri: 0 })),
       stations: STATION_SITES.map(x => Object.assign({}, x)), hqCands: [], nextHype: null,
@@ -2323,6 +2323,8 @@
   function serialize(S) { return JSON.stringify(S); }
   function deserialize(str) {
     const S = JSON.parse(str); if (!S || S.v !== 5) throw new Error('예전 지도 저장이라 불러올 수 없어요');
+    // 저장 버전을 구조·지도·콘텐츠로 나눠 기록 (없으면 현재 값으로 채움)
+    if (!S.schemaVersion) S.schemaVersion = 5; if (!S.mapVersion) S.mapVersion = 'bay-1'; if (!S.contentVersion) S.contentVersion = 1;
     if (S.v === 2) {
       S.v = 3; S.stations = STATION_SITES.map(x => Object.assign({}, x)); S.hqCands = []; S.nextHype = null;
       S.hoods.forEach((hd, i) => Object.assign(hd, { income: HOODS[i].income, age: HOODS[i].age, qol: 50, displaced: 0, gentri: 0 }));

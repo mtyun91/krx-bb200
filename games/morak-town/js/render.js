@@ -1103,7 +1103,7 @@
     const sp = Math.min(2, Math.max(0.6, speed));
     for (const w of this.walkers) stepMover(S, w, dt, sp);
     this.updateShoppers(dt, sp, view, hr, wkend, mobile, lod);
-    const phase = Math.floor(this.hourF * 20) % 2;
+    const phase = this.sigPhase || 0;
     for (const c of this.cars) stepMover(S, c, dt, sp, phase);
     for (const tr of this.trucks) { tr.f += dt / 1000 * 3 * Math.min(3, speed); while (tr.f >= 1) { tr.f -= 1; tr.i++; } }
     this.trucks = this.trucks.filter(tr => tr.i < tr.p.length - 1);
@@ -1238,7 +1238,10 @@
     const hf = this.hourF, night = darkness(hf), dusk = duskTint(hf);
     const wk = S.weather ? S.weather.kind : 'sun';
     const lod = z < 0.5;
-    this.cut = z >= 1.45;
+    // 지붕 걷기: 확대할 땐 1.5배, 축소할 땐 1.35배에서 바뀜(경계에서 깜박이지 않게)
+    this.cut = this.cut ? z >= 1.35 : z >= 1.5;
+    // 신호등: 게임 시각이 아니라 화면 시간 7초마다 바뀜(하루 1분 속도에서 깜박이지 않게). 정지하면 멈춤
+    this.sigPhase = Math.floor(this.t / 7000) % 2;
     // 보이는 범위 (월드 좌표 + 타일 범위)
     const wv = { x0: this.toWorld(0, 0).x - 80, x1: this.toWorld(this.w, 0).x + 80, y0: this.toWorld(0, 0).y - 60, y1: this.toWorld(0, this.h).y + 260 };
     const tl = [[wv.x0, wv.y0], [wv.x1, wv.y0], [wv.x0, wv.y1], [wv.x1, wv.y1]].map(([x, y]) => ({ x: (y / HH + x / HW) / 2, y: (y / HH - x / HW) / 2 }));
@@ -1354,7 +1357,7 @@
       } else if (it.pine) { const p = iso(it.pine.x, it.pine.y); const k = hash(it.pine.x, it.pine.y, 8); drawPine(ctx, p.x - 6 + k * 12, p.y + 2 - k * 4, season, 0.8 + k * 0.5); if (k > 0.5 && !lod) drawPine(ctx, p.x + 8, p.y + 6, season, 0.7); }
       else if (it.lamp) { const p = it.lamp.sp || iso(it.lamp.x, it.lamp.y); this.drawLamp(ctx, p.x, p.y, night); }
       else if (it.stree) this.streetTree(ctx, it.stree.x, it.stree.y, season, it.k);
-      else if (it.tlight) { const p = iso(it.tlight.x - 0.4, it.tlight.y - 0.4); const ph = Math.floor(this.hourF * 20) % 2; this.trafficLight(ctx, p.x, p.y, ph === 0); }
+      else if (it.tlight) { const p = iso(it.tlight.x - 0.4, it.tlight.y - 0.4); this.trafficLight(ctx, p.x, p.y, (this.sigPhase || 0) === 0); }
       else if (it.terr) this.terrace(ctx, it.terr.x, it.terr.y, it.col, it.open, it.seed);
       else if (it.station) this.drawStation(ctx, it.station);
       else if (it.o) {
@@ -1428,7 +1431,7 @@
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const f of this.floaters) {
       const p = iso(f.x, f.y); const k = f.t / 1800;
-      ctx.globalAlpha = 1 - k; ctx.font = '11px "Jua", sans-serif';
+      ctx.globalAlpha = 1 - k; ctx.font = 'bold 11px "Gowun Dodum", sans-serif';
       const txt = (f.v >= 0 ? '+' : '') + Sim.won(f.v).replace('원', '');
       ctx.lineWidth = 3; ctx.strokeStyle = '#fff8ee'; ctx.strokeText(txt, p.x, p.y - 66 - k * 26);
       ctx.fillStyle = f.v >= 0 ? '#4f7f3f' : '#c94f6d'; ctx.fillText(txt, p.x, p.y - 66 - k * 26);
