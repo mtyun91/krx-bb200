@@ -1096,7 +1096,7 @@
 
 
   R.drawWalkerAt = function (ctx, p, w, fx, rain, paused) {
-    ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1.2, 1.2); ctx.translate(-p.x, -p.y);   // 레퍼런스 비례: 사람을 조금 더 크게
+    ctx.save();
     this._walkerBody(ctx, p, w, fx, rain, paused); ctx.restore();
   };
   R._walkerBody = function (ctx, p, w, fx, rain, paused) {
@@ -1109,6 +1109,22 @@
     if (w.pair) walker(ctx, p.x + 5, p.y + 1.5, w.c2, w.hair2, bob, rain && w.umb, paused ? 0 : this.t / 110 + 1.5);
     const ox = 0, oy = 0;
     if (w.dog && !w.pair) { const dx = p.x + ox + 5, dy = p.y + oy + 1; ctx.beginPath(); ctx.ellipse(dx, dy - 2, 3, 1.8, 0, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.8); ctx.beginPath(); ctx.arc(dx + 3, dy - 3.5, 1.4, 0, 7); ctx.fill(); ink(ctx, 0.7); }
+  };
+
+  // ---------- 확대할수록 보이는 거리의 작은 이야기 (확대 1.4배 이상, 보이는 칸만) ----------
+  R.micro = function (ctx, kind, x, y, sd) {
+    const tt = this.t / 1000, sh = SHIRTS[sd % 9], hr = HAIR[sd % 6], sh2 = SHIRTS[(sd + 4) % 9];
+    const kid = (kx, ky, b) => { ctx.save(); ctx.translate(kx, ky); ctx.scale(0.7, 0.7); walker(ctx, 0, 0, sh2, hr, b || 0, false, tt * 8); ctx.restore(); };
+    if (kind === 'ball') { kid(x, y, Math.abs(Math.sin(tt * 4)) * 1.5); const by = Math.abs(Math.sin(tt * 3 + sd)) * 8; ctx.beginPath(); ctx.arc(x + 6, y - 2 - by, 1.8, 0, 7); ctx.fillStyle = '#e46b5f'; ctx.fill(); ink(ctx, 0.6); }
+    else if (kind === 'chat') { walker(ctx, x - 3, y, sh, hr, 0); walker(ctx, x + 3, y + 1, sh2, HAIR[(sd + 2) % 6], Math.sin(tt * 2) > 0.6 ? 0.6 : 0); if (Math.sin(tt * 1.3 + sd) > 0.3) { ctx.beginPath(); ctx.ellipse(x, y - 17, 3.5, 2.2, 0, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.5); } }
+    else if (kind === 'dog') { const dx = Math.sin(tt * 0.8 + sd) * 4; walker(ctx, x + dx, y, sh, hr, 0, false, tt * 6); ctx.beginPath(); ctx.moveTo(x + dx + 2, y - 6); ctx.lineTo(x + dx + 7, y - 2); ctx.strokeStyle = INK; ctx.lineWidth = 0.5; ctx.stroke(); ctx.beginPath(); ctx.ellipse(x + dx + 8, y - 2, 3, 1.8, 0, 0, 7); ctx.fillStyle = sd % 2 ? '#fff8ee' : '#c9a27e'; ctx.fill(); ink(ctx, 0.7); ctx.beginPath(); ctx.arc(x + dx + 11, y - 3.5, 1.4, 0, 7); ctx.fill(); ink(ctx, 0.6); }
+    else if (kind === 'read') { poly(ctx, [[x - 8, y], [x, y + 4], [x + 8, y], [x, y - 4]], ['#e46b5f', '#9ea7de', '#f2d36b'][sd % 3], 0.7); walkerSit(ctx, x, y + 1, sh, hr); ctx.beginPath(); ctx.rect(x + 1.5, y - 7.5, 2.5, 2); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.4); }
+    else if (kind === 'cat') this.drawCat(ctx, x, y, sd);
+    else if (kind === 'garden') { walker(ctx, x, y, sh, hr, 0); ctx.beginPath(); ctx.rect(x + 2.5, y - 7, 3.5, 2.6); ctx.fillStyle = '#7fa392'; ctx.fill(); ink(ctx, 0.5); if (Math.sin(tt * 2 + sd) > 0) { ctx.beginPath(); ctx.moveTo(x + 6, y - 6.5); ctx.quadraticCurveTo(x + 9, y - 6, x + 10, y - 1); ctx.strokeStyle = '#86c3d3'; ctx.lineWidth = 0.8; ctx.stroke(); } this.planter(ctx, x + 11, y + 1, Sim.seasonOf(this.S)); }
+    else if (kind === 'stroller') { const dx = Math.sin(tt * 0.5 + sd) * 6; walker(ctx, x + dx, y, sh, hr, 0, false, tt * 6); ctx.beginPath(); ctx.ellipse(x + dx + 6, y - 4, 3, 2.4, 0, Math.PI, 0); ctx.fillStyle = sh2; ctx.fill(); ink(ctx, 0.6); ctx.beginPath(); ctx.arc(x + dx + 4.5, y - 0.5, 1, 0, 7); ctx.arc(x + dx + 7.5, y - 0.5, 1, 0, 7); ink(ctx, 0.6); }
+    else if (kind === 'busker') { walkerSit(ctx, x, y, sh, hr); ctx.beginPath(); ctx.ellipse(x + 3, y - 5, 2.6, 1.6, 0.6, 0, 7); ctx.fillStyle = '#c9a27e'; ctx.fill(); ink(ctx, 0.6); poly(ctx, [[x - 9, y + 2], [x - 3, y + 5], [x - 1, y + 4], [x - 7, y + 1]], '#5a3a2e', 0.6); if (Math.sin(tt * 3) > 0) { ctx.font = '7px "Jua",sans-serif'; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('♪', x + 6, y - 14 - (tt * 6 % 6)); } }
+    else if (kind === 'pigeons') { for (let i = 0; i < 3; i++) this.pigeon(ctx, x - 5 + i * 5, y + (i % 2) * 2, sd + i); }
+    else if (kind === 'swing') { ctx.beginPath(); ctx.moveTo(x - 9, y + 2); ctx.lineTo(x - 7, y - 16); ctx.lineTo(x + 7, y - 16); ctx.lineTo(x + 9, y + 2); ink(ctx, 1.2); const a = Math.sin(tt * 2.2 + sd) * 0.5, sx = x + Math.sin(a) * 10, sy = y - 16 + Math.cos(a) * 12; ctx.beginPath(); ctx.moveTo(x, y - 16); ctx.lineTo(sx, sy); ink(ctx, 0.6); kid(sx, sy + 3, 0); ctx.beginPath(); ctx.moveTo(x + 12, y + 3); ctx.lineTo(x + 20, y - 8); ctx.lineTo(x + 22, y - 8); ctx.lineTo(x + 22, y + 2); ctx.strokeStyle = '#e3a63c'; ctx.lineWidth = 2; ctx.stroke(); ink(ctx, 0.6); }
   };
   // ---------- 곡선 지형층 (계획서 P1) ----------
   // 원본은 S.world의 연속 좌표. 렌더와 사람 이동이 같은 곡선을 씀.
@@ -1416,7 +1432,7 @@
     const lod = this.cam.z < 0.5;
     const area = Math.max(1, (view.x1 - view.x0) * (view.y1 - view.y0));
     const mobile = this.w < 760;
-    const want = REDUCED || lod ? 0 : Math.min(mobile ? 90 : 170, Math.round(area / 14 * act));
+    const want = REDUCED || lod ? 0 : Math.min(mobile ? 90 : 170, Math.max(this.cam.z > 1.4 ? Math.round(14 * act) : 0, Math.round(area / 14 * act)));
     const wantCars = REDUCED || lod ? 0 : Math.min(mobile ? 24 : 50, Math.round(area / 60 * act));
     const roadsIn = () => { for (let i = 0; i < 40; i++) { const x = view.x0 + Math.floor(Math.random() * (view.x1 - view.x0)), y = view.y0 + Math.floor(Math.random() * (view.y1 - view.y0)); const t = Sim.tile(S, x, y); if (t && (t.t === 'road' || t.t === 'bridge')) return t; } return null; };
     const outside = m => m.x < view.x0 - 2 || m.x > view.x1 + 2 || m.y < view.y0 - 2 || m.y > view.y1 + 2;
@@ -1686,6 +1702,23 @@
     for (let y = Math.max(0, view.y0 - 4); y < view.y0; y++) for (let x = view.x0; x <= view.x1; x++) { const t = S.tiles[y * Sim.W + x]; if (t.b && (t.b.d || 1) > 1) items.push({ d: x + y + ((t.b.w || 1) - 1 + (t.b.d || 1) - 1) * 0.5 + 0.25, t }); }
     for (let y = view.y0; y <= view.y1; y++) for (let x = Math.max(0, view.x0 - 4); x < view.x0; x++) { const t = S.tiles[y * Sim.W + x]; if (t.b && (t.b.w || 1) > 1) items.push({ d: x + y + ((t.b.w || 1) - 1 + (t.b.d || 1) - 1) * 0.5 + 0.25, t }); }
     for (const s2 of S.stations) items.push({ d: s2.x + s2.y + 1.5, station: s2 });
+    // 확대 1.4배 이상: 빈 땅·공원·인도·광장에 작은 생활 장면(밤·비·눈엔 줄어듦)
+    if (z >= 1.4 && !lod) {
+      const hrM = this.hourF % 24, out = hrM > 7 && hrM < 20 && wk !== 'rain' && wk !== 'snow';
+      for (let y = view.y0; y <= view.y1; y++) for (let x = view.x0; x <= view.x1; x++) {
+        const t = S.tiles[y * Sim.W + x], h = hash(x, y, 61), sd = (x * 7 + y * 13) % 97; let kind = null;
+        if (t.b && t.b.k === 'park' && h < 0.6) kind = 'swing';
+        else if (!out && h < 0.08 && t.t === 'land' && !t.b && t.ref == null) kind = 'cat';
+        else if (!out) continue;
+        else if (t.t === 'land' && !t.b && t.ref == null && h < 0.3) kind = ['ball', 'chat', 'dog', 'read', 'cat', 'garden'][Math.floor(hash(x, y, 62) * 6)];
+        else if (t.road === 'walk' && h < 0.22) kind = ['pigeons', 'ball', 'busker', 'chat'][Math.floor(hash(x, y, 63) * 4)];
+        else if (t.t === 'road' && t.road !== 'walk' && t.road !== 'alley' && h < 0.05 && !isCross(S, t)) kind = ['chat', 'stroller', 'busker'][Math.floor(hash(x, y, 64) * 3)];
+        if (!kind) continue;
+        let ox = (hash(x, y, 65) - 0.5) * 0.4, oy = (hash(x, y, 66) - 0.5) * 0.4;
+        if (t.t === 'road') { const lf = [[0, -1], [1, 0], [0, 1], [-1, 0]].find(([dx, dy]) => { const n = Sim.tile(S, x + dx, y + dy); return n && n.t === 'land'; }); if (!lf) continue; ox = lf[0] * 0.36; oy = lf[1] * 0.36; }
+        items.push({ d: x + y + 0.12, micro: [kind, x + ox, y + oy, sd] });
+      }
+    }
     if (!lod && S.world) {
       const inT = (x, y) => x >= view.x0 - 1 && x <= view.x1 + 1 && y >= view.y0 - 1 && y <= view.y1 + 1;
       for (const pp of S.world.promProps) if (inT(pp.x, pp.y)) items.push({ d: pp.x + pp.y, pprop: pp });
@@ -1781,7 +1814,8 @@
         ctx.beginPath(); ctx.moveTo(A0.x, A0.y - hA); ctx.quadraticCurveTo((A0.x + B0.x) / 2, (A0.y + B0.y) / 2 - hA + sag * 2, B0.x, B0.y - hA); ctx.strokeStyle = 'rgba(94,31,43,0.7)'; ctx.lineWidth = 0.7; ctx.stroke();
         const cols = ['255,214,120', '255,160,170', '170,220,255', '255,240,190'];
         for (let i = 1; i < 8; i++) { const k = i / 8, x = A0.x + (B0.x - A0.x) * k, y = A0.y + (B0.y - A0.y) * k - hA + sag * 4 * k * (1 - k); const c = cols[(i + Math.round(a[0])) % 4]; ctx.beginPath(); ctx.arc(x, y + 1.2, 1.3, 0, 7); ctx.fillStyle = `rgb(${c})`; ctx.fill(); this._glows.push({ x, y: y + 1.2, r: 7, a: 0.9, c }); }
-      } else if (it.stall) { const [x, y, sv] = it.stall, q = iso(x, y); this.drawStall(ctx, q.x, q.y, sv[0], sv[1], sv[2]); }
+      } else if (it.micro) { const [k, mx, my, sd] = it.micro, q = iso(mx, my); this.micro(ctx, k, q.x, q.y, sd); }
+      else if (it.stall) { const [x, y, sv] = it.stall, q = iso(x, y); this.drawStall(ctx, q.x, q.y, sv[0], sv[1], sv[2]); }
       else if (it.dlv) { const q = iso(it.dlv.sx, it.dlv.sy); this.drawDelivery(ctx, q.x, q.y, it.dlv.rx > it.dlv.ix ? 1 : -1); }
       else if (it.fountain) { if (Sim.seasonOf(S) === 'winter') { const c = iso(it.fountain.x, it.fountain.y); drawPine(ctx, c.x, c.y, 'winter', 1.4); for (let i = 0; i < 6; i++) { const a = i * 1.1; ctx.beginPath(); ctx.arc(c.x + Math.cos(a) * 6, c.y - 12 - i * 3, 1.3, 0, 7); ctx.fillStyle = ['#e46b5f', '#f2d36b'][i % 2]; ctx.fill(); this._glows.push({ x: c.x + Math.cos(a) * 6, y: c.y - 12 - i * 3, r: 6, a: 0.8, c: '255,220,140' }); } } else this.drawPlazaFountain(ctx, it.fountain); }
       else if (it.pbench) { const q = iso(it.pbench.x, it.pbench.y); this.bench(ctx, q.x + 2, q.y + 1); if (night < 0.4 && season !== 'winter' && it.pbench.i % 2 === 0) walkerSit(ctx, q.x, q.y - 1, SHIRTS[(it.pbench.i * 3 + 1) % 9], HAIR[it.pbench.i % 6]);
@@ -2040,7 +2074,7 @@
       for (let i = 0; i < 3; i++) scl(-1.5 + i * (nx + 2) / 2.5, ny + 0.9, () => drawTree(ctx, 0, 0, se, st.id + i + 2));
       scl(nx + 0.6, ny + 0.6, () => { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -24); ink(ctx, 1.6); poly(ctx, [[-3, -24], [3, -24], [4, -30], [-4, -30]], hour >= 18 || hour < 6 ? '#ffe7a6' : '#f6ead6', 0.9); });
       // 지나가는 사람과 차 (화면 시간으로 움직임)
-      for (let i = 0; i < 4; i++) { const ph = ((t / 9000) + i * 0.27) % 1, dir = i % 2 ? 1 : -1, along = -3 + (dir > 0 ? ph : 1 - ph) * (nx + 6); const pp = i < 2 ? P(along, ny + 0.9 + (i % 2) * 0.3) : P(nx + 0.9 + (i % 2) * 0.3, along - 2); const hh2 = k2 => hash(st.id * 31 + i, k2, 5); person(ctx, pp.x, pp.y, { k: tw / 26, walk: t / 120 + i, shirt: SHIRTS[Math.floor(hh2(1) * SHIRTS.length)], pants: PANTS[Math.floor(hh2(2) * PANTS.length)], hair: HAIR[Math.floor(hh2(3) * HAIR.length)], skin: SKIN[Math.floor(hh2(4) * SKIN.length)], hs: Math.floor(hh2(5) * 4), cup: i === 1 }); }
+      for (let i = 0; i < 4; i++) { const ph = ((t / 9000) + i * 0.27) % 1, dir = i % 2 ? 1 : -1, along = -3 + (dir > 0 ? ph : 1 - ph) * (nx + 6); const pp = i < 2 ? P(along, ny + 0.9 + (i % 2) * 0.3) : P(nx + 0.9 + (i % 2) * 0.3, along - 2); const hh2 = k2 => hash(st.id * 31 + i, k2, 5); person(ctx, pp.x, pp.y, { k: tw / 30, walk: t / 120 + i, shirt: SHIRTS[Math.floor(hh2(1) * SHIRTS.length)], pants: PANTS[Math.floor(hh2(2) * PANTS.length)], hair: HAIR[Math.floor(hh2(3) * HAIR.length)], skin: SKIN[Math.floor(hh2(4) * SKIN.length)], hs: Math.floor(hh2(5) * 4), cup: i === 1 }); }
       { const ph = (t / 7000) % 1, cy = -4 + ph * (ny + 10), c = P(nx + 2.0, cy); ctx.save(); ctx.translate(c.x, c.y); ctx.scale(tw / 24, tw / 24); poly(ctx, [[-8, -2], [2, 3], [8, 0], [-2, -5]], 'rgba(107,36,39,0.15)', 0); poly(ctx, [[-7, -5], [1, -1], [1, -8], [-7, -12]], '#e46b5f', 1); poly(ctx, [[1, -1], [7, -4], [7, -11], [1, -8]], shade('#e46b5f', -0.15), 1); poly(ctx, [[-7, -12], [1, -8], [7, -11], [-1, -15]], shade('#e46b5f', 0.2), 1); ctx.restore(); }
       if (wk === 'rain' || wk === 'snow') { ctx.save(); ctx.strokeStyle = wk === 'rain' ? 'rgba(107,36,39,0.25)' : 'rgba(255,255,255,0.9)'; ctx.fillStyle = 'rgba(255,255,255,0.9)'; for (let i = 0; i < 70; i++) { const x = (hash(i, 1) * W + t * (wk === 'rain' ? -0.05 : 0.01)) % W, y = (hash(i, 2) * Hh + t * (wk === 'rain' ? 0.5 : 0.05)) % Hh; if (wk === 'rain') { ctx.beginPath(); ctx.moveTo((x + W) % W, y); ctx.lineTo((x + W) % W - 2, y + 9); ctx.stroke(); } else { ctx.beginPath(); ctx.arc((x + W) % W, y, 1.6, 0, 7); ctx.fill(); } } ctx.restore(); }
     }
@@ -2049,15 +2083,16 @@
     q([P(nx, ny), P(nx, 0), { x: P(nx, 0).x, y: P(nx, 0).y + slab }, { x: P(nx, ny).x, y: P(nx, ny).y + slab }], shade(C.floor, -0.38), 1.4);
     q([P(0, 0), P(nx, 0), P(nx, ny), P(0, ny)], C.floor, 1.4);
     // 주방 바닥: 체크 타일
-    for (let y = 0; y < ny; y++) for (let x = 0; x < 2; x++) for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2 === 0) q([P(x + i / 2, y + j / 2), P(x + (i + 1) / 2, y + j / 2), P(x + (i + 1) / 2, y + (j + 1) / 2), P(x + i / 2, y + (j + 1) / 2)], skey === 'luxury' ? '#4c4747' : '#efe6dc', 0);
-    for (let y = 0; y < ny; y++) for (let x = 0; x < 2; x++) for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2) q([P(x + i / 2, y + j / 2), P(x + (i + 1) / 2, y + j / 2), P(x + (i + 1) / 2, y + (j + 1) / 2), P(x + i / 2, y + (j + 1) / 2)], skey === 'luxury' ? '#3a3636' : '#d9cfc6', 0);
+    const KWi = Sim.kitchenW(st.size);
+    for (let y = 0; y < ny; y++) for (let x = 0; x < KWi; x++) for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2 === 0) q([P(x + i / 2, y + j / 2), P(x + (i + 1) / 2, y + j / 2), P(x + (i + 1) / 2, y + (j + 1) / 2), P(x + i / 2, y + (j + 1) / 2)], skey === 'luxury' ? '#4c4747' : '#efe6dc', 0);
+    for (let y = 0; y < ny; y++) for (let x = 0; x < KWi; x++) for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2) q([P(x + i / 2, y + j / 2), P(x + (i + 1) / 2, y + j / 2), P(x + (i + 1) / 2, y + (j + 1) / 2), P(x + i / 2, y + (j + 1) / 2)], skey === 'luxury' ? '#3a3636' : '#d9cfc6', 0);
     // 홀 바닥: 판자 줄과 엇갈린 이음매
     ctx.save(); ctx.globalAlpha = 0.32;
     const planks = skey === 'vintage' || skey === 'luxury' ? 0 : 3;
-    if (planks) for (let k = 1; k < ny * planks; k++) { const yy = k / planks; line(P(2, yy), P(nx, yy), INK, 0.6); for (let x = 2 + ((k * 0.37) % 1); x < nx; x += 1.3) line(P(x, yy), P(x, yy - 1 / planks), INK, 0.5); }
-    else for (let y = 0; y < ny; y++) for (let x = 2; x < nx; x++) if ((x + y) % 2) q([P(x, y), P(x + 1, y), P(x + 1, y + 1), P(x, y + 1)], skey === 'luxury' ? 'rgba(199,163,90,0.35)' : 'rgba(94,31,43,0.35)', 0);
+    if (planks) for (let k = 1; k < ny * planks; k++) { const yy = k / planks; line(P(KWi, yy), P(nx, yy), INK, 0.6); for (let x = KWi + ((k * 0.37) % 1); x < nx; x += 1.3) line(P(x, yy), P(x, yy - 1 / planks), INK, 0.5); }
+    else for (let y = 0; y < ny; y++) for (let x = KWi; x < nx; x++) if ((x + y) % 2) q([P(x, y), P(x + 1, y), P(x + 1, y + 1), P(x, y + 1)], skey === 'luxury' ? 'rgba(199,163,90,0.35)' : 'rgba(94,31,43,0.35)', 0);
     ctx.restore();
-    line(P(2, 0), P(2, ny), INK, 0.9);
+    line(P(KWi, 0), P(KWi, ny), INK, 0.9);
     // ----- 벽 -----
     const wallL = (u0, u1, v0, v1) => [P(0, ny * (1 - u0)), P(0, ny * (1 - u1))].flatMap((p, i) => i ? [Z(p, v0 * wallH / tw), Z(p, v1 * wallH / tw)] : [Z(p, v1 * wallH / tw), Z(p, v0 * wallH / tw)]);
     const wq = (side, u0, u1, v0, v1, col, w) => {
@@ -2138,7 +2173,7 @@
       for (let y = 0; y <= ny; y++) line(P(0, y), P(nx, y), INK, 0.7);
       ctx.restore();
       const lab = (txt, x, y) => { const c = P(x, y); signBoard(ctx, c.x, c.y, txt.length * tw * 0.2 + 10, tw * 0.26, '#fff8ee', txt); };
-      lab('주방', 1, ny - 0.5); lab('입구', nx - 0.5, ny - 0.5);
+      lab('주방', Sim.kitchenW(st.size) / 2, ny - 0.5); lab('입구', nx - 0.5, ny - 0.5);
     }
 
     }
@@ -2361,12 +2396,12 @@
     const want = open ? Math.round((st.hourly[hour] || st.hourly[(hour + 23) % 24] || 0) * cat.dwell * (1 - cat.takeout) * 0.5) : 0;
     const seated = Math.min(seats.length, (E ? Math.round(want * 0.45) : want) + (opts.visitors || 0));
     const order = seats.map((s, i) => ({ s, k: hash(st.id, i, 5) })).sort((a, b) => a.k - b.k).map(o => o.s);
-    const pk = E ? Math.max(0.4, tw / 26) : tw / 26;
+    const pk = E ? Math.max(0.3, tw / 30) : tw / 30;
     // ----- 심즈풍 움직임: 손님은 들어와 줄 서고 주문하고 자리에 앉아 먹고 나감, 직원은 길을 따라 일함 -----
     const ctr = furn.find(f => f.k === 'counter');
     const onDuty = open ? st.staff.filter(s => Sim.onDuty(st, s, hour)) : [];
     const freeK = [], freeH = [];
-    for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) if (!occ.has(x + ',' + y) && Sim.zoneAt(st, x, y) !== 'door') (x < 2 ? freeK : freeH).push([x + 0.5, y + 0.5]);
+    for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) if (!occ.has(x + ',' + y) && Sim.zoneAt(st, x, y) !== 'door') (x < Sim.kitchenW(st.size) ? freeK : freeH).push([x + 0.5, y + 0.5]);
     // 이동 격자(0.25칸): 가구 사각형은 막힘
     const RS = 4, gw = nx * RS, gh = ny * RS, navKey = JSON.stringify(furn);
     const NAV = Renderer._nav || (Renderer._nav = new Map());
@@ -2381,7 +2416,7 @@
     const dt = Math.max(0, Math.min(120, t - A0.last)) / 1000; A0.last = t;
     const door = [nx - 0.5, ny - 0.5];
     const ctrR = ctr ? Sim.fbox(ctr) : null, ctrFront = ctrR ? [ctrR.x1 + 0.3, (ctrR.y0 + ctrR.y1) / 2] : [2.4, 1.5], ctrBack = ctrR ? [Math.max(0.3, ctrR.x0 - 0.3), (ctrR.y0 + ctrR.y1) / 2] : [1, 1.5];
-    const target = open ? Math.min(E ? 5 : 14, seated + (want > seats.length * 0.6 ? 2 : 0)) : 0;
+    const target = open ? Math.min(E ? 6 : 26, seated + (want > seats.length * 0.6 ? 2 : 0)) : 0;
     const custs = A0.ag.filter(a => a.kind === 'c');
     A0.next -= dt;
     if (custs.length < target && A0.next <= 0) { const i = A0.seq++; A0.ag.push(Object.assign({ kind: 'c', st: 'enter', x: door[0], y: door[1], path: path(door[0], door[1], ctrFront[0] + 0.2, ctrFront[1]), id: i }, cust(i))); A0.next = 1.2 + hash(st.id, i, 9) * 2.5; }

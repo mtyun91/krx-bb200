@@ -753,7 +753,7 @@
   function newGame(opts) {
     opts = opts || {};
     const S = {
-      v: 6, schemaVersion: 6, mapVersion: MAP_VERSION, contentVersion: 1, rng: (opts.seed || 20261109) | 0, hour: 6,
+      v: 6, schemaVersion: 6, mapVersion: MAP_VERSION, contentVersion: 2, rng: (opts.seed || 20261109) | 0, hour: 6,
       tiles: [], stores: [], facs: [], companies: [], news: [], nextId: 1,
       hoods: HOODS.map(h => ({ hype: h.hype || 0, rentMult: 1 + (h.hype || 0) / 250, popMult: 1, offMult: 1, transit: false, festival: 0, income: h.income, age: h.age, qol: 50, displaced: 0, gentri: 0 })),
       stations: STATION_SITES.map(x => Object.assign({}, x)), hqCands: [], nextHype: null,
@@ -1076,7 +1076,9 @@
   // ---------- 매장 가구 배치 ----------
   // 매장 안은 칸 격자. 왼쪽 두 줄(x<2)이 주방, 나머지가 홀, 오른쪽 앞 모서리 한 칸은 입구.
   // zone: kitchen(주방에만) · hall(홀에만) · any. seats 좌석, kit 주방 속도, fresh 신선도(품질), deco 꾸밈 점수, segs 좋아하는 손님층
-  const ROOM = [null, [7, 5], [8, 6], [9, 7]];
+  // 매장 안 격자(칸 수). 넓이를 예전의 4배로(가로·세로 2배). KW는 주방 폭
+  const ROOM = [null, [14, 10], [16, 12], [18, 14]], KW = [0, 4, 4, 5];
+  function kitchenW(size) { return KW[size]; }
   const FURN = {
     counter:  { name: '계산대',        icon: '🧾', grp: 'base',    zone: 'any',     w: 1, d: 2, cost: 2.5e6, need: true, desc: '주문을 받는 곳. 매장마다 하나는 꼭 있어야 해요.' },
     stove1:   { name: '가정용 화구',   icon: '🔥', grp: 'kitchen', zone: 'kitchen', w: 1, d: 1, cost: 1.2e6, kit: 0.06, desc: '화구 2개. 기본 주방 속도.' },
@@ -1105,24 +1107,28 @@
   const FURN_KEYS = Object.keys(FURN);
   const DRINK_CATS = ['cafe', 'bubbletea'];
   function roomOf(st) { return ROOM[st.size]; }
-  function zoneAt(st, x, y) { const [nx, ny] = roomOf(st); if (x === nx - 1 && y === ny - 1) return 'door'; return x < 2 ? 'kitchen' : 'hall'; }
+  function zoneAt(st, x, y) { const [nx, ny] = roomOf(st); if (x === nx - 1 && y === ny - 1) return 'door'; return x < KW[st.size] ? 'kitchen' : 'hall'; }
   function furnRect(f) { const F = FURN[f.k]; return (f.r || 0) % 2 ? { w: F.d, d: F.w } : { w: F.w, d: F.d }; }
   // 자유 배치(계획서 2.4): 위치는 0.25칸 단위 실수, 회전 4방향. 충돌은 사각형 겹침으로 검사
   function fbox(f) { const r = furnRect(f); return { x0: f.x, y0: f.y, x1: f.x + r.w, y1: f.y + r.d }; }
   const ovl = (a, b) => a.x0 < b.x1 - 1e-6 && b.x0 < a.x1 - 1e-6 && a.y0 < b.y1 - 1e-6 && b.y0 < a.y1 - 1e-6;
   // 업종·크기별 기본 배치
   function defaultFurn(cat, size) {
-    const [nx, ny] = ROOM[size], L = [];
+    const [nx, ny] = ROOM[size], kw = KW[size], L = [];
     const heat = DRINK_CATS.includes(cat) ? 'espresso' : ['bakery', 'pizza', 'dessert'].includes(cat) ? 'oven' : 'stove1';
-    L.push({ k: 'fridge1', x: 0, y: 0 }, { k: heat, x: 0, y: 1 }, { k: 'sink', x: 0, y: 2 });
-    if (heat !== 'stove1' && cat !== 'cafe' && cat !== 'bubbletea') L.push({ k: 'stove1', x: 0, y: 3 });
-    L.push({ k: 'counter', x: 1, y: 1 });
-    if (['bakery', 'dessert', 'cafe'].includes(cat)) L.push({ k: 'showcase', x: 1, y: 3 });
-    const want = [0, 3, 5, 7][size];
-    let n = 0;
-    for (let y = 1; y < ny - 1 && n < want; y += 2) for (let x = 3; x < nx - 1 && n < want; x += 2) { L.push({ k: (n % 3 === 2 && x + 1 < nx - 1) ? 'table4' : 'table2', x, y }); n++; }
-    L.push({ k: 'plant', x: nx - 1, y: 0 });
-    if (size >= 2) L.push({ k: 'plant', x: 2, y: ny - 1 });
+    // 주방: 뒷벽을 따라 냉장고·화구·개수대 줄, 가운데 작업 공간, 앞쪽에 계산대
+    const line = ['fridge1', heat, heat === 'stove1' ? 'stove1' : 'stove1', 'sink', 'fridge1'];
+    if (size >= 2) line.push(heat === 'oven' ? 'oven' : 'sink');
+    if (size >= 3) line.push('fridge1');
+    line.forEach((k, i) => { if (i < ny - 1) L.push({ k, x: 0, y: i }); });
+    L.push({ k: 'counter', x: kw - 1, y: 2 }, { k: 'counter', x: kw - 1, y: 5 });
+    if (['bakery', 'dessert', 'cafe'].includes(cat)) L.push({ k: 'showcase', x: kw - 1, y: 4 });
+    // 홀: 뒷벽 소파, 넓은 통로를 두고 테이블 줄, 모서리 화분·책장
+    for (let x = kw + 2; x + 2 <= nx - 1; x += 3) L.push({ k: 'sofa', x, y: 0 });
+    const want = [0, 9, 12, 16][size]; let n = 0;
+    for (let y = 2.5; y < ny - 1.5 && n < want; y += 2.5) for (let x = kw + 2; x < nx - 1.5 && n < want; x += 2.5) { L.push({ k: n % 3 === 1 && x + 2 < nx - 1 ? 'table4' : 'table2', x, y }); n++; }
+    L.push({ k: 'plant', x: nx - 1, y: 0 }, { k: 'plant', x: kw, y: ny - 1 }, { k: 'tree', x: nx - 1, y: Math.floor(ny / 2) }, { k: 'waiting', x: nx - 3, y: ny - 1 });
+    if (size >= 2) L.push({ k: 'shelf', x: kw + 1, y: 0 }, { k: 'lamp', x: nx - 2, y: 1 });
     return L.filter(f => furnFits({ size, furn: L }, f, f));
   }
   function furnCells(f) { const B = fbox(f), out = []; for (let y = Math.floor(B.y0); y < Math.ceil(B.y1 - 1e-6); y++) for (let x = Math.floor(B.x0); x < Math.ceil(B.x1 - 1e-6); x++) out.push([x, y]); return out; }
@@ -1131,8 +1137,9 @@
     const B = fbox(f);
     if (B.x0 < -1e-6 || B.y0 < -1e-6 || B.x1 > nx + 1e-6 || B.y1 > ny + 1e-6) return false;
     if (!F.floor && ovl(B, { x0: nx - 1, y0: ny - 1, x1: nx, y1: ny })) return false;      // 입구
-    if (F.zone === 'kitchen' && B.x1 > 2 + 1e-6) return false;
-    if (F.zone === 'hall' && B.x0 < 2 - 1e-6) return false;
+    const kw = KW[st.size];
+    if (F.zone === 'kitchen' && B.x1 > kw + 1e-6) return false;
+    if (F.zone === 'hall' && B.x0 < kw - 1e-6) return false;
     for (const g of st.furn || []) { if (g === ignore || (!!FURN[g.k].floor) !== (!!F.floor)) continue; if (ovl(B, fbox(g))) return false; }
     return true;
   }
@@ -1169,14 +1176,14 @@
     const base = BASEC[bk] || (BASEC[bk] = furnSum(st.cat, defaultFurn(st.cat, st.size)));
     const cur = furnSum(st.cat, st.furn), flow = furnFlow(st); cur.seats -= flow.blockedSeats;
     c = { key, sum: cur,
-      seatF: clamp(cur.seats / Math.max(1, base.seats), 0.3, 1.45),
+      seatF: clamp(cur.seats / Math.max(1, base.seats), 0.3, 1.45) * (flow.counterOk ? 1 : 0.25),   // 계산대에 못 가면 주문을 거의 못 받음
       flow, kitF: (cur.counter && flow.counterOk ? 1 : 0.6) * (cur.heat ? 1 : 0.7) * (1 + cur.kit - base.kit),
       qualF: 1 + cur.fresh - base.fresh,
       deco: cur.deco - base.deco, segs: Object.fromEntries(Object.keys(cur.segs).map(k => [k, cur.segs[k] - base.segs[k]])), crowd: furnCrowd(st), crowd0: furnCrowd({ size: st.size, furn: defaultFurn(st.cat, st.size) }) };
     FXC.set(st, c); return c;
   }
   // 홀이 가구로 너무 꽉 차면 답답해서 매력이 떨어져요
-  function furnCrowd(st) { const [nx, ny] = ROOM[st.size]; const hall = (nx - 2) * ny - 1; let used = 0; for (const f of st.furn) if (!FURN[f.k].floor) used += furnCells(f).filter(([x]) => x >= 2).length; return used / hall; }
+  function furnCrowd(st) { const [nx, ny] = ROOM[st.size], kw = KW[st.size]; const hall = (nx - kw) * ny - 1; let used = 0; for (const f of st.furn) if (!FURN[f.k].floor) used += furnCells(f).filter(([x]) => x >= kw).length; return used / hall; }
   function furnAppeal(st, seg) {
     const fx = furnFx(st); if (!fx) return 1;
     const lim = Math.max(0.62, fx.crowd0), crowd = fx.crowd > lim ? 1 - (fx.crowd - lim) * 0.8 : 1;
@@ -1701,7 +1708,7 @@
   function invNeed(S, comp, st) { const u = unitCost(S, comp, st), r = CATS[st.cat].recipe, o = {}; for (const g in r) o[g] = u * r[g]; return o; }
   function ensureInv(S, st) {
     if (st.inv || st.franchise) return;
-    const comp = S.companies[st.owner], need = invNeed(S, comp, st), guess = 60 + st.size * 25;
+    const comp = S.companies[st.owner], need = invNeed(S, comp, st), guess = 110 + st.size * 70;   // 넓어진 매장 기준 하루 손님 예상
     st.invDays = st.invDays || 2; st.inv = {}; st.onOrder = {}; st.invUse = {}; let cost = 0;
     for (const g in need) { st.inv[g] = need[g] * guess * st.invDays; st.invUse[g] = need[g] * guess; st.onOrder[g] = need[g] * guess * 1.2; cost += st.inv[g]; }   // 첫날 밤 배송도 미리 예약(이틀째 품절 방지)
     comp.cash -= cost; comp.cur.purchase = (comp.cur.purchase || 0) + cost; st.invValue = cost;
@@ -2450,6 +2457,8 @@
     // 지도가 바뀐 저장은 이어갈 수 없음(사용자 결정: 새 도시로 시작, 예전 저장은 보관)
     if (!S || S.mapVersion !== MAP_VERSION || !S.world) throw new Error('예전 지도 저장이라 불러올 수 없어요');
     if (!S.contentVersion) S.contentVersion = 1;
+    // 콘텐츠 2: 매장 안이 4배로 넓어짐 → 예전 가구 배치는 새 기본 배치로
+    if (S.contentVersion < 2) { for (const st of S.stores) st.furn = null; S.contentVersion = 2; }
     if (S.v === 2) {
       S.v = 3; S.stations = STATION_SITES.map(x => Object.assign({}, x)); S.hqCands = []; S.nextHype = null;
       S.hoods.forEach((hd, i) => Object.assign(hd, { income: HOODS[i].income, age: HOODS[i].age, qol: 50, displaced: 0, gentri: 0 }));
@@ -2467,7 +2476,7 @@
     FAC, PUBLIC, MKT, MKT_NAME, STORE_EVENTS, CO_EVENTS, LOGO_SHAPES, ROLES, SHIFTS, WEATHER, QUESTS, BURDEN, PROFILE, SEG_HOURS,
     roadComponents, newGame, step, tile, isLot, anchorOf, hood, hoodAt, nearSources, BTYPES, CLS_NAME, PROFILE_NAME, PROFILE_MULT, LINES, buildingPop, findFit, sources, population, dateOf, seasonOf, dayOf,
     openCost, interiorCost, utilMonth, propertyPrice, archCost, researchCost, upgradeCost, interiorBook, spaceScore, keyMoney,
-    ROOM, FURN, FURN_KEYS, zoneAt, furnRect, furnCells, furnFits, ensureFurn, defaultFurn, furnFx, furnAppeal, placeFurn, removeFurn, resetFurn, ACCT_NAME, CASH_ACCT, VENDORS, setVendor, storeTitle, furnFlow, fbox, setInvDays, invNeed, stockCap, WALLET,
+    ROOM, FURN, FURN_KEYS, zoneAt, furnRect, furnCells, furnFits, ensureFurn, defaultFurn, furnFx, furnAppeal, placeFurn, removeFurn, resetFurn, kitchenW, ACCT_NAME, CASH_ACCT, VENDORS, setVendor, storeTitle, furnFlow, fbox, setInvDays, invNeed, stockCap, WALLET,
     seatCapOf, staffBound, unitCost, ticket, quality, menuInfo, menuItems, refreshMenu, setMenu, defaultMenu, inSeason, interiorAppeal, hourCap, wantAt, dayDemand, teamStats, laborDay, chemistry, compat, effStat, shiftWindow, onDuty, askWage,
     openStore, closeStore, setInterior, setArch, upgradeStore, buyProperty, setHours, runStoreEvent, runCoEvent,
     hire, fire, staffAct, autoStaff, buildFacility, upgradeFacility, removeFacility, buildPublic, facRange, facCap, assignSupply,

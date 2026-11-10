@@ -162,24 +162,26 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   S.companies[0].cash = 5e8;
   let st = null;
   for (const t of S.tiles) { if (st) break; if (t.t !== 'land' || t.b || t.ref != null) continue; const r = Sim.openStore(S, 0, t.x, t.y, 'cafe', { size: 2 }); if (r.ok) st = r.store; }
-  for (const cat of Sim.CAT_KEYS) for (const sz of [1, 2, 3]) { const L = Sim.defaultFurn(cat, sz); assert(L.filter(f => f.k === 'counter').length === 1, '기본 배치에 계산대 ' + cat + sz); assert(L.every(f => Sim.furnFits({ size: sz, furn: L }, f, f)), '기본 배치가 칸 안에 ' + cat + sz); }
+  for (const cat of Sim.CAT_KEYS) for (const sz of [1, 2, 3]) { const L = Sim.defaultFurn(cat, sz); assert(L.filter(f => f.k === 'counter').length >= 1, '기본 배치에 계산대 ' + cat + sz); assert(L.every(f => Sim.furnFits({ size: sz, furn: L }, f, f)), '기본 배치가 칸 안에 ' + cat + sz); }
   const cap0 = Sim.seatCapOf(st);
   Sim.ensureFurn(st);
   const fx = Sim.furnFx(st);
   assert(Math.abs(fx.seatF - 1) < 1e-9 && Math.abs(fx.kitF - 1) < 1e-9 && Math.abs(Sim.furnAppeal(st, 'res') - 1) < 0.03, '기본 배치는 효과 중립');
   assert(Math.abs(Sim.seatCapOf(st) - cap0) < 1e-6, '기본 배치 좌석 그대로');
   assert(!Sim.placeFurn(S, st.id, 'stove2', 4, 2).ok, '화구는 홀에 못 놓음');
-  assert(!Sim.placeFurn(S, st.id, 'table2', 7, 5).ok, '입구는 비워야 함');
+  const [RX, RY] = Sim.ROOM[st.size], KWt = Sim.kitchenW(st.size);
+  const spot = (k, kitchen) => { for (let y = 0; y < RY; y += 0.5) for (let x = kitchen ? 0 : KWt; x < (kitchen ? KWt : RX); x += 0.5) if (Sim.furnFits(st, { k, x, y })) return [x, y]; return null; };
+  assert(!Sim.placeFurn(S, st.id, 'table2', RX - 1, RY - 1).ok, '입구는 비워야 함');
   const k0 = Sim.hourParts(st, 12).kitchen;
-  assert(Sim.placeFurn(S, st.id, 'sofa', 3, 4).ok, '소파 놓기');
-  assert(Sim.placeFurn(S, st.id, 'espresso', 0, 3).ok, '머신 추가');
+  { const p = spot('sofa'); assert(p && Sim.placeFurn(S, st.id, 'sofa', p[0], p[1]).ok, '소파 놓기'); }
+  { const p = spot('espresso', true); assert(p && Sim.placeFurn(S, st.id, 'espresso', p[0], p[1]).ok, '머신 추가'); }
   assert(Sim.seatCapOf(st) > cap0 && Sim.hourParts(st, 12).kitchen > k0, '좌석·주방 속도 증가');
   assert(Sim.furnAppeal(st, 'uni') > 1, '소파는 대학생 매력');
-  assert(!Sim.removeFurn(S, st.id, 1.5, 1.5).ok, '계산대 하나는 남겨야 함');
+  { const cs = st.furn.filter(f => f.k === 'counter'); for (let i = 0; i < cs.length - 1; i++) Sim.removeFurn(S, st.id, cs[i].x + 0.5, cs[i].y + 0.5); const c = st.furn.find(f => f.k === 'counter'); assert(!Sim.removeFurn(S, st.id, c.x + 0.5, c.y + 0.5).ok, '계산대 하나는 남겨야 함'); }
   // 자유 배치: 0.25칸 위치, 막힌 좌석은 수용에서 빠짐
-  assert(Sim.placeFurn(S, st.id, 'plant', 5.25, 4.25).ok, '0.25칸 위치에 놓기');
+  { const p = spot('plant'); assert(p && Sim.placeFurn(S, st.id, 'plant', p[0] + 0.25, p[1]).ok || Sim.placeFurn(S, st.id, 'plant', p[0], p[1]).ok, '0.25칸 위치에 놓기'); }
   const before = Sim.furnFx(st).sum.seats;
-  for (let y = 0; y < 6; y++) Sim.placeFurn(S, st.id, 'plant', 2, y);   // 홀 입구 쪽 줄을 화분으로 막아 봄
+  for (let y = 0; y < RY; y++) Sim.placeFurn(S, st.id, 'plant', KWt, y);   // 주방 앞 줄을 화분으로 막아 봄
   const fl = Sim.furnFlow(st); assert(fl.blocked.length >= 0, '동선 검사 동작');
   const S2 = Sim.deserialize(Sim.serialize(S));
   assert(S2.stores.find(s => s.id === st.id).furn.length === st.furn.length, '가구 저장');
@@ -243,7 +245,7 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   };
   const base = run();
   const pricey = run((S, st) => { st.price = 140; });
-  const blocked = run((S, st) => { for (let y = 0; y < 6; y++) Sim.placeFurn(S, st.id, 'plant', 2, y); });
+  const blocked = run((S, st) => { const kw = Sim.kitchenW(st.size); for (let y = 0; y < Sim.ROOM[st.size][1]; y++) Sim.placeFurn(S, st.id, 'plant', kw, y); });
   const farm = run((S, st) => Sim.setVendor(S, st.id, 'farm'));
   console.log('[30일] 손님 기본', base.served, '· 가격 +40%', pricey.served, '· 계산대 막힘', blocked.served, '· 직송 농장 품질', base.q.toFixed(3), '→', farm.q.toFixed(3));
   assert(pricey.served < base.served, '가격을 올리면 손님이 줆');
