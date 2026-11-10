@@ -218,4 +218,37 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   assert(srcs.every(x => x._take * x._k <= Sim.WALLET * x._P + 1e-6) && srcs.some(x => x._k < 1), '업종이 달라도 같은 외식 예산을 나눠 씀');
   console.log('[경제] 품절로 놓친 손님', lost, '· 예산 한도에 걸린 원천', srcs.filter(x => x._k < 1).length, '/', srcs.length);
 }
+
+// ---------- 하루 장부 대사: 장부에 적힌 현금 흐름 = 실제 현금 변화 ----------
+{
+  const S = Sim.newGame({ seed: 7, competitors: 3 }); S.companies[0].cash = 3e9;
+  const lots = S.tiles.filter(t => t.h === 2 && t.t === 'land' && !t.b && t.ref == null);
+  for (let i = 0; i < 24; i++) Sim.step(S);
+  Sim.openStore(S, 0, lots[0].x, lots[0].y, 'cafe', { size: 1 }); Sim.openStore(S, 0, lots[9].x, lots[9].y, 'hansik', { size: 2 });
+  for (let i = 0; i < 24 * 40; i++) Sim.step(S);
+  const J = S.journal.slice(1), bad = J.filter(j => Math.abs(j.residual) > 10);
+  assert(J.length >= 39 && bad.length === 0, '장부와 현금이 맞음: ' + bad.map(j => j.m + '/' + j.d + ' ' + j.residual).join(','));
+  console.log('[장부] 대사', J.length, '일, 차이 난 날', bad.length);
+}
+
+// ---------- P2 30일 플레이: 같은 시드에서 선택(가격·배치·공급자)이 결과를 예상 방향으로 바꿈 ----------
+{
+  const run = tweak => {
+    const S = Sim.newGame({ seed: 31, competitors: 3 }); S.companies[0].cash = 2e9;
+    const lots = S.tiles.filter(t => t.h === 2 && t.t === 'land' && !t.b && t.ref == null);
+    let st = null; for (const t of lots) { const r = Sim.openStore(S, 0, t.x, t.y, 'cafe', { size: 2 }); if (r.ok) { st = r.store; break; } } Sim.ensureFurn(st);
+    tweak && tweak(S, st);
+    let served = 0; for (let i = 0; i < 24 * 30; i++) { Sim.step(S); if (S.hour % 24 === 0) served += st.served; }
+    return { served, q: Sim.quality(S, st), rev: S.companies[0].months.concat([S.companies[0].cur]).reduce((a, m) => a + m.rev, 0) };
+  };
+  const base = run();
+  const pricey = run((S, st) => { st.price = 140; });
+  const blocked = run((S, st) => { for (let y = 0; y < 6; y++) Sim.placeFurn(S, st.id, 'plant', 2, y); });
+  const farm = run((S, st) => Sim.setVendor(S, st.id, 'farm'));
+  console.log('[30일] 손님 기본', base.served, '· 가격 +40%', pricey.served, '· 계산대 막힘', blocked.served, '· 직송 농장 품질', base.q.toFixed(3), '→', farm.q.toFixed(3));
+  assert(pricey.served < base.served, '가격을 올리면 손님이 줆');
+  assert(blocked.served < base.served, '동선이 막히면 손님을 덜 받음');
+  assert(farm.q > base.q, '좋은 공급자는 품질을 올림');
+  { const S = Sim.newGame({ seed: 31, competitors: 3 }); S.companies[0].cash = 2e9; let st = null; for (const t of S.tiles.filter(t => t.h === 2 && t.t === 'land' && !t.b && t.ref == null)) { const r = Sim.openStore(S, 0, t.x, t.y, 'cafe', { size: 1 }); if (r.ok) { st = r.store; break; } } st.rating = 4.6; for (let i = 0; i < 24 * 30; i++) { st.rating = 4.6; Sim.step(S); } const good = st.regulars; for (let i = 0; i < 24 * 30; i++) { st.rating = 2.4; Sim.step(S); } console.log('[단골] 평점 4.6 한 달', Math.round(good), '→ 평점 2.4 한 달', Math.round(st.regulars)); assert(good > 20 && st.regulars < good, '단골은 좋은 평점에 늘고 나쁜 평점에 줆'); }
+}
 console.log('모든 시뮬레이션 점검 통과');

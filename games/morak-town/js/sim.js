@@ -1231,7 +1231,8 @@
     const pf = clamp(Math.exp(-sens * 1.8 * (st.price / 100 - 1)), 0.05, 3);
     const rf = 0.55 + 0.15 * st.rating;
     const star = 1 + ((st._star == null ? 50 : st._star) - 50) / 100 * 0.3;
-    return quality(S, st) * (st._mi ? st._mi.appeal[seg] : 1) * (1 + comp.brand[st.cat] / 110) * pf * rf * (1 + 0.06 * st.mkt) * interiorAppeal(st, seg) * furnAppeal(st, seg) * archAppeal(st, seg) * star * eventMult(S, st, seg) * strat * parkM;
+    const regM = 1 + 0.15 * Math.min(1, (st.regulars || 0) / 300) * (seg === 'res' || seg === 'off' ? 1 : 0.5);
+    return regM * quality(S, st) * (st._mi ? st._mi.appeal[seg] : 1) * (1 + comp.brand[st.cat] / 110) * pf * rf * (1 + 0.06 * st.mkt) * interiorAppeal(st, seg) * furnAppeal(st, seg) * archAppeal(st, seg) * star * eventMult(S, st, seg) * strat * parkM;
   }
 
   // ---------- 하루 상황 ----------
@@ -1272,6 +1273,7 @@
   }
 
   function startDay(S, first) {
+    snapDay(S);
     const d = dateOf(S);
     S.weather = rollWeather(S, d);
     S.day = d;
@@ -1392,7 +1394,7 @@
     const cost = openCost(S, cat, x, y, size, style, tier);
     if (!opt.free && !opt.franchise) {
       if (comp.cash < cost.total) return { ok: false, msg: `자금이 부족해요. ${won(cost.total)}이 필요해요.` };
-      comp.cash -= cost.total; comp.cur.capex += cost.total - cost.deposit;
+      comp.cash -= cost.total; comp.cur.capex += cost.total - cost.deposit; comp.cur.deposit = (comp.cur.deposit || 0) + cost.deposit;
     }
     const st = {
       id: S.nextId++, x, y, cat, owner: compId, franchise: !!opt.franchise, size,
@@ -1786,6 +1788,7 @@
         st.dayCost += cogs + margin + card + wage + royalty + dlvFee;
       } else {
         comp.cash += rev - (st.inv ? 0 : cogs) - card - wage - dlvFee;   // 재고 매장은 재료값을 입고 때 냈음
+        if (!st.inv) comp.cur.cogsCash = (comp.cur.cogsCash || 0) + cogs;
         const L = comp.cur; L.rev += rev; L.cogs += cogs; L.card += card; L.wage += wage; L.dlv += dlvFee; L.served += served;
         st.dayCost += cogs + card + wage + dlvFee;
       }
@@ -1801,6 +1804,20 @@
     return ev;
   }
 
+
+  // ---------- 하루 장부 (계획서 3.1 대사) ----------
+  // 현금이 움직이는 계정과 부호. 재고 매장의 재료비(cogs)는 손익에만 잡히고 현금은 입고(purchase) 때 나감.
+  const CASH_ACCT = { rev: 1, royalty: 1, biz: 1, other: 1, cogsCash: -1, card: -1, wage: -1, dlv: -1, rent: -1, util: -1, mkt: -1, upkeep: -1, hq: -1, bizCost: -1, interest: -1, capex: -1, purchase: -1, loan: 1, equity: 1, invest: -1, deposit: -1 };
+  const ACCT_NAME = { rev: '매출', royalty: '가맹 수입', biz: '다른 사업 수입', other: '기타', cogsCash: '재료비(즉시)', card: '카드 수수료', wage: '인건비', dlv: '배달 수수료', rent: '임대료', util: '관리비', mkt: '마케팅', upkeep: '시설 유지비', hq: '본사 인건비', bizCost: '다른 사업 비용', interest: '이자', capex: '투자(개점·공사·설비)', purchase: '식재료 입고', loan: '대출·상환', equity: '증자·자사주', invest: '지분 투자', deposit: '임대 보증금', tax: '법인세', dividend: '배당' };
+  function snapDay(S) { const c = S.companies[0]; c._snap = { cash: c.cash, cur: Object.assign({}, c.cur) }; }
+  function journalDay(S, d) {
+    const c = S.companies[0], sn = c._snap; if (!sn) return;
+    const ent = []; let flow = 0;
+    for (const k in CASH_ACCT) { const dv = (c.cur[k] || 0) - (sn.cur[k] || 0); if (Math.abs(dv) < 1) continue; const v = dv * CASH_ACCT[k]; ent.push([k, Math.round(v)]); flow += v; }
+    const actual = c.cash - sn.cash;
+    S.journal = S.journal || []; S.journal.push({ y: d.year, m: d.month, d: d.day, ent, cash: Math.round(actual), residual: Math.round(actual - flow) });
+    if (S.journal.length > 90) S.journal.shift();
+  }
   // ---------- 하루 마감 ----------
   function endDay(S) {
     const d = dateOf(S, S.hour - 1);
@@ -1816,6 +1833,8 @@
       let waste = 0;
       if (CATS[st.cat].waste && st._prod) waste = Math.max(0, st._prod - st.dayServed) * unitCost(S, comp, st) * 0.7;
       st._prod = Math.max(20, st.dayServed * 1.1);
+      // 단골(계획서 P3): 평점 3.5 위에서 손님 일부가 단골이 되고, 평점이 낮거나 품절·대기가 많으면 떠남
+      st.regulars = Math.max(0, (st.regulars || 0) * 0.992 + st.dayServed * 0.01 * clamp((st.rating - 3.4) / 1.2, -1, 1) - (st.dayStockLost || 0) * 0.02);
       const spoil = restock(S, st);
       st.lossWhy = [['품절', st.dayStockLost || 0], ['자리·직원 부족', Math.round(st.dayLost || 0)], ['상한 재료(원)', Math.round(spoil + waste)]].filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
       if (spoil && !st.franchise) comp.cur.cogs += spoil;
@@ -1894,6 +1913,7 @@
       h.rentMult += (target - h.rentMult) * 0.01;
     }
     const nd = dateOf(S, S.hour);
+    journalDay(S, d);
     if (nd.month !== d.month) monthEnd(S, d);
     checkQuests(S);
   }
@@ -1969,6 +1989,7 @@
       const ni = pre - tax;
       const rec = Object.assign({}, L, { ni, cash: c.cash, value: c.value, stores: S.stores.filter(s => s.owner === c.id).length, month: d.month, year: d.year });
       if (c.isPlayer && c.listed && c.dividend > 0 && ni > 0) { const pay = ni * c.dividend; c.cash -= pay; rec.dividend = pay; S.founder.cash += pay * c.founderShares / c.shares; }
+      if (c.isPlayer && S.journal && S.journal.length) { const jj = S.journal[S.journal.length - 1]; if (tax) { jj.ent.push(['tax', -Math.round(tax)]); jj.cash -= Math.round(tax); } if (rec.dividend) { jj.ent.push(['dividend', -Math.round(rec.dividend)]); jj.cash -= Math.round(rec.dividend); } }
       c.months.push(rec); if (c.months.length > 48) c.months.shift();
       c.storeHist.push(rec.stores); if (c.storeHist.length > 24) c.storeHist.shift();
       c.cur = blankLedger(); c._prev = 0;
@@ -2446,7 +2467,7 @@
     FAC, PUBLIC, MKT, MKT_NAME, STORE_EVENTS, CO_EVENTS, LOGO_SHAPES, ROLES, SHIFTS, WEATHER, QUESTS, BURDEN, PROFILE, SEG_HOURS,
     roadComponents, newGame, step, tile, isLot, anchorOf, hood, hoodAt, nearSources, BTYPES, CLS_NAME, PROFILE_NAME, PROFILE_MULT, LINES, buildingPop, findFit, sources, population, dateOf, seasonOf, dayOf,
     openCost, interiorCost, utilMonth, propertyPrice, archCost, researchCost, upgradeCost, interiorBook, spaceScore, keyMoney,
-    ROOM, FURN, FURN_KEYS, zoneAt, furnRect, furnCells, furnFits, ensureFurn, defaultFurn, furnFx, furnAppeal, placeFurn, removeFurn, resetFurn, VENDORS, setVendor, storeTitle, furnFlow, fbox, setInvDays, invNeed, stockCap, WALLET,
+    ROOM, FURN, FURN_KEYS, zoneAt, furnRect, furnCells, furnFits, ensureFurn, defaultFurn, furnFx, furnAppeal, placeFurn, removeFurn, resetFurn, ACCT_NAME, CASH_ACCT, VENDORS, setVendor, storeTitle, furnFlow, fbox, setInvDays, invNeed, stockCap, WALLET,
     seatCapOf, staffBound, unitCost, ticket, quality, menuInfo, menuItems, refreshMenu, setMenu, defaultMenu, inSeason, interiorAppeal, hourCap, wantAt, dayDemand, teamStats, laborDay, chemistry, compat, effStat, shiftWindow, onDuty, askWage,
     openStore, closeStore, setInterior, setArch, upgradeStore, buyProperty, setHours, runStoreEvent, runCoEvent,
     hire, fire, staffAct, autoStaff, buildFacility, upgradeFacility, removeFacility, buildPublic, facRange, facCap, assignSupply,
