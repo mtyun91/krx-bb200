@@ -3,7 +3,7 @@
   'use strict';
   const Sim = window.Sim, Renderer = window.Renderer, Snd = window.GameAudio;
   const $ = id => document.getElementById(id);
-  const SAVE_KEY = 'morak.save.v5';
+  const SAVE_KEY = 'morak.save.v6';
   const HOUR_MS = 2500;                 // 1배속: 게임 1시간 = 2.5초 (하루 1분)
   const SPEEDS = [0, 1, 3, 10];
 
@@ -41,7 +41,7 @@
 
   // ---------- 저장 ----------
   function readSave() { try { const s = localStorage.getItem(SAVE_KEY); return s ? Sim.deserialize(s) : null; } catch (e) { return null; } }
-  const OLD_KEYS = ['morak.save.v4', 'morak.save.v3', 'morak.save.v2'];
+  const OLD_KEYS = ['morak.save.v5', 'morak.save.v4', 'morak.save.v3', 'morak.save.v2'];
   function oldSaveExists() { try { return OLD_KEYS.some(k => localStorage.getItem(k)); } catch (e) { return false; } }
   // 덮어쓰기 전에 바로 앞 저장을 한 칸 보관해 둠
   function writeSave(quiet) { try { const prev = localStorage.getItem(SAVE_KEY); if (prev) localStorage.setItem(SAVE_KEY + '.prev', prev); localStorage.setItem(SAVE_KEY, Sim.serialize(S)); if (!quiet) toast('저장했어요.', 'good'); } catch (e) { if (!quiet) toast('이 브라우저에서는 저장할 수 없어요.', 'bad'); } }

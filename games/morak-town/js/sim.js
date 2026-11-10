@@ -175,7 +175,7 @@
     { name: '포플러대로', kind: 'off',  rent: 250000, income: 700, age: 0.15, dev: 0.72, mix: { tower: 4, plaza: 4, office: 3, oneroom: 2, hotel: 0.4, alley: 1 }, desc: '포플러 가로수가 늘어선 새 시가지. 직장인과 쇼핑객이 많아요.' },
     { name: '솔방울밸리', kind: 'off',  rent: 120000, income: 480, age: 0.1,  dev: 0.58, mix: { knowledge: 5, office: 3, oneroom: 2, apt: 1, shop: 1 }, desc: '작은 연구소와 스튜디오가 모인 숲가 업무단지.' },
     { name: '햇살정원', kind: 'res',  rent: 85000,  income: 560, age: 0.25, dev: 0.62, mix: { apt: 7, shop: 2, villa: 1 }, desc: '정원이 딸린 저층 아파트 마을. 가족 손님이 많고 주말에 붐벼요.' },
-    { name: '조개해변', kind: 'tour', rent: 140000, income: 620, age: 0.2,  dev: 0.52, mix: { apt: 3, plaza: 2, hotel: 0.6, shop: 2, luxury: 1 }, desc: '모래사장과 호수, 해변 놀이공원과 아케이드가 있는 관광 권역.' },
+    { name: '조개해변', kind: 'tour', rent: 140000, income: 620, age: 0.2,  dev: 0.42, mix: { apt: 3, plaza: 2, hotel: 0.6, shop: 2, luxury: 1 }, desc: '모래사장과 호수, 해변 놀이공원과 아케이드가 있는 관광 권역.' },
   ];
 
   // ---------- 건물 종류 ----------
@@ -245,6 +245,12 @@
   ];
   const AVE_X = [12, 26, 40, 54, 68], AVE_Y = [14, 28, 50, 64];
   const SEA_Y = 75.5;
+  const MAP_VERSION = 'bay-2';
+  // 해안선은 연속 곡선이 원본이다. 칸(바다·모래사장)은 이 곡선을 칸 중심에서 칠한 결과.
+  function coastY(x) { return SEA_Y + 1.6 * Math.sin(x / 7) + 0.8 * Math.sin(x / 3.1); }
+  const BEACH_W = 2.2, PROM_IN = 0.45, PROM_OUT = 0.95;   // 모래사장 폭, 산책로가 모래 쪽·땅 쪽으로 걸치는 폭(칸)
+  // 기준 구역(계획서 P1): 조개해변 구역
+  const REF_AREA = { x0: 54, y0: 62, x1: 68, y1: 77, name: '조개해변' };
 
   // ---------- 인테리어·건축 ----------
   const TIERS = [null, { name: '기본', perPy: 1.5e6 }, { name: '스탠다드', perPy: 2.5e6 }, { name: '프리미엄', perPy: 4e6 }, { name: '시그니처', perPy: 6.5e6 }];
@@ -465,20 +471,36 @@
       const mx = (t.x - 40) / 11, my = (t.y - 3) / 5.5; if (mx * mx + my * my < 1) t.t = 'mount';
       const lx = (t.x - 70) / 5.2, ly = (t.y - 68) / 4.2; if (lx * lx + ly * ly < 1) t.t = 'water';
       // 남쪽 바다와 모래사장 (해안선이 완만하게 굽이침)
-      const coast = SEA_Y + 1.6 * Math.sin(t.x / 7) + 0.8 * Math.sin(t.x / 3.1);
+      const coast = coastY(t.x);
       if (t.y >= coast) { t.t = 'water'; t.sea = true; }
-      else if (t.y >= coast - 2.2) t.beach = true;
+      else if (t.y >= coast - BEACH_W) t.beach = true;
     }
     // 대로 (2칸 폭)
     const setRoad = (t, kind) => { if (!t || t.t === 'mount') return; if (t.t === 'water') { if (kind === 'ave') { t.t = 'bridge'; t.road = 'ave'; } return; } if (t.road === 'ave') return; t.t = 'road'; t.road = kind; };
-    for (const ax of AVE_X) for (let y = 0; y < H; y++) for (const x of [ax, ax + 1]) { const t = T(x, y); if (t.beach || (t.t === 'water' && Math.abs(t.y - riverC(t.x)) > 4.5)) continue; setRoad(t, 'ave'); }
+    for (const ax of AVE_X) for (let y = 0; y < H; y++) for (const x of [ax, ax + 1]) { const t = T(x, y); if (t.beach || t.y >= coastY(t.x) - BEACH_W - 1.2 || (t.t === 'water' && Math.abs(t.y - riverC(t.x)) > 4.5)) continue; setRoad(t, 'ave'); }
     for (const ay of AVE_Y) for (let x = 0; x < W; x++) for (const y of [ay, ay + 1]) setRoad(T(x, y), 'ave');
     // 강변: 물에 닿은 땅 한 줄은 한강공원, 그 바깥 한 줄은 강변도로
     const isRiver = t => t && t.t === 'water' && !t.sea && Math.abs(t.y - riverC(t.x)) < 5;
     const n8 = (t, f) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; if (f(T(t.x + dx, t.y + dy))) return true; } return false; };
     const bank = new Set();
     for (const t of S.tiles) if (t.t !== 'water' && t.t !== 'mount' && t.road !== 'ave' && (n8(t, isRiver) || t.beach)) { if (t.t === 'road') { t.t = 'land'; t.road = null; } bank.add(t); t.bank = true; }
-    for (const t of S.tiles) if (!bank.has(t) && t.t === 'land' && n8(t, n => n && bank.has(n))) setRoad(t, 'st');
+    // 강변은 이면도로, 해변 앞은 차가 다니지 않는 산책로(walk)
+    for (const t of S.tiles) if (!bank.has(t) && t.t === 'land' && n8(t, n => n && bank.has(n))) { if (n8(t, n => n && n.beach)) { t.t = 'road'; t.road = 'walk'; } else setRoad(t, 'st'); }
+    // 산책로 곡선(원본): 모래사장 안쪽 가장자리를 따라감. 호수와 겹치는 구간은 끊음
+    const prom = []; let seg = [];
+    for (let x = -0.5; x <= W - 0.5 + 1e-6; x += 0.25) {
+      const y = coastY(x) - BEACH_W - (PROM_OUT - PROM_IN) / 2, tt = T(Math.round(x), Math.round(y)), tt2 = T(Math.round(x), Math.round(y - 0.8));
+      const blocked = (tt && tt.t === 'water' && !tt.sea) || (tt2 && tt2.t === 'water' && !tt2.sea);
+      if (blocked) { if (seg.length > 3) prom.push(seg); seg = []; } else seg.push([+x.toFixed(2), +y.toFixed(3)]);
+    }
+    if (seg.length > 3) prom.push(seg);
+    // 기준 구역의 작은 원형 광장: 상점가 끝, 산책로 바로 뒤
+    const pc = { x: 61, y: +(coastY(61) - BEACH_W - 2.4).toFixed(2), r: 1.9 };
+    for (const t of S.tiles) if (t.t === 'land' && !t.bank && Math.hypot(t.x - pc.x, t.y - pc.y) <= pc.r) { t.t = 'road'; t.road = 'walk'; t.plaza = true; }
+    // 산책로 소품: 땅 쪽 가장자리에 가로등·벤치·나무·화분을 번갈아
+    const props = []; let k = 0;
+    for (const sg of prom) for (let i = 4; i < sg.length - 2; i += 7) { const [x, y] = sg[i]; props.push({ x, y: +(y - PROM_OUT * 0.55).toFixed(3), k: ['lamp', 'bench', 'tree', 'bench', 'lamp', 'planter'][k++ % 6], v: Math.floor(rnd(S) * 4) }); }
+    S.world = { mapVersion: MAP_VERSION, coast: { base: SEA_Y, waves: [[1.6, 7], [0.8, 3.1]], beachW: BEACH_W }, prom, promIn: PROM_IN, promOut: PROM_OUT, promProps: props, plaza: pc, ref: REF_AREA };
     // 이면도로·골목: 대로로 둘러싸인 큰 블록(슈퍼블록)마다 같은 간격으로 반듯하게 나눔
     const BLOCK = { old: 3, uni: 4, res: 4, ind: 4, tour: 5, rich: 5, off: 5 };
     const cuts = (lo, hi, b) => { const L = hi - lo + 1, n = Math.max(0, Math.round((L + 1) / (b + 1)) - 1), out = []; for (let i = 1; i <= n; i++) out.push(lo - 1 + Math.round(i * (L + 1) / (n + 1))); return out; };
@@ -724,7 +746,7 @@
   function newGame(opts) {
     opts = opts || {};
     const S = {
-      v: 5, schemaVersion: 5, mapVersion: 'bay-1', contentVersion: 1, rng: (opts.seed || 20261109) | 0, hour: 6,
+      v: 6, schemaVersion: 6, mapVersion: MAP_VERSION, contentVersion: 1, rng: (opts.seed || 20261109) | 0, hour: 6,
       tiles: [], stores: [], facs: [], companies: [], news: [], nextId: 1,
       hoods: HOODS.map(h => ({ hype: h.hype || 0, rentMult: 1 + (h.hype || 0) / 250, popMult: 1, offMult: 1, transit: false, festival: 0, income: h.income, age: h.age, qol: 50, displaced: 0, gentri: 0 })),
       stations: STATION_SITES.map(x => Object.assign({}, x)), hqCands: [], nextHype: null,
@@ -2322,9 +2344,10 @@
   }
   function serialize(S) { return JSON.stringify(S); }
   function deserialize(str) {
-    const S = JSON.parse(str); if (!S || S.v !== 5) throw new Error('예전 지도 저장이라 불러올 수 없어요');
-    // 저장 버전을 구조·지도·콘텐츠로 나눠 기록 (없으면 현재 값으로 채움)
-    if (!S.schemaVersion) S.schemaVersion = 5; if (!S.mapVersion) S.mapVersion = 'bay-1'; if (!S.contentVersion) S.contentVersion = 1;
+    const S = JSON.parse(str);
+    // 지도가 바뀐 저장은 이어갈 수 없음(사용자 결정: 새 도시로 시작, 예전 저장은 보관)
+    if (!S || S.mapVersion !== MAP_VERSION || !S.world) throw new Error('예전 지도 저장이라 불러올 수 없어요');
+    if (!S.contentVersion) S.contentVersion = 1;
     if (S.v === 2) {
       S.v = 3; S.stations = STATION_SITES.map(x => Object.assign({}, x)); S.hqCands = []; S.nextHype = null;
       S.hoods.forEach((hd, i) => Object.assign(hd, { income: HOODS[i].income, age: HOODS[i].age, qol: 50, displaced: 0, gentri: 0 }));
@@ -2337,6 +2360,7 @@
   }
 
   const api = {
+    coastY, MAP_VERSION, REF_AREA, BEACH_W,
     W, H, ROAD_EVERY, REACH, HOOD, congestion, parkingScore, computeTraffic, TRAFFIC_HOURS, ARCHETYPES, DIFFICULTY, loanRate, LANDMARKS, DEPTS, DEPT_KEYS, landFactors, deptPower, hqHire, hqAct, hqSalaryAsk, rentalIncome, facCost, facValue, computeQol, hourParts, CATS, CAT_KEYS, SIZES, INGR, SEG, SEG_KEYS, HOODS, TIERS, STYLES, STYLE_KEYS, ARCH, ARCH_KEYS,
     FAC, PUBLIC, MKT, MKT_NAME, STORE_EVENTS, CO_EVENTS, LOGO_SHAPES, ROLES, SHIFTS, WEATHER, QUESTS, BURDEN, PROFILE, SEG_HOURS,
     roadComponents, newGame, step, tile, isLot, anchorOf, hood, hoodAt, nearSources, BTYPES, CLS_NAME, PROFILE_NAME, PROFILE_MULT, LINES, buildingPop, findFit, sources, population, dateOf, seasonOf, dayOf,

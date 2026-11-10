@@ -133,6 +133,10 @@
     this.S = null; this.hover = null; this.sel = null; this.ghost = null; this.hourF = 12;
     this.overlay = null; this.walkers = []; this.shoppers = []; this.inside = {}; this.shopT = {}; this.doors = new Map(); this.cars = []; this.trucks = []; this.floaters = []; this.particles = [];
     this.clouds = []; this.groundKey = ''; this.pathCache = new Map(); this.t = 0;
+    // WebGL 바닥층 (주소에 ?gl=0 이면 끔)
+    const noGL = root.location && /[?&]gl=0/.test(root.location.search || '');
+    this.gl = !noGL && root.GLGround ? new root.GLGround() : null; if (this.gl && !this.gl.ok) this.gl = null;
+    this.promW = [];
     for (let i = 0; i < 4; i++) this.clouds.push({ x: Math.random() * 2400 - 1200, y: Math.random() * 1000, s: 0.6 + Math.random() * 0.8 });
     this.resize();
   }
@@ -374,6 +378,7 @@
     const ctx = cv.getContext('2d');
     ctx.setTransform(sc, 0, 0, sc, -bd.minX * sc, -bd.minY * sc);
     for (let y = bd.y0; y <= bd.y1; y++) for (let x = bd.x0; x <= bd.x1; x++) { const t = Sim.tile(S, x, y); if (t) this.groundTile(ctx, t, season); }
+    this.worldGround(ctx, season, bd);
     ch = { cv, ver, bd, sc }; cache.set(key, ch);
     // 화면에 보이는 구역 수보다 작게 잡으면 매 프레임 다시 굽느라 끊김
     while (cache.size > Math.max((this._visChunks || 0) + 4, sc > 1.6 ? 10 : 18)) cache.delete(cache.keys().next().value);
@@ -395,6 +400,13 @@
   R.roadTile = function (ctx, t, season, edges) {
     const S = this.S, p = iso(t.x, t.y), cx = p.x, cy = p.y, winter = season === 'winter';
     const ave = t.road === 'ave', alley = t.road === 'alley', bridge = t.t === 'bridge';
+    if (t.road === 'walk') {
+      // 보행 전용(해변 산책로 뒤·광장): 밝은 판석
+      diamond(ctx, cx, cy, 1, winter ? '#f5efec' : '#ecdcd0');
+      ctx.save(); diamondPath(ctx, cx, cy, 1); ctx.clip(); ctx.strokeStyle = 'rgba(94,31,43,0.14)'; ctx.lineWidth = 0.6;
+      for (let i = -2; i <= 2; i++) { const a = iso(t.x - 0.5, t.y + i * 0.25), b = iso(t.x + 0.5, t.y + i * 0.25); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); const c2 = iso(t.x + i * 0.25, t.y - 0.5), d2 = iso(t.x + i * 0.25, t.y + 0.5); ctx.beginPath(); ctx.moveTo(c2.x, c2.y); ctx.lineTo(d2.x, d2.y); ctx.stroke(); }
+      ctx.restore(); return;
+    }
     const L = (u, v) => { const q = iso(t.x + u, t.y + v); return [q.x, q.y]; };
     const quad = (u0, u1, v0, v1, fill, w) => poly(ctx, [L(u0, v0), L(u1, v0), L(u1, v1), L(u0, v1)], fill, w == null ? 0 : w);
     const nbT = (dx, dy) => Sim.tile(S, t.x + dx, t.y + dy);
@@ -416,7 +428,7 @@
       // 횡단보도: 교차로 바로 앞 칸에, 길을 가로지르는 흰 줄
       for (const sgn of [1, -1]) {
         const n = along === 'x' ? nbT(sgn, 0) : nbT(0, sgn);
-        if (!isRoadT(n) || !isCross(S, n) || n.road === 'alley') continue;
+        if (!isRoadT(n) || !isCross(S, n) || n.road === 'alley' || n.road === 'walk') continue;
         const u0 = sgn > 0 ? 0.14 : -0.42, u1 = sgn > 0 ? 0.42 : -0.14;
         for (let i = 0; i < 5; i++) { const v0 = -0.42 + i * 0.18, v1 = v0 + 0.1; if (along === 'x') quad(u0, u1, v0, v1, '#f4ece6'); else quad(v0, v1, u0, u1, '#f4ece6'); }
       }
@@ -505,6 +517,9 @@
   R.groundTile = function (ctx, t, season) {
     const S = this.S, p = iso(t.x, t.y), cx = p.x, cy = p.y, winter = season === 'winter';
     const edges = [[0, -1, [cx - HW, cy], [cx, cy - HH]], [1, 0, [cx, cy - HH], [cx + HW, cy]], [0, 1, [cx + HW, cy], [cx, cy + HH]], [-1, 0, [cx, cy + HH], [cx - HW, cy]]];
+    if (t.sea) return;   // 바다는 곡선 해안층(WebGL 셰이더 또는 2D 벡터)이 그림
+    if (t.beach && !t.b && t.ref == null && t.t === 'land') return;
+    { const a0 = t.b ? t : null; if (a0 && a0.b.k === 'rpark' && a0.b.beach) return; }
     if (t.t === 'road' || t.t === 'bridge') {
       this.roadTile(ctx, t, season, edges);
     } else if (t.t === 'water') {
@@ -903,6 +918,72 @@
     if (glow) this._glows.push({ x: g.c.x, y: g.c.y - h * 0.25, r: 30 + 8 * g.w, a: 0.55 });
   };
 
+
+  R.drawWalkerAt = function (ctx, p, w, fx, rain, paused) {
+    const run = w.kind === 'run';
+    const bob = REDUCED || paused || w.wait ? 0 : Math.abs(Math.sin(this.t / (run ? 80 : 140) + fx * 3)) * (run ? 2.2 : 1.2);
+    walker(ctx, p.x, p.y, w.c, w.hair, bob, rain && w.umb && !run, paused || w.wait ? 0 : this.t / (run ? 60 : 110) + w.sp * 10);
+    if (run) { ctx.beginPath(); ctx.moveTo(p.x - 2, p.y - 12.2 - bob); ctx.lineTo(p.x + 2, p.y - 12.2 - bob); ctx.strokeStyle = '#fff8ee'; ctx.lineWidth = 1; ctx.stroke(); }
+    if (w.kind === 'commute') { ctx.beginPath(); ctx.rect(p.x + 2.2, p.y - 5.5 - bob * 0.3, 3.4, 2.6); ctx.fillStyle = '#7a4a2e'; ctx.fill(); ink(ctx, 0.6); }
+    if (w.cup) { ctx.beginPath(); ctx.rect(p.x + 2.4, p.y - 8.2 - bob, 1.8, 2.4); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.5); }
+    if (w.pair) walker(ctx, p.x + 5, p.y + 1.5, w.c2, w.hair2, bob, rain && w.umb, paused ? 0 : this.t / 110 + 1.5);
+    const ox = 0, oy = 0;
+    if (w.dog && !w.pair) { const dx = p.x + ox + 5, dy = p.y + oy + 1; ctx.beginPath(); ctx.ellipse(dx, dy - 2, 3, 1.8, 0, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.8); ctx.beginPath(); ctx.arc(dx + 3, dy - 3.5, 1.4, 0, 7); ctx.fill(); ink(ctx, 0.7); }
+  };
+  // ---------- 곡선 지형층 (계획서 P1) ----------
+  // 원본은 S.world의 연속 좌표. 렌더와 사람 이동이 같은 곡선을 씀.
+  function coastPts(step) { const out = []; for (let x = -0.5; x <= Sim.W - 0.5 + 1e-6; x += step) out.push([x, Sim.coastY(x)]); return out; }
+  // 2D 바다·모래 (WebGL이 없을 때, 그리고 전체 지도 미리보기)
+  R.drawSeaVector = function (ctx, season) {
+    const W0 = this.S.world; if (!W0) return;
+    const cp = coastPts(0.5), BW = W0.coast.beachW, E = Sim.H - 0.5;
+    const path = pts => { ctx.beginPath(); pts.forEach(([x, y], i) => { const q = iso(x, y); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); }); };
+    // 모래: 해안선 위쪽으로 모래사장 폭 + 여유
+    path([...cp.map(([x, y]) => [x, y - BW - 0.6]), ...cp.slice().reverse()]); ctx.closePath(); ctx.fillStyle = season === 'winter' ? '#f3ece4' : '#f3dfb4'; ctx.fill();
+    path([...cp, [Sim.W - 0.5, E], [-0.5, E]]); ctx.closePath(); ctx.fillStyle = '#7cc6cc'; ctx.fill();
+    ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.6; path(cp.map(([x, y]) => [x, y + 0.12])); ctx.stroke(); ctx.restore();
+    path(cp); ink(ctx, 1.4);
+  };
+  // 산책로 띠와 광장 바닥 (바닥 구역 캐시에 함께 구움)
+  R.worldGround = function (ctx, season, bd) {
+    const W0 = this.S.world; if (!W0) return;
+    const half = (W0.promIn + W0.promOut) / 2, winter = season === 'winter';
+    for (const sg of W0.prom) {
+      if (bd && !sg.some(([x, y]) => x >= bd.x0 - 2 && x <= bd.x1 + 2 && y >= bd.y0 - 2 && y <= bd.y1 + 2)) continue;
+      const top = sg.map(([x, y]) => iso(x, y - half)), bot = sg.map(([x, y]) => iso(x, y + half));
+      ctx.beginPath(); top.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); for (let i = bot.length - 1; i >= 0; i--) ctx.lineTo(bot[i].x, bot[i].y); ctx.closePath();
+      ctx.fillStyle = winter ? '#f5efec' : '#ead6c6'; ctx.fill();
+      // 판석 이음매 (곡선을 따라 가로로)
+      ctx.strokeStyle = 'rgba(94,31,43,0.16)'; ctx.lineWidth = 0.6;
+      for (let i = 0; i < sg.length; i += 2) { const [x, y] = sg[i]; const a = iso(x, y - half), b = iso(x, y + half); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+      // 가운데 자전거길 점선
+      ctx.save(); ctx.setLineDash([4, 5]); ctx.strokeStyle = 'rgba(94,31,43,0.35)'; ctx.lineWidth = 0.9; ctx.beginPath(); sg.forEach(([x, y], i) => { const q = iso(x, y + 0.05); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); }); ctx.stroke(); ctx.restore();
+      // 연석 두 줄
+      ctx.beginPath(); top.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ink(ctx, 1.4);
+      ctx.beginPath(); bot.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ink(ctx, 1.4);
+      ctx.save(); ctx.translate(0, -3); ctx.beginPath(); bot.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ink(ctx, 0.9); ctx.restore();
+      for (let i = 0; i < bot.length; i += 3) { ctx.beginPath(); ctx.moveTo(bot[i].x, bot[i].y); ctx.lineTo(bot[i].x, bot[i].y - 3); ink(ctx, 0.8); }
+    }
+    const pc = W0.plaza;
+    if (pc && (!bd || (pc.x + 3 >= bd.x0 && pc.x - 3 <= bd.x1 && pc.y + 3 >= bd.y0 && pc.y - 3 <= bd.y1))) {
+      const ring = (r, fill, w) => { ctx.beginPath(); for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 2, q = iso(pc.x + Math.cos(a) * r, pc.y + Math.sin(a) * r); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); } ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (w) ink(ctx, w); };
+      ring(pc.r + 0.45, winter ? '#f5efec' : '#efe0d2', 1.5);
+      ring(pc.r * 0.62, winter ? '#f3ece9' : '#e6d2c2', 0.8);
+      ctx.strokeStyle = 'rgba(94,31,43,0.18)'; ctx.lineWidth = 0.6;
+      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, p0 = iso(pc.x + Math.cos(a) * pc.r * 0.62, pc.y + Math.sin(a) * pc.r * 0.62), p1 = iso(pc.x + Math.cos(a) * (pc.r + 0.45), pc.y + Math.sin(a) * (pc.r + 0.45)); ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); }
+      // 둥근 화단 네 곳
+      for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + i * Math.PI / 2, q = iso(pc.x + Math.cos(a) * pc.r * 0.95, pc.y + Math.sin(a) * pc.r * 0.95); ctx.beginPath(); ctx.ellipse(q.x, q.y, 9, 4.5, 0, 0, 7); ctx.fillStyle = winter ? '#f7f3f3' : '#a9bd6e'; ctx.fill(); ink(ctx, 1); }
+    }
+  };
+  // 광장 분수 (그리기 순서 정렬 대상)
+  R.drawPlazaFountain = function (ctx, pc) {
+    const c = iso(pc.x, pc.y);
+    ctx.beginPath(); ctx.ellipse(c.x, c.y, 20, 10, 0, 0, 7); ctx.fillStyle = '#efe2d0'; ctx.fill(); ink(ctx, 1.2);
+    ctx.beginPath(); ctx.ellipse(c.x, c.y - 1, 15, 7.5, 0, 0, 7); ctx.fillStyle = '#86c3d3'; ctx.fill(); ink(ctx, 1);
+    ctx.beginPath(); ctx.rect(c.x - 2.5, c.y - 14, 5, 13); ctx.fillStyle = '#efe2d0'; ctx.fill(); ink(ctx, 1);
+    ctx.beginPath(); ctx.ellipse(c.x, c.y - 14, 6, 3, 0, 0, 7); ctx.fillStyle = '#efe2d0'; ctx.fill(); ink(ctx, 1);
+    if (!REDUCED) for (let i = 0; i < 4; i++) { const ph = (this.t / 900 + i / 4) % 1, a = i * Math.PI / 2; ctx.beginPath(); ctx.arc(c.x + Math.cos(a) * 9 * ph, c.y - 16 - Math.sin(ph * Math.PI) * 7 + Math.sin(a) * 3 * ph, 1.4, 0, 7); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill(); }
+  };
   // ---------- 확대하면 매장 안이 보이는 단면 ----------
   // 지붕과 앞벽을 걷어 내고 바닥·뒷벽·가구·손님을 지도 위에 직접 그려요.
   function roomFit(st) {
@@ -1083,7 +1164,7 @@
     }
     if (w.f >= 1) {
       w.x = w.tx; w.y = w.ty; w.f = 0;
-      const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => { const t = Sim.tile(S, w.x + dx, w.y + dy); return t && (t.t === 'road' || t.t === 'bridge') && (!w.car || t.road !== 'alley'); });
+      const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => { const t = Sim.tile(S, w.x + dx, w.y + dy); return t && (t.t === 'road' || t.t === 'bridge') && (!w.car || (t.road !== 'alley' && t.road !== 'walk')); });
       const fwd = opts.filter(([dx, dy]) => dx === w.dx && dy === w.dy);
       const back = opts.filter(([dx, dy]) => !(w.x + dx === w.px && w.y + dy === w.py));
       const L = w.car && fwd.length && Math.random() < 0.75 ? fwd : (back.length ? back : opts);
@@ -1107,12 +1188,13 @@
     this.shoppers = (this.shoppers || []).filter(m => !outside(m));
     while (this.walkers.length < want) { const t = roadsIn(); if (!t) break; this.walkers.push(newWalker(hr, wkend, { x: t.x, y: t.y, tx: t.x, ty: t.y })); }
     if (this.walkers.length > want) this.walkers.length = want;
-    while (this.cars.length < wantCars) { const t = roadsIn(); if (!t || t.road === 'alley') break; this.cars.push({ car: true, x: t.x, y: t.y, tx: t.x, ty: t.y, f: 1, c: CARS[Math.floor(Math.random() * CARS.length)], sp: 1.4 + Math.random() * 0.8, taxi: Math.random() < 0.15 }); }
+    while (this.cars.length < wantCars) { const t = roadsIn(); if (!t || t.road === 'alley' || t.road === 'walk') break; this.cars.push({ car: true, x: t.x, y: t.y, tx: t.x, ty: t.y, f: 1, c: CARS[Math.floor(Math.random() * CARS.length)], sp: 1.4 + Math.random() * 0.8, taxi: Math.random() < 0.15 }); }
     if (this.cars.length > wantCars) this.cars.length = wantCars;
     if (!speed) return;
     const sp = Math.min(2, Math.max(0.6, speed));
     for (const w of this.walkers) stepMover(S, w, dt, sp);
     this.updateShoppers(dt, sp, view, hr, wkend, mobile, lod);
+    this.updatePromenade(dt, sp, view, act, hr, wkend, mobile, lod);
     const phase = this.sigPhase || 0;
     for (const c of this.cars) stepMover(S, c, dt, sp, phase);
     for (const tr of this.trucks) { tr.f += dt / 1000 * 3 * Math.min(3, speed); while (tr.f >= 1) { tr.f -= 1; tr.i++; } }
@@ -1157,6 +1239,30 @@
     for (const id in this.inside) {
       const L = this.inside[id];
       for (let i = L.length - 1; i >= 0; i--) if (this.t > L[i].until) { const v = L.splice(i, 1)[0].w; v.gone = false; v.enter = null; v.leave = 0; v.cup = true; this.shoppers.push(v); }
+    }
+  };
+  // 해변 산책로 사람: 산책로 곡선(원본 좌표)을 따라 걷고 달림
+  R.updatePromenade = function (dt, sp, view, act, hr, wkend, mobile, lod) {
+    const W0 = this.S.world; if (!W0 || lod) { this.promW = []; return; }
+    const inV = (x, y) => x >= view.x0 - 1 && x <= view.x1 + 1 && y >= view.y0 - 1 && y <= view.y1 + 1;
+    this.promW = this.promW.filter(w => inV(w.px, w.py));
+    let vis = 0; const cand = [];
+    W0.prom.forEach((sg, si) => { for (let i = 0; i < sg.length; i += 2) if (inV(sg[i][0], sg[i][1])) { vis += 2; if (i % 4 === 0) cand.push([si, i]); } });
+    const want = Math.min(mobile ? 14 : 30, Math.round(vis / 9 * Math.max(0.25, act) * (wkend ? 1.4 : 1)));
+    const place = w => { const sg = W0.prom[w.seg], i0 = Math.max(0, Math.min(sg.length - 2, Math.floor(w.i))), f = Math.min(1, w.i - i0); w.px = sg[i0][0] + (sg[i0 + 1][0] - sg[i0][0]) * f; w.py = sg[i0][1] + (sg[i0 + 1][1] - sg[i0][1]) * f + w.off; };
+    while (this.promW.length < want && cand.length) {
+      const [si, i] = cand[Math.floor(Math.random() * cand.length)], r = Math.random();
+      const w = newWalker(hr, wkend, { kind: r < 0.25 ? 'run' : 'stroll', dog: r > 0.25 && r < 0.4, pair: r > 0.8 });
+      if (w.kind === 'run') { w.sp = 1.5 + Math.random() * 0.5; w.c = SPORT[Math.floor(Math.random() * SPORT.length)]; }
+      w.seg = si; w.i = i; w.dir = Math.random() < 0.5 ? -1 : 1; w.off = (Math.random() - 0.5) * 0.8; w.side = 0; place(w); this.promW.push(w);
+    }
+    if (this.promW.length > want) this.promW.length = want;
+    if (!dt) return;
+    for (const w of this.promW) {
+      const sg = W0.prom[w.seg];
+      w.i += w.dir * w.sp * 4 * sp * dt / 1000;     // 점 간격 0.25칸 → 칸/초 × 4
+      if (w.i < 0) { w.i = 0; w.dir = 1; } if (w.i > sg.length - 1) { w.i = sg.length - 1; w.dir = -1; }
+      place(w);
     }
   };
   // 그릴 위치: 길 위(인도 쪽), 문으로 들어가는 중, 나오는 중
@@ -1231,6 +1337,7 @@
     cv.width = Math.ceil((maxX - minX) * sc); cv.height = Math.ceil((maxY - minY) * sc);
     const c2 = cv.getContext('2d'); c2.setTransform(sc, 0, 0, sc, -minX * sc, -minY * sc);
     const nch = Math.ceil(Sim.W / CH);
+    if (S.world) this.drawSeaVector(c2, season);
     for (let cy = 0; cy < nch; cy++) for (let cx = 0; cx < nch; cx++) { const bd = this.chunkBounds(cx, cy), ch = this.getChunk(cx, cy, season); c2.drawImage(ch.cv, bd.minX, bd.minY, ch.cv.width / ch.sc, ch.cv.height / ch.sc); }
     const items = [];
     for (const t of S.tiles) { if (t.b) items.push({ d: t.x + (t.b.w || 1) - 1 + t.y + (t.b.d || 1) - 1, t }); else if (t.ref == null && (t.tree || t.t === 'mount')) items.push({ d: t.x + t.y, tree: t }); }
@@ -1291,14 +1398,26 @@
     const nch = Math.ceil(Sim.W / CH);
     const visCh = []; for (let cy = 0; cy < nch; cy++) for (let cx = 0; cx < nch; cx++) { const bd = this.chunkBounds(cx, cy); if (!(bd.maxX < wv.x0 || bd.minX > wv.x1 || bd.maxY < wv.y0 - 200 || bd.minY > wv.y1)) visCh.push([cx, cy, bd]); }
     this._visChunks = visCh.length;
-    for (const [cx, cy, bd] of visCh) {
-      const ch = this.getChunk(cx, cy, season);
-      ctx.drawImage(ch.cv, bd.minX, bd.minY, ch.cv.width / ch.sc, ch.cv.height / ch.sc);
+    const W0 = S.world;
+    if (this.gl) {
+      // GPU: 바다 셰이더 → 바닥 구역 텍스처 → 한 장으로 2D 화면에 합성
+      const G = this.gl; G.begin(this.w, this.h, dpr, this.cam);
+      if (W0) G.sea(W0.coast, { W: Sim.W, H: Sim.H }, REDUCED ? 0 : this.t / 1000);
+      const keep = new Set();
+      for (const [cx, cy, bd] of visCh) { const ch = this.getChunk(cx, cy, season), k = cx + ',' + cy; keep.add(k); G.image(k, ch.ver + '#' + (ch.id || (ch.id = ++this._chId || (this._chId = 1))), ch.cv, bd.minX, bd.minY, ch.cv.width / ch.sc, ch.cv.height / ch.sc); }
+      if (G.tex.size > keep.size + 12) G.forget(keep);
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(G.cv, 0, 0); ctx.restore();
+    } else {
+      if (W0) this.drawSeaVector(ctx, season);
+      for (const [cx, cy, bd] of visCh) {
+        const ch = this.getChunk(cx, cy, season);
+        ctx.drawImage(ch.cv, bd.minX, bd.minY, ch.cv.width / ch.sc, ch.cv.height / ch.sc);
+      }
     }
     if (!lod) {
       ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1;
       for (let y = view.y0; y <= view.y1; y++) for (let x = view.x0; x <= view.x1; x++) {
-        const t = S.tiles[y * Sim.W + x]; if (t.t !== 'water' || hash(x, y, 1) > 0.35) continue;
+        const t = S.tiles[y * Sim.W + x]; if (t.t !== 'water' || hash(x, y, 1) > 0.35 || (t.sea && this.gl)) continue;
         const p = iso(x, y), ph = (this.t / 2400 + hash(x, y, 9)) % 1;
         ctx.globalAlpha = Math.sin(ph * Math.PI); ctx.beginPath(); ctx.moveTo(p.x - 6 + ph * 6, p.y + 4 - ph * 3); ctx.quadraticCurveTo(p.x - 3 + ph * 6, p.y + 2 - ph * 3, p.x + ph * 6, p.y + 4 - ph * 3); ctx.stroke();
       }
@@ -1330,6 +1449,13 @@
     for (let y = Math.max(0, view.y0 - 4); y < view.y0; y++) for (let x = view.x0; x <= view.x1; x++) { const t = S.tiles[y * Sim.W + x]; if (t.b && (t.b.d || 1) > 1) items.push({ d: x + (t.b.w || 1) - 1 + y + (t.b.d || 1) - 1, t }); }
     for (let y = view.y0; y <= view.y1; y++) for (let x = Math.max(0, view.x0 - 4); x < view.x0; x++) { const t = S.tiles[y * Sim.W + x]; if (t.b && (t.b.w || 1) > 1) items.push({ d: x + (t.b.w || 1) - 1 + y + (t.b.d || 1) - 1, t }); }
     for (const s2 of S.stations) items.push({ d: s2.x + s2.y + 1.5, station: s2 });
+    if (!lod && S.world) {
+      const inT = (x, y) => x >= view.x0 - 1 && x <= view.x1 + 1 && y >= view.y0 - 1 && y <= view.y1 + 1;
+      for (const pp of S.world.promProps) if (inT(pp.x, pp.y)) items.push({ d: pp.x + pp.y, pprop: pp });
+      const pc = S.world.plaza;
+      if (pc && inT(pc.x, pc.y)) { items.push({ d: pc.x + pc.y, fountain: pc }); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, x = pc.x + Math.cos(a) * pc.r * 0.78, y = pc.y + Math.sin(a) * pc.r * 0.78; items.push({ d: x + y, pbench: { x, y, i } }); } }
+      for (const w of this.promW) items.push({ d: w.px + w.py + 0.1, pw: w });
+    }
     if (!lod) for (const st of S.stores) {
       if (st.x < view.x0 - 2 || st.x > view.x1 + 2 || st.y < view.y0 - 2 || st.y > view.y1 + 2) continue;
       if (!['cafe', 'dessert', 'brunch', 'bakery', 'pub', 'bubbletea', 'pizza'].includes(st.cat)) continue;
@@ -1387,17 +1513,19 @@
         const w = it.w; const wp = walkerPos(w), fx = wp.fx, fy = wp.fy;
         const ddx = w.dx || 0;
         const tw = Sim.tile(S, Math.round(fx), Math.round(fy));
-        const sOff = tw && tw.road === 'alley' ? 0.15 : 0.37;
+        const sOff = tw && (tw.road === 'alley' || tw.road === 'walk') ? 0.15 : 0.37;
         const p = wp.p || (ddx ? iso(fx, fy + w.side * sOff) : iso(fx + w.side * sOff, fy));
-        const run = w.kind === 'run';
-        const bob = REDUCED || paused || w.wait ? 0 : Math.abs(Math.sin(this.t / (run ? 80 : 140) + fx * 3)) * (run ? 2.2 : 1.2);
-        walker(ctx, p.x, p.y, w.c, w.hair, bob, rain && w.umb && !run, paused || w.wait ? 0 : this.t / (run ? 60 : 110) + w.sp * 10);
-        if (run) { ctx.beginPath(); ctx.moveTo(p.x - 2, p.y - 12.2 - bob); ctx.lineTo(p.x + 2, p.y - 12.2 - bob); ctx.strokeStyle = '#fff8ee'; ctx.lineWidth = 1; ctx.stroke(); }
-        if (w.kind === 'commute') { ctx.beginPath(); ctx.rect(p.x + 2.2, p.y - 5.5 - bob * 0.3, 3.4, 2.6); ctx.fillStyle = '#7a4a2e'; ctx.fill(); ink(ctx, 0.6); }
-        if (w.cup) { ctx.beginPath(); ctx.rect(p.x + 2.4, p.y - 8.2 - bob, 1.8, 2.4); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.5); }
-        if (w.pair) walker(ctx, p.x + 5, p.y + 1.5, w.c2, w.hair2, bob, rain && w.umb, paused ? 0 : this.t / 110 + 1.5);
-        const ox = 0, oy = 0;
-        if (w.dog && !w.pair) { const dx = p.x + ox + 5, dy = p.y + oy + 1; ctx.beginPath(); ctx.ellipse(dx, dy - 2, 3, 1.8, 0, 0, 7); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.8); ctx.beginPath(); ctx.arc(dx + 3, dy - 3.5, 1.4, 0, 7); ctx.fill(); ink(ctx, 0.7); }
+        this.drawWalkerAt(ctx, p, w, fx, rain, paused);
+      } else if (it.pw) {
+        const w = it.pw; this.drawWalkerAt(ctx, iso(w.px, w.py), w, w.px, rain, paused);
+      } else if (it.pprop) {
+        const pp = it.pprop, q = iso(pp.x, pp.y), calm = night < 0.4 && season !== 'winter';
+        if (pp.k === 'lamp') this.drawLamp(ctx, q.x, q.y, night);
+        else if (pp.k === 'tree') drawTree(ctx, q.x, q.y, season, pp.v);
+        else if (pp.k === 'planter') this.planter(ctx, q.x, q.y, season);
+        else { this.bench(ctx, q.x + 2, q.y + 1); if (calm && hash(Math.round(pp.x * 4), 7) < 0.55) walkerSit(ctx, q.x, q.y - 1, SHIRTS[pp.v * 2 % 9], HAIR[pp.v % 6]); }
+      } else if (it.fountain) this.drawPlazaFountain(ctx, it.fountain);
+      else if (it.pbench) { const q = iso(it.pbench.x, it.pbench.y); this.bench(ctx, q.x + 2, q.y + 1); if (night < 0.4 && season !== 'winter' && it.pbench.i % 2 === 0) walkerSit(ctx, q.x, q.y - 1, SHIRTS[(it.pbench.i * 3 + 1) % 9], HAIR[it.pbench.i % 6]);
       } else if (it.car) {
         const c = it.car; const fx = c.x + (c.tx - c.x) * c.f, fy = c.y + (c.ty - c.y) * c.f;
         const ddx = c.dx || 1, ddy = c.dy || 0, lane = 0.2;

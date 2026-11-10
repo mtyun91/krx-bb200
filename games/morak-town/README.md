@@ -1,7 +1,7 @@
 # 모락모락 타운
 
 작은 가게 하나로 시작해 직원을 키우고, 공간을 꾸미고, 뜨는 동네를 찾아 프랜차이즈를 늘리고 코스닥에 상장하는 힐링 경영 게임입니다.
-개발 기준은 [DEVELOPMENT.md](DEVELOPMENT.md), 계획은 [ROADMAP.md](ROADMAP.md), 현재 상태는 [P0_STATUS.md](P0_STATUS.md)에 있습니다.
+개발 기준은 [DEVELOPMENT.md](DEVELOPMENT.md), 계획은 [ROADMAP.md](ROADMAP.md), 현재 상태는 [P0_STATUS.md](P0_STATUS.md), 기준 장면 검수는 [P1_REVIEW.md](P1_REVIEW.md)에 있습니다.
 
 도시 건설과 비즈니스 시뮬레이션 장르를 참고한 오리지널 게임이며, 빌드 도구나 외부 라이브러리 없이 브라우저에서 바로 실행됩니다.
 
@@ -54,6 +54,7 @@
 ## 파일
 
 - `js/icons.js` — 선 아이콘 모음. 화면의 이모지를 자동으로 아이콘으로 바꾸고 캔버스에도 같은 아이콘을 그립니다.
+- `js/gl.js` — WebGL 바닥층. 바다 셰이더(곡선 해안·물결·포말)와 바닥 텍스처 합성. 안 되면 2D로 그리고, 주소에 `?gl=0`을 붙이면 끕니다.
 - `js/sim.js` — 시뮬레이션 코어. DOM 없이 Node에서도 돌아가며, 같은 시드면 같은 결과가 나옵니다.
 - `js/render.js` — 도시와 매장 내부를 그리는 캔버스 렌더러.
 - `js/audio.js` — 배경 음악과 효과음.

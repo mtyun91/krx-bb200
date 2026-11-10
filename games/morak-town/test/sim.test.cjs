@@ -182,5 +182,13 @@ const run = (S, days) => { for (let i = 0; i < days * DAY; i++) Sim.step(S); };
   // 새 도시: 바다와 모래사장
   assert(S.tiles.some(t => t.sea) && S.tiles.some(t => t.b && t.b.beach), '바다와 해변');
   assert(S.tiles.filter(t => t.b && Sim.BTYPES[t.b.k] && t.b.lv > 9).length === 0, '높은 건물 없이 낮은 동네');
+  // 곡선 원본층: 바다·모래 칸은 해안 곡선에서 칠한 결과, 산책로·광장은 보행 전용
+  assert(S.world && S.world.mapVersion === Sim.MAP_VERSION, '곡선 원본층');
+  assert(S.tiles.every(t => !!t.sea === (t.y >= Sim.coastY(t.x))), '바다 칸 = 해안 곡선 아래');
+  assert(S.world.prom.length >= 1 && S.world.prom.every(sg => sg.length > 3), '산책로 곡선');
+  assert(S.world.prom.every(sg => sg.every(([x, y]) => Math.abs(y - (Sim.coastY(x) - Sim.BEACH_W - 0.25)) < 1e-2)), '산책로는 모래사장 안쪽 가장자리를 따라감');
+  assert(S.tiles.some(t => t.plaza) && S.tiles.filter(t => t.plaza).every(t => t.road === 'walk'), '광장은 보행 전용');
+  assert(Sim.roadComponents(S) === 1, '산책로를 넣어도 길은 하나로 이어짐');
+  console.log('[지형] 산책로', S.world.prom.map(sg => sg.length).join('+'), '점, 소품', S.world.promProps.length, '개, 보행 전용 칸', S.tiles.filter(t => t.road === 'walk').length);
 }
 console.log('모든 시뮬레이션 점검 통과');
