@@ -991,6 +991,17 @@
     return r5(mp * 10 * (0.5 + spaceScore(st) / 200) + interiorBook(S, st) * 0.2);
   }
 
+  // 공급자 계약(계획서 P2): 값·품질·납품 안정성이 다름
+  const VENDORS = {
+    local: { name: '모락 농협', price: 1.0, qual: 1.0, rel: 0.98, desc: '무난한 값과 품질, 거의 늘 제때 와요.' },
+    whole: { name: '바다 도매상', price: 0.9, qual: 0.93, rel: 0.88, desc: '10% 싸지만 품질이 조금 낮고 가끔 절반만 와요.' },
+    farm:  { name: '해바라기 직송 농장', price: 1.12, qual: 1.08, rel: 0.95, desc: '비싸지만 신선해서 맛이 좋아져요.' },
+  };
+  function setVendor(S, id, key) { const st = S.stores.find(s => s.id === id); if (!st || !VENDORS[key]) return { ok: false }; st.vendor = key; return { ok: true, msg: `${VENDORS[key].name}와 납품 계약을 맺었어요.` }; }
+  // 가게 이름: 매장마다 고유한 상호(예: 윤슬 식탁, 오늘의 빵)
+  const TITLE_PRE = ['윤슬', '오늘의', '바다', '햇살', '모락', '포근', '소금', '달빛', '몽글', '한입', '골목', '파도'];
+  const TITLE_SUF = { cafe: '커피', bakery: '빵', noodle: '국수', burger: '버거', dessert: '디저트', snack: '분식', chicken: '치킨', pizza: '피자', hansik: '식탁', japanese: '스시', chinese: '반점', salad: '샐러드', bubbletea: '티하우스', brunch: '브런치', pub: '이자카야' };
+  function storeTitle(st) { return TITLE_PRE[(st.id * 7 + st.x) % TITLE_PRE.length] + ' ' + (TITLE_SUF[st.cat] || CATS[st.cat].name); }
   function unitCost(S, comp, st) {
     const cat = CATS[st.cat];
     const base = (st._mi ? st._mi.ticket * st._mi.cost : cat.ticket * cat.cogs) / VAT;
@@ -1007,7 +1018,7 @@
     const m = mode === 'kitchen' ? (cat.food ? 0.82 : 0.88) : mode === 'warehouse' ? 0.88 : 1.08;
     const waste = (1 + Math.max(0, 50 - (st._skill || 50)) / 50 * 0.06) * (1 - 0.02 * deptPower(S, comp, 'logistics')) * (comp.factory ? 0.95 : 1);
     let ev = 1; for (const e of st.ev) if (e.until > S.hour && STORE_EVENTS[e.kind].cogs) ev *= STORE_EVENTS[e.kind].cogs;
-    return base * idx * m * waste * ev;
+    return base * idx * m * waste * ev * (VENDORS[st.vendor || 'local'].price);
   }
   function menuItems(st) { const C = CATS[st.cat]; const ids = st.menu && st.menu.length ? st.menu : defaultMenu(st.cat, st.size); return C.menu.filter(m => ids.includes(m.id)); }
   function inSeason(m, mi) { return m.season ? m.season.includes(mi) : null; }
@@ -1054,6 +1065,7 @@
     if (st.supply === 'kitchen' && CATS[st.cat].food) q *= 1.08;
     if (st.cat === 'cafe' && comp.roastery) q *= 1.06;
     for (const e of st.ev) if (e.until > S.hour && STORE_EVENTS[e.kind].quality) q *= STORE_EVENTS[e.kind].quality;
+    q *= VENDORS[st.vendor || 'local'].qual;
     return q;
   }
   function interiorAppeal(st, seg) {
@@ -1689,7 +1701,7 @@
     if (st.inv || st.franchise) return;
     const comp = S.companies[st.owner], need = invNeed(S, comp, st), guess = 60 + st.size * 25;
     st.invDays = st.invDays || 2; st.inv = {}; st.onOrder = {}; st.invUse = {}; let cost = 0;
-    for (const g in need) { st.inv[g] = need[g] * guess * st.invDays; st.invUse[g] = need[g] * guess; cost += st.inv[g]; }
+    for (const g in need) { st.inv[g] = need[g] * guess * st.invDays; st.invUse[g] = need[g] * guess; st.onOrder[g] = need[g] * guess * 1.2; cost += st.inv[g]; }   // 첫날 밤 배송도 미리 예약(이틀째 품절 방지)
     comp.cash -= cost; comp.cur.purchase = (comp.cur.purchase || 0) + cost; st.invValue = cost;
   }
   function stockCap(st, need) { let m = Infinity; for (const g in need) if (need[g] > 0) m = Math.min(m, (st.inv[g] || 0) / need[g]); return m; }
@@ -1703,7 +1715,7 @@
       const over = Math.max(0, st.inv[g] - st.invUse[g]), sp = over * (SPOIL[g] || 0.03) * keep;
       st.inv[g] -= sp; waste += sp;
       const fill = (S.supply && S.supply[g] && S.supply[g].until > S.hour) ? S.supply[g].fill : 1;
-      const got = (st.onOrder[g] || 0) * fill; st.inv[g] += got; paid += got;
+      const rel = VENDORS[st.vendor || 'local'].rel, got = (st.onOrder[g] || 0) * fill * (rnd(S) < rel ? 1 : 0.5); st.inv[g] += got; paid += got;
       st.onOrder[g] = Math.max(0, (st.invDays + 1) * st.invUse[g] - st.inv[g]);
     }
     st._use = {};
@@ -2434,7 +2446,7 @@
     FAC, PUBLIC, MKT, MKT_NAME, STORE_EVENTS, CO_EVENTS, LOGO_SHAPES, ROLES, SHIFTS, WEATHER, QUESTS, BURDEN, PROFILE, SEG_HOURS,
     roadComponents, newGame, step, tile, isLot, anchorOf, hood, hoodAt, nearSources, BTYPES, CLS_NAME, PROFILE_NAME, PROFILE_MULT, LINES, buildingPop, findFit, sources, population, dateOf, seasonOf, dayOf,
     openCost, interiorCost, utilMonth, propertyPrice, archCost, researchCost, upgradeCost, interiorBook, spaceScore, keyMoney,
-    ROOM, FURN, FURN_KEYS, zoneAt, furnRect, furnCells, furnFits, ensureFurn, defaultFurn, furnFx, furnAppeal, placeFurn, removeFurn, resetFurn, furnFlow, fbox, setInvDays, invNeed, stockCap, WALLET,
+    ROOM, FURN, FURN_KEYS, zoneAt, furnRect, furnCells, furnFits, ensureFurn, defaultFurn, furnFx, furnAppeal, placeFurn, removeFurn, resetFurn, VENDORS, setVendor, storeTitle, furnFlow, fbox, setInvDays, invNeed, stockCap, WALLET,
     seatCapOf, staffBound, unitCost, ticket, quality, menuInfo, menuItems, refreshMenu, setMenu, defaultMenu, inSeason, interiorAppeal, hourCap, wantAt, dayDemand, teamStats, laborDay, chemistry, compat, effStat, shiftWindow, onDuty, askWage,
     openStore, closeStore, setInterior, setArch, upgradeStore, buyProperty, setHours, runStoreEvent, runCoEvent,
     hire, fire, staffAct, autoStaff, buildFacility, upgradeFacility, removeFacility, buildPublic, facRange, facCap, assignSupply,

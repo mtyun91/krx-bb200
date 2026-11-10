@@ -21,7 +21,7 @@
   const short = v => Sim.won(v).replace('원', '');
   const pct = v => (v * 100).toFixed(1).replace('.0', '') + '%';
   const hoodOfXY = (x, y) => Sim.HOODS[Sim.tile(S, x, y).h];
-  const storeName = st => `${hoodOfXY(st.x, st.y).name} ${Sim.CATS[st.cat].name}`;
+  const storeName = st => Sim.storeTitle(st);
   function stars(r) { const n = Math.round(r); return `<span class="stars" aria-label="평점 ${r.toFixed(1)}">${'★'.repeat(n)}<span class="off">${'★'.repeat(5 - n)}</span></span> ${r.toFixed(1)}`; }
   const logo = (c, size) => `<canvas class="logo-c" data-logo="${c.id}" width="${size || 18}" height="${size || 18}" style="width:${size || 18}px;height:${size || 18}px"></canvas>`;
   function paintLogos(rootEl) {
@@ -337,7 +337,8 @@
       ${C.dlv > 0 ? `<div class="ctl"><span class="lbl">배달앱</span><div class="seg" style="max-width:170px"><button class="${st.delivery ? 'on' : ''}" data-act="dlv" data-arg="1">입점</button><button class="${!st.delivery ? 'on' : ''}" data-act="dlv" data-arg="0">안 함</button></div><span class="chip">업종 배달 비중 ${Math.round(C.dlv * 100)}%</span></div>
       <p class="hint" style="margin-top:0">배달 주문은 좌석 없이 주방만 쓰지만 주문마다 수수료 9.8%와 배달비 3,000원이 들어요. 어제 배달 ${st.dayDlv || 0}건 · 수수료 ${won(st.dayDlvFee || 0)}${st.dlvMin != null ? ` · 평균 도착 ${Math.round(st.dlvMin)}분${st.dlvLate > 0.05 ? ` <span class="down">(지연 ${Math.round(st.dlvLate * 100)}%: 환불·평점 하락)</span>` : ''}` : ''}</p>` : ''}
       ${st.inv ? (() => { const days = Math.min(...Object.keys(st.inv).map(g => st.invUse[g] > 0 ? st.inv[g] / st.invUse[g] : 9)); return `<div class="row"><span class="lbl">재고</span><div class="seg">${[1, 2, 3, 4, 5].map(d => `<button class="${st.invDays === d ? 'on' : ''}" data-act="invdays" data-arg="${d}">${d}일치</button>`).join('')}</div></div>
-      <p class="hint" style="margin-top:0">남은 재고 약 ${days.toFixed(1)}일치 (${won(st.invValue || 0)}) · 어제 품절로 놓친 손님 ${st.dayStockLost || 0}명 · 상한 재료 ${won(st.dayWaste || 0)}. 재고를 많이 두면 품절은 줄지만 우유·고기·채소가 더 상해요.</p>${st.lossWhy && st.lossWhy.length ? `<p class="hint" style="margin-top:0">어제 손해 원인: ${st.lossWhy.map(([k, v]) => `<b>${k} ${k.includes('원') ? won(v) : v + '명'}</b>`).join(' · ')}</p>` : ''}`; })() : ''}
+      <p class="hint" style="margin-top:0">남은 재고 약 ${days.toFixed(1)}일치 (${won(st.invValue || 0)}) · 어제 품절로 놓친 손님 ${st.dayStockLost || 0}명 · 상한 재료 ${won(st.dayWaste || 0)}. 재고를 많이 두면 품절은 줄지만 우유·고기·채소가 더 상해요.</p>
+      <div class="row"><span class="lbl">공급자</span><div class="seg">${Object.keys(Sim.VENDORS).map(k => `<button class="${(st.vendor || 'local') === k ? 'on' : ''}" data-act="vendor" data-arg="${k}" title="${Sim.VENDORS[k].desc}">${Sim.VENDORS[k].name}</button>`).join('')}</div></div><p class="hint" style="margin-top:0">${Sim.VENDORS[st.vendor || 'local'].desc}</p>${st.lossWhy && st.lossWhy.length ? `<p class="hint" style="margin-top:0">어제 손해 원인: ${st.lossWhy.map(([k, v]) => `<b>${k} ${k.includes('원') ? won(v) : v + '명'}</b>`).join(' · ')}</p>` : ''}`; })() : ''}
       <h4>${C.icon} ${C.name}의 특징</h4><ul class="traits">${(C.traits || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
       <h4>매장 이벤트</h4><div class="evgrid">${Object.entries(Sim.STORE_EVENTS).map(([k, E]) => { const on = st.ev.find(e => e.kind === k && e.until > S.hour); return `<button class="evbtn ${on ? 'on' : ''}" data-act="sevent" data-arg="${k}" ${on ? 'disabled' : ''}><b>${E.name}</b><span>${E.desc}</span><small>${on ? `진행 중 · ${Math.ceil((on.until - S.hour) / 24)}일 남음` : E.cost ? won(E.cost) : '무료'}</small></button>`; }).join('')}</div>
       <div class="rows">
@@ -729,6 +730,7 @@
       case 'mkt': if (st) { st.mkt = +arg; Sim.computeDemand(S); } break;
       case 'dlv': if (st) st.delivery = arg === '1'; break;
       case 'invdays': if (st) result(Sim.setInvDays(S, st.id, +arg)); break;
+      case 'vendor': if (st) result(Sim.setVendor(S, st.id, arg)); break;
       case 'tab': tab = arg; renderTabs(); $('panel').classList.add('open'); break;
       case 'hqhire': { const r = Sim.hqHire(S, +arg); result(r); if (r.ok) Snd.play('hire'); break; }
       case 'hqdept': { const [id, d] = arg.split(':'); result(Sim.hqAct(S, +id, 'dept', d)); break; }

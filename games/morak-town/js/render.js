@@ -220,12 +220,8 @@
   R.home = function () { const c = this.S && this.S.hoodCenters ? this.S.hoodCenters[2] : { x: 40, y: 20 }; this.centerOn(c.x, c.y + 6); this.cam.z = Math.min(0.9, Math.max(0.6, this.w / 1400)); };
   R.pop = function (x, y) { (this.pops || (this.pops = {}))[x + ',' + y] = this.t; };
 
-  function darkness(h) {
-    if (h >= 7 && h < 17.5) return 0;
-    if (h >= 17.5 && h < 20) return (h - 17.5) / 2.5 * 0.7;
-    if (h >= 5 && h < 7) return (7 - h) / 2 * 0.7;
-    return 0.7;
-  }
+  // 하루 밝기: 노을·새벽을 부드러운 곡선으로
+  function darkness(h) { const sm = (a, b, v) => { const k = Math.max(0, Math.min(1, (v - a) / (b - a))); return k * k * (3 - 2 * k); }; return 0.7 * Math.max(sm(17, 20.5, h), 1 - sm(4.5, 7.5, h)); }
   function duskTint(h) { return (h >= 16.5 && h < 19.5) ? Math.sin((h - 16.5) / 3 * Math.PI) : (h >= 5 && h < 7.5 ? Math.sin((h - 5) / 2.5 * Math.PI) * 0.6 : 0); }
 
   // ---------- 여러 칸 건물 도형 ----------
@@ -551,7 +547,7 @@
     for (const [dx, dy, a, b] of edges) {
       const n = nbT(dx, dy);
       if (!n || isRoadT(n)) continue;
-      if (n.t === 'water') { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 2.4); if (bridge) { ctx.save(); ctx.translate(0, -5); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 1.2); ctx.restore(); for (let i = 0; i <= 4; i++) { const u = i / 4, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 5); ink(ctx, 1); } } continue; }
+      if (n.t === 'water') { if (bridge) { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(b[0], b[1] + 9); ctx.quadraticCurveTo(m[0], m[1] + 1, a[0], a[1] + 9); ctx.closePath(); ctx.fillStyle = '#ead9c8'; ctx.fill(); ink(ctx, 1.1); } ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 2.4); if (bridge) { ctx.save(); ctx.translate(0, -5); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 1.2); ctx.restore(); for (let i = 0; i <= 4; i++) { const u = i / 4, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 5); ink(ctx, 1); } } continue; }
       if (alley) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 1.2); continue; }
       const [u0, u1, v0, v1] = side[dx + ',' + dy];
       quad(u0, u1, v0, v1, swCol, 0);
@@ -927,6 +923,22 @@
     ctx.beginPath(); ctx.moveTo(x - 10, y - 14.5); ctx.quadraticCurveTo(x - 6, y - 21, x - 4, y - 21); ctx.lineTo(x - 2, y - 14); ctx.closePath(); ctx.fillStyle = '#fff8ee'; ctx.fill(); ink(ctx, 0.6);
     if (v === 1) { ctx.beginPath(); ctx.arc(x + 12, y - 2, 3, 0, 7); ctx.fillStyle = '#e3a63c'; ctx.fill(); ink(ctx, 0.7); }
   };
+
+  R.drawStall = function (ctx, x, y, col, label, goods) {
+    poly(ctx, [[x - 9, y - 1], [x, y + 3.5], [x + 9, y - 1], [x + 9, y - 7], [x, y - 2.5], [x - 9, y - 7]], '#c9a27e', 0.9);
+    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(x - 6 + i * 3, y - 6 + (i < 3 ? i : 4 - i) * 0.9, 1.4, 0, 7); ctx.fillStyle = goods[i % goods.length]; ctx.fill(); }
+    walker(ctx, x + 2, y - 4, '#fff8ee', HAIR[Math.abs(x | 0) % 6], 0);
+    for (const dx of [-8, 8]) { ctx.beginPath(); ctx.moveTo(x + dx, y - 1); ctx.lineTo(x + dx, y - 17); ink(ctx, 1); }
+    for (let i = 0; i < 6; i++) { const x0 = x - 10 + i * 3.4; ctx.beginPath(); ctx.moveTo(x0, y - 18 + i * 0.6); ctx.lineTo(x0 + 3.4, y - 17.4 + i * 0.6); ctx.lineTo(x0 + 3.4, y - 14 + i * 0.6); ctx.lineTo(x0, y - 14.6 + i * 0.6); ctx.closePath(); ctx.fillStyle = i % 2 ? '#fff8ee' : col; ctx.fill(); ink(ctx, 0.6); }
+    signBoard(ctx, x, y - 21, label.length * 6 + 6, 6.5, '#fff8ee', label);
+  };
+  R.drawDelivery = function (ctx, x, y, dx) {
+    ctx.save(); ctx.translate(x + dx * 10, y + 3);
+    poly(ctx, [[-8, -4], [2, 1], [2, -9], [-8, -14]], '#f6f1ea', 1); poly(ctx, [[2, 1], [8, -2], [8, -12], [2, -9]], '#e6ded4', 1); poly(ctx, [[-8, -14], [2, -9], [8, -12], [-2, -17]], '#fbf7f2', 1);
+    ctx.beginPath(); ctx.ellipse(-4, -9, 2.2, 1.6, 0.4, 0, 7); ctx.fillStyle = '#7fa35a'; ctx.fill(); ctx.restore();
+    walker(ctx, x, y, '#6f8fb5', HAIR[Math.abs(x | 0) % 6], 0); ctx.beginPath(); ctx.rect(x + 1.5, y - 9.5, 5, 3.5); ctx.fillStyle = '#c9a27e'; ctx.fill(); ink(ctx, 0.6);
+    ctx.beginPath(); ctx.rect(x - 7, y - 3, 4, 3); ctx.fillStyle = '#c9a27e'; ctx.fill(); ink(ctx, 0.5);
+  };
   R.drawBus = function (ctx, cx, cy) {
     ctx.beginPath(); ctx.moveTo(cx - 12, cy); ctx.lineTo(cx - 12, cy - 18); ctx.moveTo(cx + 10, cy + 3); ctx.lineTo(cx + 10, cy - 14); ink(ctx, 1.8);
     poly(ctx, [[cx - 15, cy - 19], [cx + 15, cy - 14], [cx + 15, cy - 11], [cx - 15, cy - 16]], '#9ea7de');
@@ -1043,7 +1055,14 @@
     const wallCol = arch === 'basic' ? shade(comp.color, 0.55) : A.wall;
     gshadow(ctx, g);
     if (lod) { fbox(ctx, g, h, wallCol, comp.color); const p = up(g.c, h + 10); drawLogo(ctx, comp, p[0], p[1], 7); return; }
-    if (this.cut) { this.drawStoreCut(ctx, st, g, season, night); return; }
+    // 확대 1.35~1.55배 사이는 지붕이 서서히 걷힘
+    const ca = Math.max(0, Math.min(1, (this.cam.z - 1.35) / 0.2));
+    if (ca >= 1) { this.drawStoreCut(ctx, st, g, season, night); return; }
+    if (ca > 0) { this.drawStoreCut(ctx, st, g, season, night); ctx.save(); ctx.globalAlpha = 1 - ca; this._storeClosed(ctx, st, g, season, night, h, wallCol, comp, arch, A, floors, open, snow); ctx.restore(); return; }
+    this._storeClosed(ctx, st, g, season, night, h, wallCol, comp, arch, A, floors, open, snow);
+  };
+  R._storeClosed = function (ctx, st, g, season, night, h, wallCol, comp, arch, A, floors, open, snow) {
+    const S = this.S;
     fbox(ctx, g, h, wallCol);
     if (arch === 'brick') { ctx.strokeStyle = 'rgba(94,31,43,0.35)'; ctx.lineWidth = 0.6; for (let i = 1; i < 9; i++) { fq(ctx, g, 'L', 0, 1, h * i / 9, h * i / 9, null, 0.5); fq(ctx, g, 'R', 0, 1, h * i / 9, h * i / 9, null, 0.5); } }
     if (arch === 'glass' || arch === 'greenhouse' || arch === 'container') { const n = arch === 'container' ? 10 : 6; for (let i = 1; i < n * g.w; i++) fq(ctx, g, 'L', i / (n * g.w), i / (n * g.w), 0, h, null, 0.6); for (let i = 1; i < n * g.d; i++) fq(ctx, g, 'R', i / (n * g.d), i / (n * g.d), 0, h, null, 0.6); }
@@ -1059,6 +1078,7 @@
     if (floors === 2) { winBoxes(ctx, g, 'L', h * 0.52, h * 0.95, 1, 2, st.id, night > 0.3 ? 0.6 : 0); winBoxes(ctx, g, 'R', h * 0.52, h * 0.95, 1, 1.5, st.id + 1, night > 0.3 ? 0.6 : 0); }
     if (!A.roof && arch !== 'hanok') scallop(ctx, g, h, shade(comp.color, 0.7));
     this.awning(ctx, g, 'L', fh0 + 1, comp.color); this.awning(ctx, g, 'R', fh0 + 1, comp.color);
+    { const tp = fpt(g, 'L', 0.45), title = Sim.storeTitle(st); signBoard(ctx, tp.x, tp.y - fh0 - 9, Math.max(22, title.length * 6), 8, '#fff8ee', title); }
     const pp = fpt(g, 'L', 0.95); ctx.beginPath(); ctx.rect(pp.x + 2, pp.y - 6, 4, 4); ctx.fillStyle = '#d9785f'; ctx.fill(); ink(ctx, 0.8); ctx.beginPath(); ctx.arc(pp.x + 4, pp.y - 9, 3.4, 0, 7); ctx.fillStyle = '#8fb38a'; ctx.fill(); ink(ctx, 0.8);
     if (open) { const ab = fpt(g, 'L', 0.18); const x = ab.x - 6, y = ab.y + 4; poly(ctx, [[x - 3, y], [x, y - 9], [x + 3, y]], '#fff8ee', 0.8); ctx.beginPath(); ctx.arc(x, y - 4.5, 1.4, 0, 7); ctx.fillStyle = comp.color; ctx.fill(); }
     hedge(ctx, g, 'R', 0.1, 0.4, season);
@@ -1580,7 +1600,7 @@
     const season = Sim.seasonOf(S);
     const hf = this.hourF, night = darkness(hf), dusk = duskTint(hf);
     const wk = S.weather ? S.weather.kind : 'sun';
-    const lod = z < 0.5;
+    const lod = z < 0.42;   // 0.42~0.55 사이는 전체 지도와 상세 지도를 겹쳐 서서히 바뀜
     // 지붕 걷기: 확대할 땐 1.5배, 축소할 땐 1.35배에서 바뀜(경계에서 깜박이지 않게)
     this.cut = this.cut ? z >= 1.35 : z >= 1.5;
     // 신호등: 게임 시각이 아니라 화면 시간 7초마다 바뀜(하루 1분 속도에서 깜박이지 않게). 정지하면 멈춤
@@ -1670,12 +1690,22 @@
       const inT = (x, y) => x >= view.x0 - 1 && x <= view.x1 + 1 && y >= view.y0 - 1 && y <= view.y1 + 1;
       for (const pp of S.world.promProps) if (inT(pp.x, pp.y)) items.push({ d: pp.x + pp.y, pprop: pp });
       const pc = S.world.plaza;
+      const sea = Sim.seasonOf(S), dday = Sim.dateOf(S);
+      if (pc && inT(pc.x, pc.y) && night < 0.9) {
+        const stalls = sea === 'autumn' ? [['#e3a63c', '가을 시장', ['#e46b5f', '#e3a63c', '#7fa35a']], ['#c96a3c', '산지 직송', ['#e3a63c', '#9b5a3c', '#7fa35a']], ['#7fa392', '햇과일', ['#e46b5f', '#f2d36b']]]
+          : sea === 'winter' ? [['#e46b5f', '따뜻한 음료', ['#8a5a3c', '#fff8ee']], ['#a8647a', '핫초코', ['#8a5a3c', '#e46b5f']]]
+          : sea === 'summer' && (dday.weekend || dday.holiday) ? [['#6fb7b2', '시원한 빙수', ['#fff8ee', '#e58ba3']], ['#f2d36b', '레몬에이드', ['#f2d36b', '#fff8ee']], ['#e46b5f', '바다 꼬치구이', ['#c96a3c', '#e3a63c']]] : [];
+        stalls.forEach((sv, i) => { const a = -Math.PI * 0.85 + i * 0.55, x = pc.x + Math.cos(a) * (pc.r + 0.9), y = pc.y + Math.sin(a) * (pc.r + 0.9); items.push({ d: x + y, stall: [x, y, sv] }); });
+      }
       if (pc && inT(pc.x, pc.y)) { items.push({ d: pc.x + pc.y, fountain: pc }); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, x = pc.x + Math.cos(a) * pc.r * 0.78, y = pc.y + Math.sin(a) * pc.r * 0.78; items.push({ d: x + y, pbench: { x, y, i } }); } }
       for (const w of this.promW) items.push({ d: w.px + w.py + 0.1, pw: w });
       // 저녁 줄전구: 산책로 땅 쪽 가장자리를 따라 처지는 전구 줄
       if (night > 0.25) for (const sg of S.world.prom) for (let i = 4; i + 7 < sg.length; i += 7) { const a = sg[i], b = sg[i + 7]; if (inT(a[0], a[1]) || inT(b[0], b[1])) items.push({ d: a[0] + a[1] + 0.05, fest: [a, b] }); }
       if (pc && inT(pc.x, pc.y)) for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + i * Math.PI / 2, x = pc.x + Math.cos(a) * (pc.r + 0.25), y = pc.y + Math.sin(a) * (pc.r + 0.25); items.push({ d: x + y, lamp: { sp: iso(x, y) } }); }
     }
+    // 아침 7~10시: 매장 앞 식재료 배송 차와 상자를 나르는 사람
+    const hrNow = Math.floor(this.hourF) % 24;
+    if (!lod && hrNow >= 7 && hrNow < 10) for (const st of S.stores) { if (st.x < view.x0 - 1 || st.x > view.x1 + 1 || st.y < view.y0 - 1 || st.y > view.y1 + 1 || hash(st.id, Math.floor(S.hour / 24), 3) > 0.6) continue; let dc = this.doors && this.doors.get(st.id); if (!dc || dc.v !== S.mapVer) { dc = { v: S.mapVer, d: this.doorOf(st) }; (this.doors || (this.doors = new Map())).set(st.id, dc); } if (dc.d) items.push({ d: dc.d.sx + dc.d.sy + 0.2, dlv: dc.d }); }
     if (!lod) for (const st of S.stores) {
       if (st.x < view.x0 - 2 || st.x > view.x1 + 2 || st.y < view.y0 - 2 || st.y > view.y1 + 2) continue;
       if (!['cafe', 'dessert', 'brunch', 'bakery', 'pub', 'bubbletea', 'pizza'].includes(st.cat)) continue;
@@ -1711,8 +1741,10 @@
         else {
           const sc = z * dpr > 3 ? 3 : z * dpr > 1.6 ? 2 : z * dpr > 0.9 ? 1.25 : 0.8;
           const sp = this.spriteFor(t, season, night, sc);
-          if (sp) { ctx.drawImage(sp.cv, sp.minX, sp.minY, sp.cv.width / sp.sc, sp.cv.height / sp.sc); for (const gl of sp.glows) this._glows.push(gl); }
-          else this.drawBuilding(ctx, t, season, night, true);
+          const ti = t.y * Sim.W + t.x, ph = this._ph || (this._ph = new Map());
+          if (sp) { let fa = 1; if (ph.has(ti)) { let st0 = ph.get(ti); if (!st0) { st0 = performance.now(); ph.set(ti, st0); } fa = Math.min(1, (performance.now() - st0) / 280); if (fa < 1) this.drawBuilding(ctx, t, season, night, true); else ph.delete(ti); }
+            ctx.globalAlpha = fa; ctx.drawImage(sp.cv, sp.minX, sp.minY, sp.cv.width / sp.sc, sp.cv.height / sp.sc); ctx.globalAlpha = 1; for (const gl of sp.glows) this._glows.push(gl); }
+          else { this.drawBuilding(ctx, t, season, night, true); if (!ph.has(ti)) ph.set(ti, 0); }
         }
       } else if (it.tree) {
         const p = iso(it.tree.x, it.tree.y), k = Math.floor(hash(it.tree.x, it.tree.y, 4) * 10);
@@ -1749,7 +1781,9 @@
         ctx.beginPath(); ctx.moveTo(A0.x, A0.y - hA); ctx.quadraticCurveTo((A0.x + B0.x) / 2, (A0.y + B0.y) / 2 - hA + sag * 2, B0.x, B0.y - hA); ctx.strokeStyle = 'rgba(94,31,43,0.7)'; ctx.lineWidth = 0.7; ctx.stroke();
         const cols = ['255,214,120', '255,160,170', '170,220,255', '255,240,190'];
         for (let i = 1; i < 8; i++) { const k = i / 8, x = A0.x + (B0.x - A0.x) * k, y = A0.y + (B0.y - A0.y) * k - hA + sag * 4 * k * (1 - k); const c = cols[(i + Math.round(a[0])) % 4]; ctx.beginPath(); ctx.arc(x, y + 1.2, 1.3, 0, 7); ctx.fillStyle = `rgb(${c})`; ctx.fill(); this._glows.push({ x, y: y + 1.2, r: 7, a: 0.9, c }); }
-      } else if (it.fountain) this.drawPlazaFountain(ctx, it.fountain);
+      } else if (it.stall) { const [x, y, sv] = it.stall, q = iso(x, y); this.drawStall(ctx, q.x, q.y, sv[0], sv[1], sv[2]); }
+      else if (it.dlv) { const q = iso(it.dlv.sx, it.dlv.sy); this.drawDelivery(ctx, q.x, q.y, it.dlv.rx > it.dlv.ix ? 1 : -1); }
+      else if (it.fountain) { if (Sim.seasonOf(S) === 'winter') { const c = iso(it.fountain.x, it.fountain.y); drawPine(ctx, c.x, c.y, 'winter', 1.4); for (let i = 0; i < 6; i++) { const a = i * 1.1; ctx.beginPath(); ctx.arc(c.x + Math.cos(a) * 6, c.y - 12 - i * 3, 1.3, 0, 7); ctx.fillStyle = ['#e46b5f', '#f2d36b'][i % 2]; ctx.fill(); this._glows.push({ x: c.x + Math.cos(a) * 6, y: c.y - 12 - i * 3, r: 6, a: 0.8, c: '255,220,140' }); } } else this.drawPlazaFountain(ctx, it.fountain); }
       else if (it.pbench) { const q = iso(it.pbench.x, it.pbench.y); this.bench(ctx, q.x + 2, q.y + 1); if (night < 0.4 && season !== 'winter' && it.pbench.i % 2 === 0) walkerSit(ctx, q.x, q.y - 1, SHIRTS[(it.pbench.i * 3 + 1) % 9], HAIR[it.pbench.i % 6]);
       } else if (it.car) {
         const c = it.car; const fx = c.x + (c.tx - c.x) * c.f, fy = c.y + (c.ty - c.y) * c.f;
@@ -1766,6 +1800,7 @@
       }
     }
 
+    if (z < 0.55) { const ov = this.bakeOverview(season, night); ctx.globalAlpha = Math.min(1, (0.55 - z) / 0.13); ctx.drawImage(ov.cv, ov.minX, ov.minY, ov.cv.width / ov.sc, ov.cv.height / ov.sc); ctx.globalAlpha = 1; }
     if (night > 0 || dusk > 0) {
       ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (dusk > 0) { ctx.fillStyle = `rgba(240,140,110,${0.14 * dusk})`; ctx.fillRect(0, 0, this.w, this.h); }
@@ -1883,8 +1918,10 @@
     const amt = this.S.weather && this.S.weather.amt != null ? this.S.weather.amt : 0.6;
     const n = Math.round((mode === 'rain' ? 30 + 170 * amt : mode === 'snow' ? 30 + 90 * amt : 24) * (this.w < 760 ? 0.5 : 1));
     if (this._pmode !== mode) { this.particles = []; this._pmode = mode; }
-    if (this.particles.length > n) this.particles.length = n;
-    while (this.particles.length < n) this.particles.push({ x: Math.random() * this.w, y: Math.random() * this.h - this.h, v: 0.012 + Math.random() * 0.02, s: 2 + Math.random() * 2.5, ph: Math.random() * 6 });
+    this._wxN = this._wxN == null ? 0 : this._wxN + Math.sign(n - this._wxN) * Math.min(Math.abs(n - this._wxN), 1.5);
+    const nn = Math.round(this._wxN);
+    if (this.particles.length > nn) this.particles.length = nn;
+    while (this.particles.length < nn) this.particles.push({ x: Math.random() * this.w, y: Math.random() * this.h - this.h, v: 0.012 + Math.random() * 0.02, s: 2 + Math.random() * 2.5, ph: Math.random() * 6 });
     for (const p of this.particles) {
       if (mode === 'rain') { p.y += dt * 0.9; p.x -= dt * 0.12; }
       else { p.y += dt * p.v * (mode === 'snow' ? 2 : 1.4); p.x += (dt ? Math.sin(this.t / 900 + p.ph) * 0.3 : 0) + dt * 0.006; }
@@ -1978,7 +2015,35 @@
 
     if (!E) {
     // ----- 배경과 바닥 -----
-    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, Hh);
+    // ----- 매장 밖 풍경(바깥 길·이웃 건물·나무·지나가는 사람) -----
+    {
+      const se = Sim.seasonOf(S), wint = se === 'winter', wk = S.weather ? S.weather.kind : 'sun';
+      ctx.fillStyle = wint ? '#efe9ec' : GRASS[se]; ctx.fillRect(0, 0, W, Hh);
+      const quad = (x0, y0, x1, y1, col, w) => q([P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)], col, w == null ? 0 : w);
+      const BIG = 14;
+      // 앞쪽 두 길(차도)과 인도
+      quad(nx + 1.6, -BIG, nx + 3.2, ny + BIG, '#a99ca1'); quad(-BIG, ny + 1.6, nx + 1.6, ny + 3.2, '#a99ca1');
+      quad(nx + 0.2, -BIG, nx + 1.6, ny + 1.6, '#f6e7df'); quad(-BIG, ny + 0.2, nx + 0.2, ny + 1.6, '#f6e7df');
+      quad(nx + 3.2, -BIG, nx + 4.2, ny + BIG, '#f6e7df'); quad(-BIG, ny + 3.2, nx + 3.2, ny + 4.2, '#f6e7df');
+      ctx.save(); ctx.setLineDash([tw * 0.25, tw * 0.3]); line(P(nx + 2.4, -BIG), P(nx + 2.4, ny + BIG), '#f4ece6', 1.2); line(P(-BIG, ny + 2.4), P(nx + 2.4, ny + 2.4), '#f4ece6', 1.2); ctx.restore();
+      for (const [a0, b0] of [[P(nx + 1.6, -BIG), P(nx + 1.6, ny + 1.6)], [P(-BIG, ny + 1.6), P(nx + 1.6, ny + 1.6)], [P(nx + 3.2, -BIG), P(nx + 3.2, ny + BIG)], [P(-BIG, ny + 3.2), P(nx + 3.2, ny + 3.2)]]) line(a0, b0, INK, 1.2);
+      ctx.save(); ctx.globalAlpha = 0.25; for (let k = -BIG; k < ny + 1.6; k += 0.5) line(P(nx + 0.2, k), P(nx + 1.6, k), INK, 0.5); for (let k = -BIG; k < nx + 0.2; k += 0.5) line(P(k, ny + 0.2), P(k, ny + 1.6), INK, 0.5); ctx.restore();
+      // 횡단보도
+      for (let i = 0; i < 5; i++) quad(nx + 1.7 + i * 0.3, ny + 1.75, nx + 1.85 + i * 0.3, ny + 3.05, '#f4ece6');
+      // 뒤쪽 이웃 건물 (벽 뒤로 지붕과 옥상이 보임)
+      const NB = ['#e58ba3', '#e3a63c', '#a99bd9', '#9ea7de', '#e46b5f', '#f0b6a8'];
+      for (let i = 0; i < 4; i++) { const y0 = -0.4 - i * 0, x0 = i * (nx / 4); const hgt = 2.2 + hash(st.id, i, 41) * 1.6; box(x0 + 0.05, -2.4, x0 + nx / 4 - 0.05, -0.35, 0, hgt, shade(NB[(st.id + i) % 6], 0.25), NB[(st.id + i) % 6]); void y0; for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) { const xa = x0 + 0.25 + c * nx / 8, za = 0.5 + r * hgt * 0.4; q([PZ(xa, -0.35, za), PZ(xa + 0.35, -0.35, za), PZ(xa + 0.35, -0.35, za + 0.45), PZ(xa, -0.35, za + 0.45)], '#fff4ea', 0.8); q([PZ(xa + 0.05, -0.35, za + 0.05), PZ(xa + 0.3, -0.35, za + 0.05), PZ(xa + 0.3, -0.35, za + 0.4), PZ(xa + 0.05, -0.35, za + 0.4)], hour >= 18 || hour < 6 ? '#ffd98a' : '#dcdcf4', 0.5); } }
+      for (let i = 0; i < 3; i++) { const y0 = i * (ny / 3); const hgt = 2 + hash(st.id, i, 42) * 1.5; box(-2.4, y0 + 0.05, -0.35, y0 + ny / 3 - 0.05, 0, hgt, shade(NB[(st.id + i + 3) % 6], 0.25), NB[(st.id + i + 3) % 6]); }
+      // 길가 나무·가로등·화단
+      const scl = (x, y, f) => { const c = P(x, y); ctx.save(); ctx.translate(c.x, c.y); ctx.scale(tw / 34, tw / 34); f(); ctx.restore(); };
+      for (let i = 0; i < 3; i++) scl(nx + 0.9, -1.5 + i * (ny + 2) / 2.5, () => drawTree(ctx, 0, 0, se, st.id + i));
+      for (let i = 0; i < 3; i++) scl(-1.5 + i * (nx + 2) / 2.5, ny + 0.9, () => drawTree(ctx, 0, 0, se, st.id + i + 2));
+      scl(nx + 0.6, ny + 0.6, () => { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -24); ink(ctx, 1.6); poly(ctx, [[-3, -24], [3, -24], [4, -30], [-4, -30]], hour >= 18 || hour < 6 ? '#ffe7a6' : '#f6ead6', 0.9); });
+      // 지나가는 사람과 차 (화면 시간으로 움직임)
+      for (let i = 0; i < 4; i++) { const ph = ((t / 9000) + i * 0.27) % 1, dir = i % 2 ? 1 : -1, along = -3 + (dir > 0 ? ph : 1 - ph) * (nx + 6); const pp = i < 2 ? P(along, ny + 0.9 + (i % 2) * 0.3) : P(nx + 0.9 + (i % 2) * 0.3, along - 2); const hh2 = k2 => hash(st.id * 31 + i, k2, 5); person(ctx, pp.x, pp.y, { k: tw / 26, walk: t / 120 + i, shirt: SHIRTS[Math.floor(hh2(1) * SHIRTS.length)], pants: PANTS[Math.floor(hh2(2) * PANTS.length)], hair: HAIR[Math.floor(hh2(3) * HAIR.length)], skin: SKIN[Math.floor(hh2(4) * SKIN.length)], hs: Math.floor(hh2(5) * 4), cup: i === 1 }); }
+      { const ph = (t / 7000) % 1, cy = -4 + ph * (ny + 10), c = P(nx + 2.0, cy); ctx.save(); ctx.translate(c.x, c.y); ctx.scale(tw / 24, tw / 24); poly(ctx, [[-8, -2], [2, 3], [8, 0], [-2, -5]], 'rgba(107,36,39,0.15)', 0); poly(ctx, [[-7, -5], [1, -1], [1, -8], [-7, -12]], '#e46b5f', 1); poly(ctx, [[1, -1], [7, -4], [7, -11], [1, -8]], shade('#e46b5f', -0.15), 1); poly(ctx, [[-7, -12], [1, -8], [7, -11], [-1, -15]], shade('#e46b5f', 0.2), 1); ctx.restore(); }
+      if (wk === 'rain' || wk === 'snow') { ctx.save(); ctx.strokeStyle = wk === 'rain' ? 'rgba(107,36,39,0.25)' : 'rgba(255,255,255,0.9)'; ctx.fillStyle = 'rgba(255,255,255,0.9)'; for (let i = 0; i < 70; i++) { const x = (hash(i, 1) * W + t * (wk === 'rain' ? -0.05 : 0.01)) % W, y = (hash(i, 2) * Hh + t * (wk === 'rain' ? 0.5 : 0.05)) % Hh; if (wk === 'rain') { ctx.beginPath(); ctx.moveTo((x + W) % W, y); ctx.lineTo((x + W) % W - 2, y + 9); ctx.stroke(); } else { ctx.beginPath(); ctx.arc((x + W) % W, y, 1.6, 0, 7); ctx.fill(); } } ctx.restore(); }
+    }
     const slab = tw * 0.14;
     q([P(0, ny), P(nx, ny), { x: P(nx, ny).x, y: P(nx, ny).y + slab }, { x: P(0, ny).x, y: P(0, ny).y + slab }], shade(C.floor, -0.3), 1.4);
     q([P(nx, ny), P(nx, 0), { x: P(nx, 0).x, y: P(nx, 0).y + slab }, { x: P(nx, ny).x, y: P(nx, ny).y + slab }], shade(C.floor, -0.38), 1.4);
@@ -2297,38 +2362,66 @@
     const seated = Math.min(seats.length, (E ? Math.round(want * 0.45) : want) + (opts.visitors || 0));
     const order = seats.map((s, i) => ({ s, k: hash(st.id, i, 5) })).sort((a, b) => a.k - b.k).map(o => o.s);
     const pk = E ? Math.max(0.4, tw / 26) : tw / 26;
-    for (let i = 0; i < seated; i++) {
-      const s = order[i], o = cust(i);
-      items.push({ d: s.d, draw: () => { const c = PZ(s.x, s.y, s.hi ? 0.42 : s.back === 'sofa' ? 0.26 : 0.25); person(ctx, c.x, c.y + tw * 0.05, Object.assign(o, { sit: true, k: pk, cup: rs(i, 8) < 0.5, arm: Math.max(0, Math.sin(t / 900 + i * 2)) * (rs(i, 9) < 0.4 ? 1 : 0) })); } });
-    }
-    // 줄 선 손님
+    // ----- 심즈풍 움직임: 손님은 들어와 줄 서고 주문하고 자리에 앉아 먹고 나감, 직원은 길을 따라 일함 -----
     const ctr = furn.find(f => f.k === 'counter');
-    if (open && want > seats.length * 0.6 && ctr) { const r = Sim.furnRect(ctr); for (let i = 0; i < Math.min(3, Math.ceil((want - seats.length * 0.6) / 3)); i++) { const x = ctr.x + r.w + 0.35 + i * 0.45, y = ctr.y + r.d * 0.5 + i * 0.2; const o = cust(50 + i); items.push({ d: x + y, draw: () => { const c = P(x, y); person(ctx, c.x, c.y, Object.assign(o, { k: pk, bob: i === 0 ? Math.abs(Math.sin(t / 500)) * 0.6 : 0 })); } }); } }
-    // 직원
     const onDuty = open ? st.staff.filter(s => Sim.onDuty(st, s, hour)) : [];
     const freeK = [], freeH = [];
     for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) if (!occ.has(x + ',' + y) && Sim.zoneAt(st, x, y) !== 'door') (x < 2 ? freeK : freeH).push([x + 0.5, y + 0.5]);
-    const heat = furn.filter(f => /^stove|espresso|oven|sink/.test(f.k));
-    onDuty.forEach((s, i) => {
-      let x, y, walk = null;
-      if (s.role === 'kitchen') {
-        if (freeK.length) [x, y] = freeK[i % freeK.length];
-        else { const h0 = heat[i % Math.max(1, heat.length)] || { x: 0, y: i }; x = 1.5; y = h0.y + 0.5; }
-      } else if (s.role === 'manager') { if (ctr) { const r = Sim.furnRect(ctr); x = ctr.x + 0.5 - (ctr.x >= 1 ? 0.75 : -0.9); y = ctr.y + r.d / 2; if (x < 0.3) x = ctr.x + r.w + 0.3; } else { x = 2.3; y = 1; } }
-      else if (freeH.length > 1) {
-        const n = freeH.length, sp = 5200, tt = t / sp + i * 0.41, a = Math.floor(tt) , f2 = tt - a;
-        const p0 = freeH[Math.floor(hash(s.id, a, 3) * n)], p1 = freeH[Math.floor(hash(s.id, a + 1, 3) * n)];
-        const e = f2 < 0.55 ? 0 : (f2 - 0.55) / 0.45, ee = e * e * (3 - 2 * e);
-        x = p0[0] + (p1[0] - p0[0]) * ee; y = p0[1] + (p1[1] - p0[1]) * ee; if (e > 0 && e < 1) walk = t / 110;
-      } else { x = 2.5 + i * 0.4; y = 0.8; }
-      items.push({ d: x + y + 0.02, draw: () => {
-        const c = P(x, y), hi = opts.hoverStaff === s.id;
-        if (hi) { ctx.fillStyle = 'rgba(242,185,80,0.5)'; ctx.beginPath(); ctx.ellipse(c.x, c.y + 1, tw * 0.28, tw * 0.13, 0, 0, 7); ctx.fill(); }
-        person(ctx, c.x, c.y, { k: pk, shirt: '#fff8ee', pants: '#3b2228', hair: HAIR[s.id % HAIR.length], skin: SKIN[s.id % SKIN.length], hs: s.id % 4, apron: comp.color, walk, bob: s.role === 'kitchen' ? Math.abs(Math.sin(t / 260 + i)) * 0.8 : 0, cap: s.role === 'kitchen' ? '#fff8ee' : null, cup: s.role === 'hall' && !walk });
-        const em = s.role === 'manager' ? '⭐' : s.morale < 40 ? '💧' : s.morale > 85 ? '♪' : '';
-        if (em) { if (em === '♪') { ctx.font = `${Math.round(tw * 0.22)}px "Jua",sans-serif`; ctx.textAlign = 'center'; ctx.fillStyle = INK; ctx.fillText(em, c.x + tw * 0.2, c.y - tw * 0.95); } else icon(ctx, em, c.x + tw * 0.2, c.y - tw * 0.98, tw * 0.24, 2, em === '⭐' ? '#f2d36b' : '#bfe0f3'); }
+    // 이동 격자(0.25칸): 가구 사각형은 막힘
+    const RS = 4, gw = nx * RS, gh = ny * RS, navKey = JSON.stringify(furn);
+    const NAV = Renderer._nav || (Renderer._nav = new Map());
+    let nav = NAV.get(st.id); if (!nav || nav.key !== navKey) { const bl = new Uint8Array(gw * gh); for (const f of furn) { if (Sim.FURN[f.k].floor) continue; const B = Sim.fbox(f); for (let y = Math.floor(B.y0 * RS); y < Math.ceil(B.y1 * RS - 1e-6); y++) for (let x = Math.floor(B.x0 * RS); x < Math.ceil(B.x1 * RS - 1e-6); x++) if (x >= 0 && y >= 0 && x < gw && y < gh) bl[y * gw + x] = 1; } nav = { key: navKey, bl }; NAV.set(st.id, nav); }
+    const cellOf = (x, y) => [Math.max(0, Math.min(gw - 1, Math.floor(x * RS))), Math.max(0, Math.min(gh - 1, Math.floor(y * RS)))];
+    const nearFree = (x, y) => { const [cx, cy] = cellOf(x, y); let best = null, bd = 1e9; for (let r = 0; r < 6 && !best; r++) for (let yy = cy - r; yy <= cy + r; yy++) for (let xx = cx - r; xx <= cx + r; xx++) { if (xx < 0 || yy < 0 || xx >= gw || yy >= gh || nav.bl[yy * gw + xx]) continue; const d = (xx - cx) ** 2 + (yy - cy) ** 2; if (d < bd) { bd = d; best = [xx, yy]; } } return best || [cx, cy]; };
+    const path = (x0, y0, x1, y1) => { const s0 = nearFree(x0, y0), s1 = nearFree(x1, y1), prev = new Int32Array(gw * gh).fill(-1), q = [s0[1] * gw + s0[0]]; prev[q[0]] = q[0]; const goal = s1[1] * gw + s1[0];
+      for (let qi = 0; qi < q.length && prev[goal] < 0; qi++) { const c = q[qi], cx = c % gw, cy = (c / gw) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = cx + dx, Y = cy + dy; if (X < 0 || Y < 0 || X >= gw || Y >= gh) continue; const i = Y * gw + X; if (prev[i] >= 0 || nav.bl[i]) continue; prev[i] = c; q.push(i); } }
+      if (prev[goal] < 0) return [[x1, y1]]; const out = []; for (let c = goal; c !== prev[c]; c = prev[c]) out.push([(c % gw + 0.5) / RS, (((c / gw) | 0) + 0.5) / RS]); out.reverse(); const sm = out.filter((_, i) => i % 2 === 1 || i === out.length - 1); sm.push([x1, y1]); return sm; };
+    const IA = Renderer._ia || (Renderer._ia = new Map()), key = (E ? 'e' : 'm') + st.id;
+    let A0 = IA.get(key); if (!A0 || A0.nav !== navKey) { A0 = { nav: navKey, ag: [], last: t, next: 0, seq: 0 }; IA.set(key, A0); }
+    const dt = Math.max(0, Math.min(120, t - A0.last)) / 1000; A0.last = t;
+    const door = [nx - 0.5, ny - 0.5];
+    const ctrR = ctr ? Sim.fbox(ctr) : null, ctrFront = ctrR ? [ctrR.x1 + 0.3, (ctrR.y0 + ctrR.y1) / 2] : [2.4, 1.5], ctrBack = ctrR ? [Math.max(0.3, ctrR.x0 - 0.3), (ctrR.y0 + ctrR.y1) / 2] : [1, 1.5];
+    const target = open ? Math.min(E ? 5 : 14, seated + (want > seats.length * 0.6 ? 2 : 0)) : 0;
+    const custs = A0.ag.filter(a => a.kind === 'c');
+    A0.next -= dt;
+    if (custs.length < target && A0.next <= 0) { const i = A0.seq++; A0.ag.push(Object.assign({ kind: 'c', st: 'enter', x: door[0], y: door[1], path: path(door[0], door[1], ctrFront[0] + 0.2, ctrFront[1]), id: i }, cust(i))); A0.next = 1.2 + hash(st.id, i, 9) * 2.5; }
+    // 직원 맞추기
+    const staffIds = new Set(onDuty.map(s => s.id));
+    A0.ag = A0.ag.filter(a => a.kind === 'c' || staffIds.has(a.sid));
+    for (const s of onDuty) if (!A0.ag.some(a => a.sid === s.id)) { const kit = s.role === 'kitchen'; const home = kit ? (freeK[s.id % Math.max(1, freeK.length)] || ctrBack) : s.role === 'manager' ? [ctrFront[0] + 0.2, ctrFront[1] + 0.6] : [ctrFront[0] + 0.5, ctrFront[1] - 0.6]; A0.ag.push({ kind: 's', role: s.role, sid: s.id, x: home[0], y: home[1], home, path: [], wait: hash(s.id, 1) * 3, task: null }); }
+    const sk = s2 => s2.x.toFixed(2) + ',' + s2.y.toFixed(2), taken = new Set(A0.ag.filter(a => a.seat).map(a => sk(a.seat)));
+    const walk = (a, sp) => { if (!a.path.length) return true; const [tx, ty] = a.path[0], dx = tx - a.x, dy = ty - a.y, d = Math.hypot(dx, dy), st2 = sp * dt; if (d <= st2) { a.x = tx; a.y = ty; a.path.shift(); } else { a.x += dx / d * st2; a.y += dy / d * st2; } a.moving = dt > 0; a.wph = (a.wph || 0) + dt * 9; return !a.path.length; };
+    for (const a of A0.ag) {
+      a.moving = false;
+      if (a.kind === 'c') {
+        if (a.st === 'enter') { if (walk(a, 1.3)) { a.st = 'order'; a.timer = 1.4 + hash(a.id, 2) * 1.6; } }
+        else if (a.st === 'order') { a.timer -= dt; if (a.timer <= 0) { const free = seats.filter(s2 => !taken.has(sk(s2))); const takeout = !free.length || hash(a.id, 3) < cat.takeout * 0.8; if (takeout) { a.st = 'leave'; a.cup = true; a.path = path(a.x, a.y, door[0], door[1]); } else { const s2 = free[Math.floor(hash(a.id, 4) * free.length)]; a.seat = s2; taken.add(sk(s2)); a.st = 'toSeat'; a.path = path(a.x, a.y, s2.x, s2.y); a.path[a.path.length - 1] = [s2.x, s2.y]; } } }
+        else if (a.st === 'toSeat') { if (walk(a, 1.3)) { a.st = 'eat'; a.timer = 9 + hash(a.id, 5) * 14; a.served = false; } }
+        else if (a.st === 'eat') { a.timer -= dt; if (!a.served && !A0.ag.some(b => b.task === a)) { const sv = A0.ag.find(b => b.kind === 's' && b.role !== 'kitchen' && !b.task); if (sv) { sv.task = a; sv.path = path(sv.x, sv.y, ctrFront[0], ctrFront[1]); sv.leg = 'pick'; } } if (a.timer <= 0 || !open) { a.st = 'leave'; a.seat = null; a.path = path(a.x, a.y, door[0], door[1]); } }
+        else if (a.st === 'leave') { if (walk(a, 1.4)) a.gone = true; }
+      } else {
+        if (a.task) { if (walk(a, 1.8)) { if (a.leg === 'pick') { a.leg = 'deliver'; a.tray = true; const s2 = a.task.seat; a.path = s2 ? path(a.x, a.y, s2.x, s2.y) : []; } else if (a.leg === 'deliver') { a.task.served = true; a.tray = false; a.task = null; a.path = path(a.x, a.y, a.home[0], a.home[1]); } } }
+        else { a.wait -= dt; if (walk(a, 1.6) && a.wait <= 0) { a.wait = 3 + hash(a.sid, Math.floor(t / 4000)) * 4; if (a.role === 'kitchen') { const tgt = Math.random() < 0.5 ? ctrBack : (freeK[Math.floor(Math.random() * Math.max(1, freeK.length))] || ctrBack); a.path = path(a.x, a.y, tgt[0], tgt[1]); } } }
+      }
+    }
+    A0.ag = A0.ag.filter(a => !a.gone);
+    for (const a of A0.ag) {
+      const sitting = a.kind === 'c' && a.st === 'eat' && a.seat;
+      items.push({ d: (sitting ? a.seat.d : a.x + a.y + 0.02), draw: () => {
+        if (a.kind === 'c') {
+          const c = sitting ? PZ(a.seat.x, a.seat.y, a.seat.hi ? 0.42 : a.seat.back === 'sofa' ? 0.26 : 0.25) : P(a.x, a.y);
+          person(ctx, c.x, c.y + (sitting ? tw * 0.05 : 0), Object.assign({}, a, { sit: !!sitting, k: pk, walk: a.moving ? a.wph : null, cup: a.cup || (sitting && a.served), arm: sitting && a.served ? Math.max(0, Math.sin(t / 700 + a.id)) : 0 }));
+          if (a.st === 'order' && !E) { ctx.font = `${Math.round(tw * 0.2)}px "Jua",sans-serif`; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('…', c.x + tw * 0.15, c.y - tw * 1.05); }
+        } else {
+          const s0 = onDuty.find(s => s.id === a.sid), c = P(a.x, a.y), hi = opts.hoverStaff === a.sid;
+          if (hi) { ctx.fillStyle = 'rgba(242,185,80,0.5)'; ctx.beginPath(); ctx.ellipse(c.x, c.y + 1, tw * 0.28, tw * 0.13, 0, 0, 7); ctx.fill(); }
+          person(ctx, c.x, c.y, { k: pk, shirt: '#fff8ee', pants: '#3b2228', hair: HAIR[a.sid % HAIR.length], skin: SKIN[a.sid % SKIN.length], hs: a.sid % 4, apron: comp.color, walk: a.moving ? a.wph : null, bob: a.role === 'kitchen' && !a.moving ? Math.abs(Math.sin(t / 260 + a.sid)) * 0.8 : 0, cap: a.role === 'kitchen' ? '#fff8ee' : null, arm: a.tray ? 1 : 0 });
+          if (a.tray) { ctx.beginPath(); ctx.ellipse(c.x + tw * 0.14, c.y - tw * 0.62 * pk / (tw / 26), tw * 0.12, tw * 0.05, 0, 0, 7); ctx.fillStyle = '#e9e3da'; ctx.fill(); ink(ctx, 0.8); }
+          const em = s0 && (s0.role === 'manager' ? '⭐' : s0.morale < 40 ? '💧' : s0.morale > 85 ? '♪' : '');
+          if (em && !E) { if (em === '♪') { ctx.font = `${Math.round(tw * 0.22)}px "Jua",sans-serif`; ctx.textAlign = 'center'; ctx.fillStyle = INK; ctx.fillText(em, c.x + tw * 0.2, c.y - tw * 0.95); } else icon(ctx, em, c.x + tw * 0.2, c.y - tw * 0.98, tw * 0.24, 2, em === '⭐' ? '#f2d36b' : '#bfe0f3'); }
+        }
       } });
-    });
+    }
     // 고양이 (꾸밈이 좋은 매장엔 가게 고양이가 놀러 와요)
     const fx = Sim.furnFx(st);
     if (fx && fx.sum.deco >= 8 && freeH.length) { const [x, y] = freeH[Math.floor(hash(st.id, Math.floor(t / 20000), 4) * freeH.length)]; items.push({ d: x + y, draw: () => { const c = P(x, y); const ck = E ? 0.42 : 1; ctx.save(); ctx.translate(c.x, c.y); ctx.scale(ck, ck); ctx.translate(-c.x, -c.y); ctx.beginPath(); ctx.ellipse(c.x, c.y - 4, 7, 4, 0, 0, 7); ctx.fillStyle = '#e3a63c'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = LWI; ctx.stroke(); ctx.beginPath(); ctx.arc(c.x + 6, c.y - 8, 3.5, 0, 7); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(c.x - 7, c.y - 4); ctx.quadraticCurveTo(c.x - 12, c.y - 12 + Math.sin(t / 400) * 2, c.x - 9, c.y - 14); ctx.stroke(); ctx.restore(); } }); }
