@@ -365,81 +365,91 @@
     const cache = this.chunks || (this.chunks = new Map());
     let ch = cache.get(key);
     if (ch && ch.ver === ver) { cache.delete(key); cache.set(key, ch); return ch; }
+    // 이번 프레임 굽기 예산을 다 썼으면 예전 그림을 잠깐 그대로 씀 (한 프레임에 몰아서 굽다 끊기지 않게)
+    if (ch && this._budgetG <= 0) return ch;
+    const t0 = performance.now();
     const bd = this.chunkBounds(cx, cy);
-    const cv = (ch && ch.cv) || document.createElement('canvas');
+    const cv = document.createElement('canvas');
     cv.width = Math.ceil((bd.maxX - bd.minX) * sc); cv.height = Math.ceil((bd.maxY - bd.minY) * sc);
     const ctx = cv.getContext('2d');
     ctx.setTransform(sc, 0, 0, sc, -bd.minX * sc, -bd.minY * sc);
     for (let y = bd.y0; y <= bd.y1; y++) for (let x = bd.x0; x <= bd.x1; x++) { const t = Sim.tile(S, x, y); if (t) this.groundTile(ctx, t, season); }
     ch = { cv, ver, bd, sc }; cache.set(key, ch);
-    while (cache.size > (sc > 1.6 ? 8 : 18)) cache.delete(cache.keys().next().value);
+    // 화면에 보이는 구역 수보다 작게 잡으면 매 프레임 다시 굽느라 끊김
+    while (cache.size > Math.max((this._visChunks || 0) + 4, sc > 1.6 ? 10 : 18)) cache.delete(cache.keys().next().value);
+    this._budgetG -= performance.now() - t0;
     return ch;
   };
   function isRoadT(t) { return t && (t.t === 'road' || t.t === 'bridge'); }
   function isCross(S, t) { const r = (dx, dy) => isRoadT(Sim.tile(S, t.x + dx, t.y + dy)); return (r(1, 0) || r(-1, 0)) && (r(0, 1) || r(0, -1)); }
+  // 골목 자갈 무늬 (한 번 만들어 반복)
+  let COBBLE = null;
+  function cobblePattern(ctx) {
+    if (COBBLE || typeof document === 'undefined') return COBBLE;
+    const c = document.createElement('canvas'); c.width = 16; c.height = 8; const g = c.getContext('2d');
+    g.fillStyle = '#cdb9ad'; g.fillRect(0, 0, 16, 8); g.strokeStyle = 'rgba(94,31,43,0.28)'; g.lineWidth = 0.6;
+    for (const [x, y] of [[4, 2], [12, 2], [0, 6], [8, 6], [16, 6]]) { g.beginPath(); g.ellipse(x, y, 3.4, 1.7, 0, 0, 7); g.stroke(); }
+    COBBLE = ctx.createPattern(c, 'repeat'); return COBBLE;
+  }
+  const ROADC = { ave: '#8e7d84', st: '#a3939a', bridge: '#8e7d84' };
   R.roadTile = function (ctx, t, season, edges) {
     const S = this.S, p = iso(t.x, t.y), cx = p.x, cy = p.y, winter = season === 'winter';
     const ave = t.road === 'ave', alley = t.road === 'alley', bridge = t.t === 'bridge';
-    if (bridge) diamond(ctx, cx, cy, 1, '#86c3d3');
-    const asphalt = winter ? '#e8e0e2' : ave ? '#c3adae' : '#dcc7bd';
-    diamond(ctx, cx, cy, 1, alley ? (winter ? '#f3ecec' : '#e9d6c9') : asphalt);
-    const nb = (dx, dy) => isRoadT(Sim.tile(S, t.x + dx, t.y + dy));
+    const L = (u, v) => { const q = iso(t.x + u, t.y + v); return [q.x, q.y]; };
+    const quad = (u0, u1, v0, v1, fill, w) => poly(ctx, [L(u0, v0), L(u1, v0), L(u1, v1), L(u0, v1)], fill, w == null ? 0 : w);
+    const nbT = (dx, dy) => Sim.tile(S, t.x + dx, t.y + dy);
+    const nb = (dx, dy) => isRoadT(nbT(dx, dy));
     const cross = isCross(S, t);
-    const along = nb(1, 0) || nb(-1, 0) ? (nb(0, 1) || nb(0, -1) ? null : 'x') : 'y';
-    ctx.save(); diamondPath(ctx, cx, cy, 1); ctx.clip();
-    if (!ave && !bridge) {
-      // 자갈 포장: 엇갈린 둥근 돌
-      ctx.strokeStyle = 'rgba(94,31,43,0.22)'; ctx.lineWidth = 0.6;
-      const st2 = alley ? 4 : 5;
-      for (let j = -6; j <= 6; j++) for (let i = -6; i <= 6; i++) { const u = (i + (j % 2 ? 0.5 : 0)) * st2, v = j * st2; const px = cx + (u - v), py = cy + (u + v) / 2; ctx.beginPath(); ctx.ellipse(px, py, st2 * 0.62, st2 * 0.34, 0, 0, 7); ctx.stroke(); }
-    } else if (!cross) {
-      // 차선: 대로는 흰 점선 + 반대 방향 대로와 맞닿은 쪽 노란 중앙선, 이면도로는 가운데 점선
-      ctx.strokeStyle = '#f6efe9'; ctx.lineWidth = 1.4; ctx.setLineDash([5, 6]); ctx.beginPath();
-      if (along === 'x') { ctx.moveTo(cx - HW * 0.55, cy - HH * 0.55); ctx.lineTo(cx + HW * 0.55, cy + HH * 0.55); } else { ctx.moveTo(cx + HW * 0.55, cy - HH * 0.55); ctx.lineTo(cx - HW * 0.55, cy + HH * 0.55); }
-      ctx.stroke(); ctx.setLineDash([]);
+    const along = cross ? null : (nb(1, 0) || nb(-1, 0)) ? 'x' : 'y';
+    // 바탕
+    if (alley) { diamond(ctx, cx, cy, 1, '#cdb9ad'); const pat = cobblePattern(ctx); if (pat && !winter) { diamondPath(ctx, cx, cy, 1); ctx.fillStyle = pat; ctx.fill(); } if (winter) diamond(ctx, cx, cy, 1, '#efe7e4'); }
+    else diamond(ctx, cx, cy, 1, winter ? '#cfc5c7' : ROADC[bridge ? 'bridge' : ave ? 'ave' : 'st']);
+    if (!alley && !cross) {
+      // 차선: 대로는 흰 점선 + 맞은편 차로와 닿은 변에 노란 중앙선, 이면도로는 가는 흰 점선
+      const dash = (u0, v0, u1, v1, col, w, d) => { const A = L(u0, v0), B = L(u1, v1); ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.setLineDash(d || []); ctx.stroke(); ctx.setLineDash([]); };
+      if (along === 'x') dash(-0.5, 0, 0.5, 0, ave ? '#f4ece6' : 'rgba(244,236,230,0.75)', ave ? 1.4 : 1, [5, 6]);
+      else dash(0, -0.5, 0, 0.5, ave ? '#f4ece6' : 'rgba(244,236,230,0.75)', ave ? 1.4 : 1, [5, 6]);
       if (ave) {
-        const n2 = along === 'x' ? Sim.tile(S, t.x, t.y + 1) : Sim.tile(S, t.x + 1, t.y), n3 = along === 'x' ? Sim.tile(S, t.x, t.y - 1) : Sim.tile(S, t.x - 1, t.y);
-        const e = n2 && n2.road === 'ave' ? (along === 'x' ? edges[2] : edges[1]) : n3 && n3.road === 'ave' ? (along === 'x' ? edges[0] : edges[3]) : null;
-        if (e) { ctx.strokeStyle = '#e3a63c'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(e[2][0], e[2][1]); ctx.lineTo(e[3][0], e[3][1]); ctx.stroke(); }
+        if (along === 'x') { const o = nbT(0, 1) && nbT(0, 1).road === 'ave' ? 0.47 : nbT(0, -1) && nbT(0, -1).road === 'ave' ? -0.47 : null; if (o != null) dash(-0.5, o, 0.5, o, '#e3b04a', 2); }
+        else { const o = nbT(1, 0) && nbT(1, 0).road === 'ave' ? 0.47 : nbT(-1, 0) && nbT(-1, 0).road === 'ave' ? -0.47 : null; if (o != null) dash(o, -0.5, o, 0.5, '#e3b04a', 2); }
+      }
+      // 횡단보도: 교차로 바로 앞 칸에, 길을 가로지르는 흰 줄
+      for (const sgn of [1, -1]) {
+        const n = along === 'x' ? nbT(sgn, 0) : nbT(0, sgn);
+        if (!isRoadT(n) || !isCross(S, n) || n.road === 'alley') continue;
+        const u0 = sgn > 0 ? 0.14 : -0.42, u1 = sgn > 0 ? 0.42 : -0.14;
+        for (let i = 0; i < 5; i++) { const v0 = -0.42 + i * 0.18, v1 = v0 + 0.1; if (along === 'x') quad(u0, u1, v0, v1, '#f4ece6'); else quad(v0, v1, u0, u1, '#f4ece6'); }
       }
     }
-    ctx.restore();
-    // 횡단보도: 교차로에 들어오는 길마다 얼룩말 무늬
-    if (cross && !alley) {
-      for (const [dx, dy, a, b] of edges) {
-        const n = Sim.tile(S, t.x + dx, t.y + dy); if (!isRoadT(n) || isCross(S, n) || n.road === 'alley') continue;
-        const c = { x: cx, y: cy };
-        for (let i = 0; i < 5; i++) {
-          const u = 0.14 + i * 0.18;
-          const px = a[0] + (b[0] - a[0]) * u, py = a[1] + (b[1] - a[1]) * u;
-          const qx = px + (c.x - px) * 0.3, qy = py + (c.y - py) * 0.3;
-          ctx.beginPath(); ctx.moveTo(px + (c.x - px) * 0.04, py + (c.y - py) * 0.04); ctx.lineTo(qx, qy); ctx.strokeStyle = '#fbf6f2'; ctx.lineWidth = 3.2; ctx.stroke();
-        }
-      }
-    }
-    // 인도: 땅과 맞닿은 변을 따라 보도블록 띠 + 연석
+    // 인도: 땅과 맞닿은 변을 따라 띠 + 연석, 교차로 모서리는 둥글게
+    const SW = 0.24, swCol = winter ? '#f7f1f0' : '#efe0d8';
+    const side = { '0,-1': [-0.5, 0.5, -0.5, -0.5 + SW], '1,0': [0.5 - SW, 0.5, -0.5, 0.5], '0,1': [-0.5, 0.5, 0.5 - SW, 0.5], '-1,0': [-0.5, -0.5 + SW, -0.5, 0.5] };
     for (const [dx, dy, a, b] of edges) {
-      const n = Sim.tile(S, t.x + dx, t.y + dy);
+      const n = nbT(dx, dy);
       if (!n || isRoadT(n)) continue;
       if (n.t === 'water') { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 2.4); if (bridge) { ctx.save(); ctx.translate(0, -5); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 1.2); ctx.restore(); for (let i = 0; i <= 4; i++) { const u = i / 4, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 5); ink(ctx, 1); } } continue; }
       if (alley) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 1.2); continue; }
-      const k = 0.26;
-      const a2 = [a[0] + (cx - a[0]) * k, a[1] + (cy - a[1]) * k], b2 = [b[0] + (cx - b[0]) * k, b[1] + (cy - b[1]) * k];
-      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(b2[0], b2[1]); ctx.lineTo(a2[0], a2[1]); ctx.closePath();
-      ctx.fillStyle = winter ? '#f7f1f0' : '#f1e2dc'; ctx.fill();
-      ctx.strokeStyle = 'rgba(94,31,43,0.18)'; ctx.lineWidth = 0.6;
-      for (let i = 1; i < 5; i++) { const u = i / 5; ctx.beginPath(); ctx.moveTo(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u); ctx.lineTo(a2[0] + (b2[0] - a2[0]) * u, a2[1] + (b2[1] - a2[1]) * u); ctx.stroke(); }
-      ctx.beginPath(); ctx.moveTo(a2[0], a2[1]); ctx.lineTo(b2[0], b2[1]); ink(ctx, 1.3);
-      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ink(ctx, 0.9);
+      const [u0, u1, v0, v1] = side[dx + ',' + dy];
+      quad(u0, u1, v0, v1, swCol, 0);
+      ctx.strokeStyle = 'rgba(94,31,43,0.16)'; ctx.lineWidth = 0.6;
+      for (let i = 1; i < 4; i++) { const k = -0.5 + i / 4; const A = dx ? L(u0, k) : L(k, v0), B = dx ? L(u1, k) : L(k, v1); ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke(); }
+      const inner = dx > 0 ? [L(u0, -0.5), L(u0, 0.5)] : dx < 0 ? [L(u1, -0.5), L(u1, 0.5)] : dy > 0 ? [L(-0.5, v0), L(0.5, v0)] : [L(-0.5, v1), L(0.5, v1)];
+      ctx.beginPath(); ctx.moveTo(inner[0][0], inner[0][1]); ctx.lineTo(inner[1][0], inner[1][1]); ink(ctx, 1.5);
       // 낮은 거리 소품
-      const h = hash(t.x * 3 + dx, t.y * 5 + dy, 11);
-      const mx = (a[0] + b[0]) / 2 * 0.86 + cx * 0.14, my = (a[1] + b[1]) / 2 * 0.86 + cy * 0.14;
+      const h = hash(t.x * 3 + dx, t.y * 5 + dy, 11), mid = dx ? L((u0 + u1) / 2, 0) : L(0, (v0 + v1) / 2), mx = mid[0], my = mid[1];
       if (h < 0.13) this.planter(ctx, mx, my, season);
-      else if (h < 0.19) { ctx.beginPath(); ctx.rect(mx - 2, my - 6, 4, 6); ctx.fillStyle = '#8fb38a'; ctx.fill(); ink(ctx, 0.8); }
-      else if (h < 0.25) this.bikes(ctx, mx, my);
-      else if (h < 0.28) { ctx.beginPath(); ctx.rect(mx - 1.5, my - 5, 3, 5); ctx.fillStyle = '#e46b5f'; ctx.fill(); ink(ctx, 0.8); }
-      else if (h < 0.31) { ctx.beginPath(); ctx.rect(mx - 3, my - 10, 6, 10); ctx.fillStyle = '#9ea7de'; ctx.fill(); ink(ctx, 0.9); ctx.beginPath(); ctx.rect(mx - 2, my - 8, 4, 3); ctx.fillStyle = '#fff8ee'; ctx.fill(); }
-      else if (h < 0.34) { ctx.beginPath(); ctx.ellipse(mx, my - 1, 4, 2, 0, 0, 7); ctx.fillStyle = '#a99bd9'; ctx.fill(); ink(ctx, 0.7); }
+      else if (h < 0.19) this.bikes(ctx, mx, my);
+      else if (h < 0.22) { ctx.beginPath(); ctx.rect(mx - 1.5, my - 5, 3, 5); ctx.fillStyle = '#e46b5f'; ctx.fill(); ink(ctx, 0.8); }
+      else if (h < 0.25) { ctx.beginPath(); ctx.ellipse(mx, my - 1, 4, 2, 0, 0, 7); ctx.fillStyle = '#a99bd9'; ctx.fill(); ink(ctx, 0.7); }
+    }
+    // 교차로 안쪽 모서리: 대각선 칸이 땅이면 둥근 연석
+    if (!alley) for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      if (!nb(sx, 0) || !nb(0, sy)) continue;
+      const dn = nbT(sx, sy); if (!dn || isRoadT(dn) || dn.t === 'water') continue;
+      const pts = []; for (let i = 0; i <= 6; i++) { const a2 = i / 6 * Math.PI / 2; pts.push(L(sx * (0.5 - SW * Math.sin(a2)), sy * (0.5 - SW * Math.cos(a2)))); }
+      pts.push(L(sx * 0.5, sy * 0.5));
+      poly(ctx, pts, swCol, 0);
+      ctx.beginPath(); pts.slice(0, 7).forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ink(ctx, 1.5);
     }
   };
   R.planter = function (ctx, x, y, season) {
@@ -1189,6 +1199,12 @@
     const cache = this.sprites || (this.sprites = new Map());
     let sp = cache.get(key);
     if (sp) { cache.delete(key); cache.set(key, sp); return sp; }
+    // 배율만 다른 예전 그림이 있고 예산을 다 썼으면 그것을 잠깐 씀
+    const base = key.slice(0, key.lastIndexOf('|')), latest = this.spriteLast || (this.spriteLast = new Map());
+    const old = latest.get(base);
+    if (old) { latest.delete(base); latest.set(base, old); }
+    if (this._budget <= 0) return old || null;   // 처음 보는 건물은 이번 프레임엔 간단한 상자로 그림
+    const t0 = performance.now();
     const g = geo(t.x, t.y, w, d);
     const tall = b.k === 'lm' ? 230 : fh(b.lv || 1) + (['hotel', 'tower', 'alley', 'villa', 'oneroom'].includes(b.k) ? 34 : 22);
     const minX = g.L.x - 14, maxX = g.R.x + 14, minY = g.T.y - tall, maxY = g.B.y + 10;
@@ -1199,9 +1215,11 @@
     this.drawBuilding(c2, t, season, night, false);
     sp = { cv, minX, minY, sc, glows: this._glows };
     this._glows = saved;
-    cache.set(key, sp);
+    cache.set(key, sp); latest.set(base, sp);
     const cap = Math.max(300, Math.min(2400, Math.round((this._visB || 400) * 1.5)));
     while (cache.size > cap) cache.delete(cache.keys().next().value);
+    while (latest.size > cap * 2) latest.delete(latest.keys().next().value);
+    this._budget -= performance.now() - t0;
     return sp;
   };
   R.bakeOverview = function (season, night) {
@@ -1233,6 +1251,7 @@
     const paused = !speed;
     const adt = paused ? 0 : dt;           // 정지하면 모든 움직임이 멈춰요
     this.t += adt; this._glows = [];
+    this._budget = 8; this._budgetG = 6;   // 프레임마다 건물·바닥 캐시 굽기에 쓸 수 있는 시간(ms)
     const ctx = this.ctx, z = this.cam.z, dpr = this.dpr;
     const season = Sim.seasonOf(S);
     const hf = this.hourF, night = darkness(hf), dusk = duskTint(hf);
@@ -1270,9 +1289,9 @@
     }
     // 바닥 구역
     const nch = Math.ceil(Sim.W / CH);
-    for (let cy = 0; cy < nch; cy++) for (let cx = 0; cx < nch; cx++) {
-      const bd = this.chunkBounds(cx, cy);
-      if (bd.maxX < wv.x0 || bd.minX > wv.x1 || bd.maxY < wv.y0 - 200 || bd.minY > wv.y1) continue;
+    const visCh = []; for (let cy = 0; cy < nch; cy++) for (let cx = 0; cx < nch; cx++) { const bd = this.chunkBounds(cx, cy); if (!(bd.maxX < wv.x0 || bd.minX > wv.x1 || bd.maxY < wv.y0 - 200 || bd.minY > wv.y1)) visCh.push([cx, cy, bd]); }
+    this._visChunks = visCh.length;
+    for (const [cx, cy, bd] of visCh) {
       const ch = this.getChunk(cx, cy, season);
       ctx.drawImage(ch.cv, bd.minX, bd.minY, ch.cv.width / ch.sc, ch.cv.height / ch.sc);
     }
@@ -1346,8 +1365,8 @@
         else {
           const sc = z * dpr > 3 ? 3 : z * dpr > 1.6 ? 2 : z * dpr > 0.9 ? 1.25 : 0.8;
           const sp = this.spriteFor(t, season, night, sc);
-          ctx.drawImage(sp.cv, sp.minX, sp.minY, sp.cv.width / sp.sc, sp.cv.height / sp.sc);
-          for (const gl of sp.glows) this._glows.push(gl);
+          if (sp) { ctx.drawImage(sp.cv, sp.minX, sp.minY, sp.cv.width / sp.sc, sp.cv.height / sp.sc); for (const gl of sp.glows) this._glows.push(gl); }
+          else this.drawBuilding(ctx, t, season, night, true);
         }
       } else if (it.tree) {
         const p = iso(it.tree.x, it.tree.y), k = Math.floor(hash(it.tree.x, it.tree.y, 4) * 10);
